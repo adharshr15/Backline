@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import { prisma } from './lib/prisma'
 import express from "express";
 import userRoutes from './routes/user.routes'
 
@@ -13,3 +12,4 @@ app.listen(3000, () =>
   console.log('REST API server ready at: http://localhost:3000'),
 )
 
+export { app }

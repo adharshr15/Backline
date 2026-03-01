@@ -1,12 +1,11 @@
 import 'dotenv/config';
 import { prisma } from './lib/prisma';
 
-async function testConnection() {
+export async function testConnection() {
   try {
     await prisma.$connect();
     console.log('Database connection successful');
 
-    // Optional: count users
     const count = await prisma.user.count();
     console.log(`Users in DB: ${count}`);
 

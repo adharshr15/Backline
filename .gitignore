@@ -1,0 +1,19 @@
+# Ignore all node_modules folders
+node_modules/
+
+# Ignore all .env files
+*.env
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Prisma generated client
+prisma/client/
+
+# Mac / VSCode / OS files
+.DS_Store
+.vscode/

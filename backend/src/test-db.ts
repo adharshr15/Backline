@@ -3,9 +3,8 @@ import { prisma } from './lib/prisma';
 
 async function testConnection() {
   try {
-    // Just ping the database
     await prisma.$connect();
-    console.log('✅ Database connection successful');
+    console.log('Database connection successful');
 
     // Optional: count users
     const count = await prisma.user.count();
@@ -13,7 +12,7 @@ async function testConnection() {
 
     await prisma.$disconnect();
   } catch (err) {
-    console.error('❌ Database connection failed:', err);
+    console.error('Database connection failed:', err);
   }
 }
 

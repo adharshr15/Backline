@@ -53,12 +53,14 @@ model Band {
   id                String                    @id @default(cuid())
   name              String
   genre             String?
-  location          String?
+  city              String?
+  state             String?
+  country           String?
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
   members           BandMember[]
-  tours             Tour[]
+  tours             Tour[]                    @relation("BandTours")
 }
 
 model BandMember {
@@ -108,11 +110,9 @@ model VenueRepresentative {
 model Tour {
   id                String                    @id @default(cuid())
   name              String                    
-  band              Band                      @relation(fields: [bandId], references: [id])
-  bandId            String
+  bands             Band[]                    @relation("BandTours")
   stops             TourStop[]
   
-  @@index([bandId])
 }
 
 model TourStop {

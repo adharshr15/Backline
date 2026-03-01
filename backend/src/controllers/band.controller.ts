@@ -5,12 +5,24 @@ import { Request, Response } from 'express'
 
 export const getBands = async (req: Request, res: Response) => {
   try {
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 20;
+
     const bands = await prisma.band.findMany({
-      include: {
-        members: { include: { user: true } },
-        tours: false
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        genre: true,
+        city: true,
+        state: true,
+        country: true,
+        createdAt: true
       }
-    })
+    });
+
     res.json(bands)
   } catch (error: any) {
     console.error("Prisma getBands error:", error.message)
@@ -43,8 +55,8 @@ export const getBandById = async (req: Request, res: Response) => {
 
 export const createBand = async (req: Request, res: Response) => {
   try {
-    const { name, genre, location, members, tours } = req.body
-    
+    const { name, genre, city, state, country, members } = req.body
+
     /* 
      * Members is an array of UserIds and Roles
      * members_example = [{"userId": "userid1", "role": "MEMBER"}, {"userId": "userid2", "role": "MANAGER"}] 
@@ -60,9 +72,8 @@ export const createBand = async (req: Request, res: Response) => {
 
     const band = await prisma.band.create({
       data: {
-        name, genre, location,
-        members: members ? { create: members } : undefined,
-        tours: tours ? { create: tours } : undefined
+        name, genre, city, state, country,
+        members: members ? { create: members } : undefined
       },
       include: {
         members: true,
@@ -81,94 +92,115 @@ export const updateBand = async (req: Request, res: Response) => {
   try {
     const bandId = req.params.id as string
 
-    const { name, genre, location, addMembers, removeMemberIds, updateRoles, addTours, updateTours, removeTourIds }: 
-    {
-      name?: string
-      genre?: string
-      location?: string
-      addMembers?: { userId: string; role?: BandRole }[]
-      removeMemberIds?: string[]
-      updateRoles?: { userId: string; role: BandRole }[]
-      addTours?: { name: string }[]
-      updateTours?: { id: string; name?: string }[]
-      removeTourIds?: string[]
-    } = req.body
+    const { name, genre, city, state, country, addMemberId, removeMemberId, updateRole, addTourId, updateTourId, removeTourId }:
+      {
+        name?: string
+        genre?: string
+        city?: string
+        state?: string
+        country?: string
+        addMemberId?: { userId: string; bandRole?: BandRole }
+        removeMemberId?: string
+        updateRole?: { userId: string; bandRole: BandRole }
+        addTourId?: string
+        updateTourId?: { id: string; name?: string }
+        removeTourId?: string
+      } = req.body
 
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.band.update({
-        where: { id: bandId },
-        data: {
-          name, genre, location,
-          members: {
-            create: addMembers || undefined,
+    const updatedBand = await prisma.$transaction(async (tx) => {
+      const updateData: any = {}
 
-            deleteMany: removeMemberIds
-              ? removeMemberIds.map((userId) => ({ userId }))
-              : undefined,
+      if (name) updateData.name = name;
+      if (genre) updateData.genre = genre;
+      if (city) updateData.city = city;
+      if (state) updateData.state = state;
+      if (country) updateData.country = country;
 
-            update: updateRoles
-              ? updateRoles.map(({ userId, role }) => ({
-                  where: {
-                    userId_bandId: {
-                      userId,
-                      bandId,
-                    },
-                  },
-                  data: { role },
-                }))
-              : undefined,
+      // add user to band
+      if (addMemberId) {
+        await tx.bandMember.upsert({
+          where: {
+            userId_bandId: {
+              userId: addMemberId.userId,
+              bandId: bandId
+            }
           },
-          tours: {
-            create: addTours || undefined,
-
-            deleteMany: removeTourIds
-              ? removeTourIds.map((id) => ({ id }))
-              : undefined,
-
-            update: updateTours
-              ? updateTours.map(({ id, name }) => ({
-                  where: { id },
-                  data: { name },
-                }))
-              : undefined,
-          },
-        },
-      })
-
-      // Count remaining members
-      const memberCount = await tx.bandMember.count({
-        where: { bandId }
-      })
-
-      // If no members, delete band
-      if (memberCount === 0) {
-        await tx.band.delete({
-          where: { id: bandId }
-        })
-
-        return { deleted: true }
+          update: { role: addMemberId.bandRole || "MEMBER" },
+          create: {
+            userId: addMemberId.userId,
+            bandId: bandId,
+            role: addMemberId.bandRole || "MEMBER"
+          }
+        });
       }
 
-      // Otherwise return updated band
-      return tx.band.findUnique({
-        where: { id: bandId },
+      // remove user from band
+      if (removeMemberId) {
+        await tx.bandMember.deleteMany({
+          where: {
+            userId: removeMemberId,
+            bandId: bandId
+          }
+        })
+      }
+
+      // update member's role
+      if (updateRole) {
+        await tx.bandMember.update({
+          where: {
+            userId_bandId: {
+              userId: updateRole.userId,
+              bandId: bandId
+            }
+          },
+          data: {
+            role: updateRole.bandRole
+          }
+        });
+      }
+
+      // add a tour to band
+      if (addTourId) {
+        await tx.tour.update({
+          where: { id: addTourId },
+          data: {
+            bands: {
+              connect: { id: bandId }
+            }
+          }
+        });
+      }
+
+      // remove tour from band
+      if (removeTourId) {
+        await prisma.tour.update({
+          where: { id: removeTourId },
+          data: {
+            bands: { disconnect: { id: bandId } }
+          }
+        });
+      }
+
+      const band = await tx.band.update({
+        where: { id: bandId }, 
+        data: updateData,
         include: {
-          members: { include: { user: true } },
-          tours: true,
-        },
+          members: {
+            include: { band: true }
+          },
+          tours: true
+        }
       })
-    })
 
-    if ((result as any)?.deleted) {
-      return res.json({
-        message: "Last member removed. Band deleted."
-      })
-    }
+      return band;
 
-    res.json(result)
+    });
+
+    res.status(200).json(updatedBand);
+
 
   } catch (error: any) {
-    console.error("Prisma updateBand error:", error.message)
+    console.error(error);
 
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Band not found" })
@@ -180,35 +212,37 @@ export const updateBand = async (req: Request, res: Response) => {
 
 export const deleteBand = async (req: Request, res: Response) => {
   try {
-    const bandId = req.params.id as string
+    const bandId = req.params.id as string;
 
     await prisma.$transaction(async (tx) => {
+      // Delete band members
+      await tx.bandMember.deleteMany({ where: { bandId } });
 
-      // Delete band members first
-      await tx.bandMember.deleteMany({
-        where: { bandId }
-      })
+      // Disconnect band from all tours it has
+      const tours = await tx.tour.findMany({
+        where: { bands: { some: { id: bandId } } },
+        select: { id: true }
+      });
 
-      // Delete tours belonging to this band
-      await tx.tour.deleteMany({
-        where: { bandId }
-      })
+      for (const tour of tours) {
+        await tx.tour.update({
+          where: { id: tour.id },
+          data: { bands: { disconnect: { id: bandId } } }
+        });
+      }
 
-      // Now delete the band
-      await tx.band.delete({
-        where: { id: bandId }
-      })
-    })
+      // Delete the band
+      await tx.band.delete({ where: { id: bandId } });
+    });
 
-    res.json({ message: "Band deleted successfully" })
-
+    res.json({ message: "Band deleted successfully" });
   } catch (error: any) {
-    console.error("Prisma deleteBand error:", error.message)
+    console.error("Prisma deleteBand error:", error.message);
 
     if (error.code === "P2025") {
-      return res.status(404).json({ error: "Band not found" })
+      return res.status(404).json({ error: "Band not found" });
     }
 
-    res.status(500).json({ error: error.message })
+    res.status(500).json({ error: error.message });
   }
-}
+};

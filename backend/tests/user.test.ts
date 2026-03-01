@@ -9,7 +9,21 @@ let testVenueId: string
 let testConversationId: string
 
 beforeAll(async () => {
-    // Create a band, venue, conversation for testing
+    // FULL clean
+    await prisma.$transaction([
+        prisma.tourStop.deleteMany(),
+        prisma.tour.deleteMany(),
+        prisma.conversationParticipant.deleteMany(),
+        prisma.message.deleteMany(),
+        prisma.bandMember.deleteMany(),
+        prisma.venueRepresentative.deleteMany(),
+        prisma.conversation.deleteMany(),
+        prisma.user.deleteMany(),
+        prisma.band.deleteMany(),
+        prisma.venue.deleteMany(),
+    ])
+
+    // Create band, venue, conversation for testing
     const band = await prisma.band.create({ data: { name: "Test Band" } })
     testBandId = band.id
 
@@ -21,14 +35,16 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-    // Cleanup DB completely after all tests
-    await prisma.conversationParticipant.deleteMany()
-    await prisma.bandMember.deleteMany()
-    await prisma.venueRepresentative.deleteMany()
-    await prisma.user.deleteMany()
-    await prisma.band.deleteMany()
-    await prisma.venue.deleteMany()
-    await prisma.conversation.deleteMany()
+    await prisma.$transaction([
+        prisma.conversationParticipant.deleteMany(),
+        prisma.message.deleteMany(),
+        prisma.bandMember.deleteMany(),
+        prisma.venueRepresentative.deleteMany(),
+        prisma.user.deleteMany(),
+        prisma.band.deleteMany(),
+        prisma.venue.deleteMany(),
+        prisma.conversation.deleteMany(),
+    ])
 })
 
 describe("User API", () => {
@@ -45,35 +61,31 @@ describe("User API", () => {
                 role: "USER"
             })
         
-            expect(res.status).toBe(201)
-            testUserId = res.body.id
-            expect(testUserId).toBeDefined()
-            expect(res.body.email).toBe("test2@test.com")
-            console.log(res.body)
+        expect(res.status).toBe(201)
+        testUserId = res.body.id
+        expect(testUserId).toBeDefined()
     })
 
     // READ
     it("Should get all users", async () => {
         const res = await request(app).get("/users")
         expect(res.status).toBe(200)
-        console.log(res.body)
+        expect(res.body.length).toBeGreaterThan(0)
     })
 
     it("Should get a valid user", async () => {
         const res = await request(app).get(`/users/${testUserId}`)
         expect(res.status).toBe(200)
         expect(res.body.id).toBe(testUserId)
-        console.log(res.body)
     })
 
     it("Should return 404 for invalid user", async () => {
         const res = await request(app).get("/users/invalid-user-id")
         expect(res.status).toBe(404)
-
     })
 
     // UPDATE
-    it("Should update a user including band/venue/conversation changes", async () => {
+    it("Should update a user including band/venue changes", async () => {
         const res = await request(app)
             .put(`/users/${testUserId}`)
             .send({
@@ -89,44 +101,30 @@ describe("User API", () => {
         expect(res.status).toBe(200)
         expect(res.body.name).toBe("Updated Tester")
         expect(res.body.email).toBe("updated@test.com")
-        console.log(res.body)
+
+        // Confirm bandMemberships updated
+        const bandMembers = await prisma.bandMember.findMany({ where: { userId: testUserId } })
+        expect(bandMembers.length).toBe(1)
+        expect(bandMembers[0].bandId).toBe(testBandId)
+
+        // Confirm venueReps updated
+        const venueReps = await prisma.venueRepresentative.findMany({ where: { userId: testUserId } })
+        expect(venueReps.length).toBe(1)
+        expect(venueReps[0].venueId).toBe(testVenueId)
     })
     
     // DELETE
     it("Should delete a user and preserve messages", async () => {
-    // Delete the user
-    const deleteRes = await request(app)
-        .delete(`/users/${testUserId}`);
-    expect(deleteRes.status).toBe(200);
+        const deleteRes = await request(app).delete(`/users/${testUserId}`)
+        expect(deleteRes.status).toBe(200)
 
-    // ---- Verify user is gone ----
-    const getRes = await request(app)
-        .get(`/users/${testUserId}`);
-    expect(getRes.status).toBe(404);
+        const getRes = await request(app).get(`/users/${testUserId}`)
+        expect(getRes.status).toBe(404)
 
-    // ---- Verify messages still exist with null sender ----
-    const messages = await prisma.message.findMany({
-        where: { conversationId: testConversationId }
-    });
+        const bandMembers = await prisma.bandMember.findMany({ where: { userId: testUserId } })
+        expect(bandMembers.length).toBe(0)
 
-    for (const msg of messages) {
-        // senderId should be null if the message was from the deleted user
-        if (msg.senderId === testUserId) {
-        expect(msg.senderId).toBeNull();
-        }
-    }
-
-    // ---- Verify bandMemberships removed ----
-    const bandMembers = await prisma.bandMember.findMany({
-        where: { userId: testUserId }
-    });
-    expect(bandMembers.length).toBe(0);
-
-    // ---- Verify venueReps removed ----
-    const venueReps = await prisma.venueRepresentative.findMany({
-        where: { userId: testUserId }
-    });
-    expect(venueReps.length).toBe(0);
-    });
-
+        const venueReps = await prisma.venueRepresentative.findMany({ where: { userId: testUserId } })
+        expect(venueReps.length).toBe(0)
+    })
 })

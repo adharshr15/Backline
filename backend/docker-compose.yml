@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:18.1
+    restart: always
+    environment:
+      POSTGRES_USER: adharshrajavel
+      POSTGRES_PASSWORD: Rockets3137
+      POSTGRES_DB: backline
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres:/var/lib/postgresql
+
+volumes:
+  postgres:

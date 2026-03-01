@@ -11,6 +11,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  relationMode = "prisma"
 }
 
 
@@ -34,6 +35,8 @@ enum StopStatus {
 
 model User {
   id                String                    @id @default(cuid())
+  username          String
+  name              String
   email             String                    @unique
   password          String
   role              Role

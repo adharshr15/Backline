@@ -27,7 +27,7 @@ beforeAll(async () => {
     const band = await prisma.band.create({ data: { name: "Test Band" } })
     testBandId = band.id
 
-    const venue = await prisma.venue.create({ data: { name: "Test Venue", city: "Austin" } })
+    const venue = await prisma.venue.create({ data: { name: "Test Venue", city: "Austin", state: "Texas", country: "United States" } })
     testVenueId = venue.id
 
     const conversation = await prisma.conversation.create({ data: {} })

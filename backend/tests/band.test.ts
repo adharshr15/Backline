@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import request from "supertest"
 import { app } from "../src/index"
 import { prisma } from "../src/lib/prisma"
-import { BandRole } from "../generated/prisma/client"
 
 let testBandId: string
 let userId1: string

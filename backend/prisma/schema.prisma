@@ -80,6 +80,8 @@ model Venue {
   id                String                    @id @default(cuid())
   name              String
   city              String 
+  state             String
+  country           String
   latitude          Float?
   longitude         Float?
   capacity          Int?

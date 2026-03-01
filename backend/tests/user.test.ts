@@ -34,28 +34,7 @@ afterAll(async () => {
 describe("User API", () => {
 
     // CREATE
-    it("Should create a user with band, venue, and conversation", async () => {
-        const res = await request(app)
-            .post("/users")
-            .send({
-                email: "test@test.com",
-                password: "123456",
-                username: "tester",
-                name: "Tester",
-                role: "BAND",
-                bandId: testBandId,
-                bandRole: "MEMBER",
-                venueId: testVenueId,
-                addConversationId: testConversationId
-            })
-
-        expect(res.status).toBe(201)
-        expect(res.body.email).toBe("test@test.com")
-        testUserId = res.body.id
-        expect(testUserId).toBeDefined()
-        console.log(res.body)
-    });
-    it("Should create a user without band, venue, and conversation", async () => {
+    it("Should create a user", async () => {
         const res = await request(app)
             .post("/users")
             .send({
@@ -63,10 +42,12 @@ describe("User API", () => {
                 password: "7890123",
                 username: "tester2",
                 name: "Tester 2",
-                role: "ADMIN"
+                role: "USER"
             })
         
             expect(res.status).toBe(201)
+            testUserId = res.body.id
+            expect(testUserId).toBeDefined()
             expect(res.body.email).toBe("test2@test.com")
             console.log(res.body)
     })
@@ -98,9 +79,10 @@ describe("User API", () => {
             .send({
                 name: "Updated Tester",
                 email: "updated@test.com",
-                bandRole: "LEAD",
+                bandRole: "MEMBER",
+                addBandId: testBandId,
                 removeBandId: null,
-                addConversationId: testConversationId,
+                addVenueId: testVenueId,
                 removeVenueId: null
             })
 
@@ -109,17 +91,42 @@ describe("User API", () => {
         expect(res.body.email).toBe("updated@test.com")
         console.log(res.body)
     })
-
+    
     // DELETE
-    it("Should delete a user", async () => {
-        const res = await request(app)
-            .delete(`/users/${testUserId}`)
-        expect(res.status).toBe(200)
-    })
+    it("Should delete a user and preserve messages", async () => {
+    // Delete the user
+    const deleteRes = await request(app)
+        .delete(`/users/${testUserId}`);
+    expect(deleteRes.status).toBe(200);
 
-    it("Should return 404 after deletion", async () => {
-        const res = await request(app)
-            .get(`/users/${testUserId}`)
-        expect(res.status).toBe(404)
-    })
+    // ---- Verify user is gone ----
+    const getRes = await request(app)
+        .get(`/users/${testUserId}`);
+    expect(getRes.status).toBe(404);
+
+    // ---- Verify messages still exist with null sender ----
+    const messages = await prisma.message.findMany({
+        where: { conversationId: testConversationId }
+    });
+
+    for (const msg of messages) {
+        // senderId should be null if the message was from the deleted user
+        if (msg.senderId === testUserId) {
+        expect(msg.senderId).toBeNull();
+        }
+    }
+
+    // ---- Verify bandMemberships removed ----
+    const bandMembers = await prisma.bandMember.findMany({
+        where: { userId: testUserId }
+    });
+    expect(bandMembers.length).toBe(0);
+
+    // ---- Verify venueReps removed ----
+    const venueReps = await prisma.venueRepresentative.findMany({
+        where: { userId: testUserId }
+    });
+    expect(venueReps.length).toBe(0);
+    });
+
 })

@@ -4,6 +4,9 @@ import userRoutes from './routes/user.routes'
 import bandRoutes from './routes/band.routes'
 import venueRoutes from './routes/venue.routes'
 import tourRoutes from './routes/tour.routes'
+import showRoutes from './routes/show.routes'
+import conversationRoutes from './routes/conversation.routes'
+import messageRoutes from './routes/message.routes'
 
 const app = express()
 
@@ -13,6 +16,9 @@ app.use('/users', userRoutes)
 app.use('/bands', bandRoutes)
 app.use('/venues', venueRoutes)
 app.use('/tours', tourRoutes)
+app.use('/shows', showRoutes)
+app.use('/conversations', conversationRoutes)
+app.use('/messages', messageRoutes)
 
 
 app.listen(3000, () =>

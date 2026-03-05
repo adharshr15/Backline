@@ -1,12 +1,12 @@
 import { Router } from 'express'
-import { getUsers, getUserById, createUser, updateUser, deleteUser } from '../controllers/user.controller'
+import { getTours, getTourById, createTour, updateTour, deleteTour } from '../controllers/tour.controller'
 
 const router = Router()
 
-router.get('/', getUsers)
-router.get('/:id', getUserById)
-router.post('/', createUser)
-router.put("/:id", updateUser)  
-router.delete("/:id", deleteUser)
+router.get('/', getTours)
+router.get('/:id', getTourById)
+router.post('/', createTour)
+router.put("/:id", updateTour)  
+router.delete("/:id", deleteTour)
 
 export default router

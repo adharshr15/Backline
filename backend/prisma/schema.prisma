@@ -48,6 +48,7 @@ model User {
   deletedAt         DateTime?
   bandMemberships   BandMember[]
   venueReps         VenueRepresentative[]
+  isPromoter        Boolean                   @default(false)
   messages          Message[]
   conversations     ConversationParticipant[]
   rentalItems       RentalItem[]
@@ -137,6 +138,7 @@ model Tour {
 
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
+  deletedAt         DateTime?
 }
 
 model Show {
@@ -183,6 +185,7 @@ model ShowBand {
 
 model Conversation {
   id                String                    @id @default(cuid())
+  name              String?
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?

@@ -8,11 +8,12 @@ let userId1: string
 let userId2: string
 let userId3: string
 let testTourId: string
+let testShowId: string
 
 beforeAll(async () => {
     // Clean test database in correct order
     await prisma.$transaction([
-        prisma.tourStop.deleteMany(),
+        prisma.show.deleteMany(),
         prisma.tour.deleteMany(),
         prisma.conversationParticipant.deleteMany(),
         prisma.message.deleteMany(),
@@ -66,6 +67,17 @@ beforeAll(async () => {
         }
     });
     testTourId = tour1.id;
+    console.log('testTourId: ', testTourId);
+
+    const show1 = await prisma.show.create({
+        data: {
+            date: new Date(2026, 3, 4),
+            city: "Austin",
+            state: "Texas", 
+            country: "United States"
+        } 
+    })
+    testShowId = show1.id;
 
 })
 
@@ -77,7 +89,9 @@ afterAll(async () => {
     await prisma.user.deleteMany()
     await prisma.band.deleteMany()
     await prisma.venue.deleteMany()
+    await prisma.tour.deleteMany()
     await prisma.conversation.deleteMany()
+    await prisma.$disconnect()
 })
 
 describe("Band API", () => {
@@ -131,14 +145,13 @@ describe("Band API", () => {
     })
 
     // UPDATE
-    it("Should update band to include new member and tour", async () => {
+    it("Should update band to include new member", async () => {
         const res = await request(app)
             .put(`/bands/${testBandId}`)
             .send({
                 genre: "Electronic",
                 addMemberId: { userId: userId3, bandRole: "MEMBER" },
-                updateRole: { userId: userId1, bandRole: "MANAGER" },
-                addTourId: testTourId
+                updateRole: { userId: userId1, bandRole: "MANAGER" }
             })
 
         expect(res.status).toBe(200);
@@ -155,18 +168,13 @@ describe("Band API", () => {
         const updatedRole = updatedBand.members.find((m: any) => m.userId === userId1)?.role;
         expect(updatedRole).toBe("MANAGER");
 
-        // Check that the tour was added
-        const tourIds = updatedBand.tours.map((t: any) => t.id);
-        expect(tourIds).toContain(testTourId);
-
         console.log("Updated Band:", updatedBand);
     })
     it("Should update band to remove a tour and member", async () => {
         const res = await request(app)
             .put(`/bands/${testBandId}`)
             .send({
-                removeMemberId: userId3,
-                removeTourId: testTourId
+                removeMemberId: userId3
             });
 
         expect(res.status).toBe(200);
@@ -176,31 +184,42 @@ describe("Band API", () => {
         const memberIds = updatedBand.members.map((m: any) => m.userId);
         expect(memberIds).not.toContain(userId3);
 
-        // Check tour was removed
-        const tourIds = updatedBand.tours.map((t: any) => t.id);
-        expect(tourIds).not.toContain(testTourId);
-
         console.log("Updated Band: ", updatedBand);
 
     })
 
     // DELETE
-    it("Should delete a band and remove it from all tours", async () => {
+    it("Should soft-delete a band and remove it from all tours", async () => {
         // Delete the band
         const deleteRes = await request(app).delete(`/bands/${testBandId}`);
         expect(deleteRes.status).toBe(200);
 
-        // Verify band no longer exists
+        // Verify GET returns 404 (soft delete filter working)
         const getRes = await request(app).get(`/bands/${testBandId}`);
         expect(getRes.status).toBe(404);
 
+        // Verify band still exists in DB but is soft-deleted
+        const bandInDb = await prisma.band.findUnique({
+            where: { id: testBandId }
+        });
+        expect(bandInDb).not.toBeNull();
+        expect(bandInDb?.deletedAt).not.toBeNull();
+
         // Verify band members removed
-        const bandMembers = await prisma.bandMember.findMany({ where: { bandId: testBandId } });
+        const bandMembers = await prisma.bandMember.findMany({
+            where: { bandId: testBandId }
+        });
         expect(bandMembers.length).toBe(0);
 
         // Verify no tour still has this band
         const toursWithBand = await prisma.tour.findMany({
-            where: { bands: { some: { id: testBandId } } }
+            where: {
+                bands: {
+                    some: {
+                        bandId: testBandId
+                    }
+                }
+            }
         });
         expect(toursWithBand.length).toBe(0);
     });

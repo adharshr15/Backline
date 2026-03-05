@@ -4,31 +4,31 @@ import { Request, Response } from 'express'
 
 export const getVenues = async (req: Request, res: Response) => {
     try {
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 20;
+        const page = Number(req.query.page) || 1;
+        const limit = Number(req.query.limit) || 20;
 
-    const venues = await prisma.venue.findMany({
-      skip: (page - 1) * limit,
-      take: limit,
-      orderBy: { createdAt: "desc" },
-      select: {
-        name: true,
-        city: true,
-        state: true,
-        country: true,
-        latitude: true,
-        longitude: true,
-        capacity: true,
-        contactEmail: true,
-        createdAt: true
-      }
-    });
+        const venues = await prisma.venue.findMany({
+            skip: (page - 1) * limit,
+            take: limit,
+            orderBy: { createdAt: "desc" },
+            select: {
+                name: true,
+                city: true,
+                state: true,
+                country: true,
+                latitude: true,
+                longitude: true,
+                capacity: true,
+                contactEmail: true,
+                createdAt: true
+            }
+        });
 
-    res.json(venues)
-  } catch (error: any) {
-    console.error("Prisma getVenues error:", error.message)
-    res.status(500).json({ error: error.message })
-  }
+        res.json(venues)
+    } catch (error: any) {
+        console.error("Prisma getVenues error:", error.message)
+        res.status(500).json({ error: error.message })
+    }
 }
 
 export const getVenueById = async (req: Request, res: Response) => {
@@ -36,7 +36,7 @@ export const getVenueById = async (req: Request, res: Response) => {
         const id = req.params.id as string
 
         const venue = await prisma.venue.findUnique({
-            where: { id },
+            where: { id, deletedAt: null },
             include: {
                 representatives: { include: { user: true } }
             }
@@ -106,3 +106,110 @@ export const createVenue = async (req: Request, res: Response) => {
         return res.status(500).json({ error: error.message });
     }
 };
+
+export const updateVenue = async (req: Request, res: Response) => {
+    try {
+        const venueId = req.params.id as string
+
+        const { name, city, state, country, latitude, longitude, capacity, contactEmail, addRepresentativeId, removeRepresentativeId }:
+            {
+                name?: string
+                city?: string
+                state?: string
+                country?: string
+                latitude?: number
+                longitude?: number
+                capacity?: number
+                contactEmail: string
+                addRepresentativeId: string
+                removeRepresentativeId: string
+            } = req.body
+
+        const updatedVenue = await prisma.$transaction(async (tx) => {
+            const updateData: any = {}
+
+            if (name) updateData.name = name;
+            if (city) updateData.city = city;
+            if (state) updateData.state = state;
+            if (country) updateData.country = country;
+            if (latitude !== undefined) updateData.latitude = latitude;
+            if (longitude !== undefined) updateData.longitude = longitude;
+            if (capacity !== undefined) updateData.capacity = capacity;
+            if (contactEmail) updateData.contactEmail = contactEmail;
+
+            // add representative to venue
+            if (addRepresentativeId) {
+                await tx.venueRepresentative.upsert({
+                    where: {
+                        userId_venueId: {
+                            userId: addRepresentativeId,
+                            venueId: venueId
+                        }
+                    },
+                    update: {}, // no fields to update for now
+                    create: {
+                        userId: addRepresentativeId,
+                        venueId: venueId
+                    }
+                });
+            }
+
+            // Remove representative from venue
+            if (removeRepresentativeId) {
+                await tx.venueRepresentative.deleteMany({
+                    where: {
+                        userId: removeRepresentativeId,
+                        venueId: venueId
+                    }
+                });
+            }
+
+            const venue = await tx.venue.update({
+                where: { id: venueId },
+                data: updateData,
+                include: { representatives: true }
+            });
+
+            return venue
+        });
+
+        res.status(200).json(updatedVenue);
+    } catch (error: any) {
+        console.error(error);
+
+        if (error.code === "P2025") {
+            return res.status(404).json({ error: "Venue not found" })
+        }
+
+        res.status(500).json({ error: error.message })
+    }
+}
+
+export const deleteVenue = async (req: Request, res: Response) => {
+    try {
+        const venueId = req.params.id as string;
+
+        await prisma.$transaction(async (tx) => {
+            // Remove relationships
+            await tx.venueRepresentative.deleteMany({ where: { venueId } });
+
+            // soft delete venue
+            const venue = await tx.venue.update({
+                where: { id: venueId },
+                data: { deletedAt: new Date() }
+            })
+
+            return venue
+        });
+
+        res.json({ message: "Venue soft-deleted successfully" });
+    } catch (error: any) {
+        console.error("Prisma deleteVenue error: ", error.message);
+
+        if (error.code === "P2025") {
+            return res.status(404).json({ error: "Venue not found" });
+        }
+
+        res.status(500).json({ error: error.message });
+    }
+}

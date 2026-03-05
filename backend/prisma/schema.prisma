@@ -25,10 +25,15 @@ enum BandRole {
   MEMBER
 }
 
-enum StopStatus {
+enum ShowStatus {
   PENDING
   CONFIRMED
   CANCELLED
+}
+
+enum ShowRole {
+  HEADLINER
+  SUPPORT
 }
 
 model User {
@@ -60,7 +65,8 @@ model Band {
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
   members           BandMember[]
-  tours             Tour[]                    @relation("BandTours")
+  shows             ShowBand[]
+  tours             BandTour[]        
 }
 
 model BandMember {
@@ -74,6 +80,17 @@ model BandMember {
   @@unique([userId, bandId])
   @@index([bandId])
   @@index([userId])
+}
+
+model BandTour {
+  id                String                    @id @default(cuid())
+
+  band              Band                      @relation(fields: [bandId], references: [id])
+  bandId            String 
+  tour              Tour                      @relation(fields: [tourId], references: [id])
+  tourId            String
+
+  @@unique([bandId, tourId])
 }
 
 model Venue {
@@ -90,7 +107,7 @@ model Venue {
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
-  tourStops         TourStop[]         
+  shows             Show[]       
 
   @@index([city])
   @@index([capacity]) 
@@ -112,21 +129,36 @@ model VenueRepresentative {
 model Tour {
   id                String                    @id @default(cuid())
   name              String                    
-  bands             Band[]                    @relation("BandTours")
-  stops             TourStop[]
+  startDate         DateTime?
+  endDate           DateTime?
   
+  bands             BandTour[]
+  shows             Show[]
+
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
 }
 
-model TourStop {
+model Show {
   id                String                    @id @default(cuid())
-  date              DateTime                  
+  date              DateTime
   city              String
-  status            StopStatus                @default(PENDING)
+  state             String
+  country           String
+  status            ShowStatus                @default(PENDING)
   notes             String?
-  tour              Tour                      @relation(fields: [tourId], references: [id])
-  tourId            String
+
+  tour              Tour?                     @relation(fields: [tourId], references: [id])
+  tourId            String?
+
   venue             Venue?                    @relation(fields: [venueId], references: [id])
   venueId           String?
+
+  venueName         String?
+  venueAddress      String?
+
+  bands             ShowBand[]
+
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
@@ -136,6 +168,17 @@ model TourStop {
   @@index([city])
   @@index([date])
   @@index([status])
+}
+
+model ShowBand {
+  id                String                    @id @default(cuid())
+  band              Band                      @relation(fields: [bandId], references: [id])
+  bandId            String
+  show              Show                      @relation(fields: [showId], references: [id])
+  showId            String
+  role              ShowRole?
+
+  @@unique([bandId, showId])
 }
 
 model Conversation {

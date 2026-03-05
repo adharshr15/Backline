@@ -10,18 +10,16 @@ let testConversationId: string
 
 beforeAll(async () => {
     // FULL clean
-    await prisma.$transaction([
-        prisma.tourStop.deleteMany(),
-        prisma.tour.deleteMany(),
-        prisma.conversationParticipant.deleteMany(),
-        prisma.message.deleteMany(),
-        prisma.bandMember.deleteMany(),
-        prisma.venueRepresentative.deleteMany(),
-        prisma.conversation.deleteMany(),
-        prisma.user.deleteMany(),
-        prisma.band.deleteMany(),
-        prisma.venue.deleteMany(),
-    ])
+    await prisma.show.deleteMany()
+    await prisma.tour.deleteMany()
+    await prisma.conversationParticipant.deleteMany()
+    await prisma.message.deleteMany()
+    await prisma.bandMember.deleteMany()
+    await prisma.venueRepresentative.deleteMany()
+    await prisma.conversation.deleteMany()
+    await prisma.user.deleteMany()
+    await prisma.band.deleteMany()
+    await prisma.venue.deleteMany()
 
     // Create band, venue, conversation for testing
     const band = await prisma.band.create({ data: { name: "Test Band" } })
@@ -35,16 +33,18 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-    await prisma.$transaction([
-        prisma.conversationParticipant.deleteMany(),
-        prisma.message.deleteMany(),
-        prisma.bandMember.deleteMany(),
-        prisma.venueRepresentative.deleteMany(),
-        prisma.user.deleteMany(),
-        prisma.band.deleteMany(),
-        prisma.venue.deleteMany(),
-        prisma.conversation.deleteMany(),
-    ])
+    await prisma.show.deleteMany()
+    await prisma.tour.deleteMany()
+    await prisma.conversationParticipant.deleteMany()
+    await prisma.message.deleteMany()
+    await prisma.bandMember.deleteMany()
+    await prisma.venueRepresentative.deleteMany()
+    await prisma.conversation.deleteMany()
+    await prisma.user.deleteMany()
+    await prisma.band.deleteMany()
+    await prisma.venue.deleteMany()
+
+    await prisma.$disconnect()
 })
 
 describe("User API", () => {

@@ -5,6 +5,9 @@
   "scripts": {
     "test:db": "cross-env DATABASE_URL=postgresql://adharshrajavel:Rockets3137@localhost:5432/backline_test prisma migrate deploy",
     "test": "vitest",
+    "test:user": "vitest run tests/user.test.ts",
+    "test:band": "vitest run tests/band.test.ts",
+    "test:venue": "vitest run tests/venue.test.ts",
     "dev": "tsx src/index.ts",
     "migrate": "node scripts/migrate.cjs"
   },

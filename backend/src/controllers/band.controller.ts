@@ -9,6 +9,9 @@ export const getBands = async (req: Request, res: Response) => {
     const limit = Number(req.query.limit) || 20;
 
     const bands = await prisma.band.findMany({
+      where: {
+        deletedAt: null
+      },
       skip: (page - 1) * limit,
       take: limit,
       orderBy: { createdAt: "desc" },
@@ -35,10 +38,11 @@ export const getBandById = async (req: Request, res: Response) => {
     const id = req.params.id as string
 
     const band = await prisma.band.findUnique({
-      where: { id },
+      where: { id, deletedAt: null },
       include: {
         members: { include: { user: true } },
-        tours: false
+        tours: { include: { tour: true } },
+        shows: { include: { show: { include: { venue: true, tour: true } } } }
       }
     })
 
@@ -73,11 +77,17 @@ export const createBand = async (req: Request, res: Response) => {
     const band = await prisma.band.create({
       data: {
         name, genre, city, state, country,
-        members: members ? { create: members } : undefined
+        members: {
+          create: members.map((m: any) => ({
+            userId: m.userId,
+            role: m.role ?? "MEMBER"
+          }))
+        }
       },
       include: {
-        members: true,
-        tours: true
+        members: { include: { user: true } },
+        tours: { include: { tour: true } },
+        shows: { include: { show: { include: { venue: true } } } }
       },
     })
 
@@ -92,7 +102,7 @@ export const updateBand = async (req: Request, res: Response) => {
   try {
     const bandId = req.params.id as string
 
-    const { name, genre, city, state, country, addMemberId, removeMemberId, updateRole, addTourId, updateTourId, removeTourId }:
+    const { name, genre, city, state, country, addMemberId, removeMemberId, updateRole }:
       {
         name?: string
         genre?: string
@@ -102,9 +112,6 @@ export const updateBand = async (req: Request, res: Response) => {
         addMemberId?: { userId: string; bandRole?: BandRole }
         removeMemberId?: string
         updateRole?: { userId: string; bandRole: BandRole }
-        addTourId?: string
-        updateTourId?: { id: string; name?: string }
-        removeTourId?: string
       } = req.body
 
     const updatedBand = await prisma.$transaction(async (tx) => {
@@ -141,7 +148,7 @@ export const updateBand = async (req: Request, res: Response) => {
             userId: removeMemberId,
             bandId: bandId
           }
-        })
+        });
       }
 
       // update member's role
@@ -159,40 +166,29 @@ export const updateBand = async (req: Request, res: Response) => {
         });
       }
 
-      // add a tour to band
-      if (addTourId) {
-        await tx.tour.update({
-          where: { id: addTourId },
-          data: {
-            bands: {
-              connect: { id: bandId }
-            }
-          }
-        });
-      }
-
-      // remove tour from band
-      if (removeTourId) {
-        await prisma.tour.update({
-          where: { id: removeTourId },
-          data: {
-            bands: { disconnect: { id: bandId } }
-          }
-        });
-      }
-
       const band = await tx.band.update({
-        where: { id: bandId }, 
+        where: { id: bandId },
         data: updateData,
         include: {
-          members: {
-            include: { band: true }
+          members: true,
+          tours: {
+            include: {
+              tour: true
+            }
           },
-          tours: true
+          shows: {
+            include: {
+              show: true
+            }
+          }
         }
-      })
+      });
 
-      return band;
+      return {
+        ...band,
+        tours: band.tours.map(bt => bt.tour),
+        shows: band.shows.map(sb => sb.show)
+      };
 
     });
 
@@ -215,27 +211,21 @@ export const deleteBand = async (req: Request, res: Response) => {
     const bandId = req.params.id as string;
 
     await prisma.$transaction(async (tx) => {
-      // Delete band members
+      // Remove relationships (hard delete join rows only)
       await tx.bandMember.deleteMany({ where: { bandId } });
+      await tx.bandTour.deleteMany({ where: { bandId } });
+      await tx.showBand.deleteMany({ where: { bandId } });
 
-      // Disconnect band from all tours it has
-      const tours = await tx.tour.findMany({
-        where: { bands: { some: { id: bandId } } },
-        select: { id: true }
+      // Soft delete band
+      const band = await tx.band.update({
+        where: { id: bandId },
+        data: { deletedAt: new Date() }
       });
 
-      for (const tour of tours) {
-        await tx.tour.update({
-          where: { id: tour.id },
-          data: { bands: { disconnect: { id: bandId } } }
-        });
-      }
-
-      // Delete the band
-      await tx.band.delete({ where: { id: bandId } });
+      return band;
     });
 
-    res.json({ message: "Band deleted successfully" });
+    res.json({ message: "Band soft-deleted successfully" });
   } catch (error: any) {
     console.error("Prisma deleteBand error:", error.message);
 

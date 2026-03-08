@@ -82,6 +82,7 @@ model Band {
   shows             ShowBand[]
   tours             BandTour[]        
   invites           BandInvite[]
+  showInvites       ShowInvite[]
 }
 
 model BandMember {
@@ -135,7 +136,8 @@ model Venue {
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
-  shows             Show[]       
+  shows             Show[]    
+  blocks            VenueBlock[]   
   invites           VenueInvite[]
 
   @@index([city])
@@ -204,6 +206,10 @@ model Show {
   venueAddress      String?
 
   bands             ShowBand[]
+  showInvites       ShowInvite[]
+
+  startTime         DateTime
+  endTime           DateTime
 
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
@@ -216,6 +222,16 @@ model Show {
   @@index([status])
 }
 
+model VenueBlock {
+  id        String   @id @default(cuid())
+  venueId   String
+  venue     Venue    @relation(fields: [venueId], references: [id])
+
+  startTime DateTime
+  endTime   DateTime
+  reason    String?
+}
+
 model ShowBand {
   id                String                    @id @default(cuid())
   band              Band                      @relation(fields: [bandId], references: [id])
@@ -225,6 +241,20 @@ model ShowBand {
   role              ShowRole?
 
   @@unique([bandId, showId])
+}
+
+model ShowInvite {
+  id                String                    @id @default(cuid())
+  showId            String
+  bandId            String
+  status            InviteStatus              @default(PENDING)
+
+  show              Show                      @relation(fields: [showId], references: [id])
+  band              Band                      @relation(fields: [bandId], references: [id])
+
+  createdAt         DateTime                  @default(now())
+
+  @@unique([showId, bandId])
 }
 
 model Conversation {

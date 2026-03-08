@@ -58,6 +58,40 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const getMyInvites = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.params.id as string;
+
+    const bandInvites = await prisma.bandInvite.findMany({
+      where: {
+        userId,
+        status: "PENDING"
+      },
+      include: {
+        band: true
+      }
+    });
+
+    const venueInvites = await prisma.venueInvite.findMany({
+      where: {
+        userId,
+        status: "PENDING"
+      },
+      include: {
+        venue: true
+      }
+    });
+
+    res.json({
+      bandInvites,
+      venueInvites
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch invites" });
+  }
+};
+
 export const createUser = async (req: AuthRequest, res: Response) => {
   try {
     const {
@@ -76,13 +110,13 @@ export const createUser = async (req: AuthRequest, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const result = await prisma.user.create({
-        data: {
-          username,
-          name,
-          email,
-          password: hashedPassword,
-          role
-        }
+      data: {
+        username,
+        name,
+        email,
+        password: hashedPassword,
+        role
+      }
     });
 
     delete (result as any).password;
@@ -102,10 +136,7 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       email,
       password,
       role,
-      addBandId,
       removeBandId,
-      bandRole,
-      addVenueId,
       removeVenueId
     } = req.body;
 
@@ -121,47 +152,12 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
         updateData.password = await bcrypt.hash(password, 10);
       }
 
-      // add user to band
-      if (addBandId) {
-        await tx.bandMember.upsert({
-          where: {
-            userId_bandId: {
-              userId: id,
-              bandId: addBandId
-            }
-          },
-          update: { role: bandRole || "MEMBER" },
-          create: {
-            userId: id,
-            bandId: addBandId,
-            role: bandRole || "MEMBER"
-          }
-        });
-      }
-
       // remove user from band
       if (removeBandId) {
         await tx.bandMember.deleteMany({
           where: {
             userId: id,
             bandId: removeBandId
-          }
-        });
-      }
-
-      // add user to venue
-      if (addVenueId) {
-        await tx.venueRepresentative.upsert({
-          where: {
-            userId_venueId: {
-              userId: id,
-              venueId: addVenueId
-            }
-          },
-          update: {},
-          create: {
-            userId: id,
-            venueId: addVenueId
           }
         });
       }
@@ -188,7 +184,7 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
             include: { venue: true }
           }
         }
-        
+
       });
 
       return user;
@@ -199,6 +195,93 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to update user" });
+  }
+};
+
+export const respondToBandInvite = async (req: AuthRequest, res: Response) => {
+  try {
+    const inviteId = req.params.id as string;
+    const { response } = req.body;
+    const userId = req.user?.userId as string;
+
+    const invite = await prisma.bandInvite.findUnique({
+      where: { id: inviteId }
+    });
+
+    if (!invite || invite.userId !== userId) {
+      return res.status(404).json({ error: "Invite not found" });
+    }
+
+    if (invite.status !== "PENDING") {
+      return res.status(400).json({ error: "Invite already responded to" });
+    }
+
+    await prisma.$transaction(async (tx) => {
+
+      if (response === "ACCEPTED") {
+        await tx.bandMember.create({
+          data: {
+            userId: userId!,
+            bandId: invite.bandId,
+            role: "MEMBER"
+          }
+        });
+      }
+
+      await tx.bandInvite.update({
+        where: { id: inviteId },
+        data: { status: response }
+      });
+
+    });
+
+    res.json({ message: `Band invite ${response.toLowerCase()}` });
+
+  } catch (error) {
+    res.status(500).json({ error: "Failed to respond to band invite" });
+  }
+};
+
+export const respondToVenueInvite = async (req: AuthRequest, res: Response) => {
+  try {
+    const inviteId = req.params.id as string;
+    const { response } = req.body;
+    const userId = req.user?.userId;
+
+    const invite = await prisma.venueInvite.findUnique({
+      where: { id: inviteId }
+    });
+
+    if (!invite || invite.userId !== userId) {
+      return res.status(404).json({ error: "Invite not found" });
+    }
+
+    if (invite.status !== "PENDING") {
+      return res.status(400).json({ error: "Invite already responded to" });
+    }
+
+    await prisma.$transaction(async (tx) => {
+
+      if (response === "ACCEPTED") {
+        await tx.venueRepresentative.create({
+          data: {
+            userId: userId!,
+            venueId: invite.venueId
+          }
+        });
+      }
+
+      await tx.venueInvite.update({
+        where: { id: inviteId },
+        data: { status: response }
+      });
+
+    });
+
+    res.json({ message: `Venue invite ${response.toLowerCase()}` });
+
+  } catch (error) {
+    res.status(500).json({ error: "Failed to respond to venue invite" });
   }
 };
 
@@ -232,11 +315,21 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
         });
       }
 
+      // ---- Delete Band Invites ----
+      await tx.bandInvite.deleteMany({
+        where: { userId: id }
+      });
+
+      // ---- Delete Venue Invites ----
+      await tx.venueInvite.deleteMany({
+        where: { userId: id }
+      });
+
       // ---- Handle Messages: preserve in conversation ----
       // Message stays, sender removed
       await tx.message.updateMany({
         where: { senderId: id },
-        data: { senderId: null } 
+        data: { senderId: null }
       });
 
       // ---- Remove user from conversation participants ----

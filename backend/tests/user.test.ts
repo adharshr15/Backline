@@ -7,6 +7,8 @@ let testUserId: string
 let testBandId: string
 let testVenueId: string
 let testConversationId: string
+let testBandInviteId: string
+let testVenueInviteId: string
 let token: string
 
 beforeAll(async () => {
@@ -17,6 +19,8 @@ beforeAll(async () => {
     await prisma.message.deleteMany()
     await prisma.bandMember.deleteMany()
     await prisma.venueRepresentative.deleteMany()
+    await prisma.bandInvite.deleteMany()
+    await prisma.venueInvite.deleteMany()
     await prisma.conversation.deleteMany()
     await prisma.user.deleteMany()
     await prisma.band.deleteMany()
@@ -41,6 +45,8 @@ afterAll(async () => {
     await prisma.message.deleteMany()
     await prisma.bandMember.deleteMany()
     await prisma.venueRepresentative.deleteMany()
+    await prisma.bandInvite.deleteMany()
+    await prisma.venueInvite.deleteMany()
     await prisma.conversation.deleteMany()
     await prisma.user.deleteMany()
     await prisma.band.deleteMany()
@@ -68,6 +74,24 @@ describe("User API", () => {
         token = userRes.body.token
         expect(testUserId).toBeDefined()
         expect(token).toBeDefined()
+
+        // Create band invite
+        const bandInvite = await prisma.bandInvite.create({
+            data: {
+                bandId: testBandId,
+                userId: testUserId
+            }
+        })
+        testBandInviteId = bandInvite.id
+
+        // Create venue invite
+        const venueInvite = await prisma.venueInvite.create({
+            data: {
+                venueId: testVenueId,
+                userId: testUserId
+            }
+        })
+        testVenueInviteId = venueInvite.id
     })
 
     // READ
@@ -96,6 +120,63 @@ describe("User API", () => {
         expect(res.status).toBe(404)
     })
 
+    // INVITES
+    it("Should fetch my invites", async () => {
+        const res = await request(app)
+            .get("/users/me/invites")
+            .set("Authorization", `Bearer ${token}`)
+
+        expect(res.status).toBe(200)
+
+        expect(res.body.bandInvites.length).toBe(1)
+        expect(res.body.bandInvites[0].id).toBe(testBandInviteId)
+
+        expect(res.body.venueInvites.length).toBe(1)
+        expect(res.body.venueInvites[0].id).toBe(testVenueInviteId)
+    })
+
+    it("Should accept a band invite", async () => {
+        const res = await request(app)
+            .post(`/users/band-invites/${testBandInviteId}/respond`)
+            .set("Authorization", `Bearer ${token}`)
+            .send({ response: "ACCEPTED" })
+
+        expect(res.status).toBe(200)
+
+        const membership = await prisma.bandMember.findFirst({
+            where: {
+                userId: testUserId,
+                bandId: testBandId
+            }
+        })
+
+        expect(membership).not.toBeNull()
+
+        const bandMembers = await prisma.bandMember.findMany({ where: { userId: testUserId } })
+        expect(bandMembers.length).toBe(1)
+    })
+
+    it("Should accept a venue invite", async () => {
+        const res = await request(app)
+            .post(`/users/venue-invites/${testVenueInviteId}/respond`)
+            .set("Authorization", `Bearer ${token}`)
+            .send({ response: "ACCEPTED" })
+
+        expect(res.status).toBe(200)
+
+        const rep = await prisma.venueRepresentative.findFirst({
+            where: {
+                userId: testUserId,
+                venueId: testVenueId
+            }
+        })
+
+        expect(rep).not.toBeNull()
+
+        const venueReps = await prisma.venueRepresentative.findMany({ where: { userId: testUserId } })
+        expect(venueReps.length).toBe(1)
+    })
+
     // UPDATE
     it("Should update a user including band/venue changes", async () => {
         const res = await request(app)
@@ -104,10 +185,8 @@ describe("User API", () => {
                 name: "Updated Tester",
                 email: "updated@test.com",
                 bandRole: "MEMBER",
-                addBandId: testBandId,
-                removeBandId: null,
-                addVenueId: testVenueId,
-                removeVenueId: null
+                removeBandId: testBandId,
+                removeVenueId: testVenueId
             })
             .set("Authorization", `Bearer ${token}`);
 
@@ -117,13 +196,11 @@ describe("User API", () => {
 
         // Confirm bandMemberships updated
         const bandMembers = await prisma.bandMember.findMany({ where: { userId: testUserId } })
-        expect(bandMembers.length).toBe(1)
-        expect(bandMembers[0].bandId).toBe(testBandId)
+        expect(bandMembers.length).toBe(0)
 
         // Confirm venueReps updated
         const venueReps = await prisma.venueRepresentative.findMany({ where: { userId: testUserId } })
-        expect(venueReps.length).toBe(1)
-        expect(venueReps[0].venueId).toBe(testVenueId)
+        expect(venueReps.length).toBe(0)
         console.log(res.body);
     })
 
@@ -131,11 +208,16 @@ describe("User API", () => {
     it("Should delete a user and preserve messages", async () => {
         const deleteRes = await request(app)
             .delete(`/users/${testUserId}`)
-            .set("Authorization", `Bearer ${token}`);
+            .set("Authorization", `Bearer ${token}`)
+
+        console.log(deleteRes.error)
         expect(deleteRes.status).toBe(200)
 
-        const getRes = await request(app).get(`/users/${testUserId}`)
-        expect(getRes.status).toBe(401)
+        const getRes = await request(app)
+            .get(`/users/${testUserId}`)
+            .set("Authorization", `Bearer ${token}`)
+    
+        expect(getRes.status).toBe(404)
 
         const bandMembers = await prisma.bandMember.findMany({ where: { userId: testUserId } })
         expect(bandMembers.length).toBe(0)

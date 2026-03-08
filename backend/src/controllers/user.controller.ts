@@ -2,8 +2,9 @@ import 'dotenv/config';
 import { prisma } from '../lib/prisma'
 import { Request, Response } from 'express'
 import bcrypt from "bcrypt";
+import { AuthRequest } from '../middlewares/auth.middleware';
 
-export const getUsers = async (req: Request, res: Response) => {
+export const getUsers = async (req: AuthRequest, res: Response) => {
   try {
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 20;
@@ -28,9 +29,10 @@ export const getUsers = async (req: Request, res: Response) => {
   }
 };
 
-export const getUserById = async (req: Request, res: Response) => {
+export const getUserById = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
+    console.log(id)
 
     const user = await prisma.user.findUnique({
       where: { id },
@@ -56,7 +58,7 @@ export const getUserById = async (req: Request, res: Response) => {
   }
 };
 
-export const createUser = async (req: Request, res: Response) => {
+export const createUser = async (req: AuthRequest, res: Response) => {
   try {
     const {
       username,
@@ -91,7 +93,7 @@ export const createUser = async (req: Request, res: Response) => {
   }
 };
 
-export const updateUser = async (req: Request, res: Response) => {
+export const updateUser = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     const {
@@ -200,7 +202,7 @@ export const updateUser = async (req: Request, res: Response) => {
   }
 };
 
-export const deleteUser = async (req: Request, res: Response) => {
+export const deleteUser = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
 

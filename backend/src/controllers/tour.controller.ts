@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
+import { AuthRequest } from '../middlewares/auth.middleware';
 
 // READ
-export const getTours = async (req: Request, res: Response) => {
+export const getTours = async (req: AuthRequest, res: Response) => {
   try {
     const tours = await prisma.tour.findMany({
       where: { deletedAt: null },
@@ -15,7 +16,7 @@ export const getTours = async (req: Request, res: Response) => {
   }
 };
 
-export const getTourById = async (req: Request, res: Response) => {
+export const getTourById = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     const tour = await prisma.tour.findFirst({
@@ -31,7 +32,7 @@ export const getTourById = async (req: Request, res: Response) => {
 };
 
 // CREATE
-export const createTour = async (req: Request, res: Response) => {
+export const createTour = async (req: AuthRequest, res: Response) => {
   try {
     const { name, startDate, endDate, bandIds } = req.body;
 
@@ -61,7 +62,7 @@ export const createTour = async (req: Request, res: Response) => {
 
 
 // UPDATE
-export const updateTour = async (req: Request, res: Response) => {
+export const updateTour = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     const { name, startDate, endDate, addBandIds, removeBandIds } = req.body;
@@ -108,7 +109,7 @@ export const updateTour = async (req: Request, res: Response) => {
 };
 
 // DELETE 
-export const deleteTour = async (req: Request, res: Response) => {
+export const deleteTour = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     await prisma.$transaction(async (tx) => {

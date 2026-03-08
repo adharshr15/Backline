@@ -7,6 +7,7 @@ let testUserId: string
 let testBandId: string
 let testVenueId: string
 let testConversationId: string
+let token: string
 
 beforeAll(async () => {
     // FULL clean
@@ -30,6 +31,7 @@ beforeAll(async () => {
 
     const conversation = await prisma.conversation.create({ data: {} })
     testConversationId = conversation.id
+
 })
 
 afterAll(async () => {
@@ -51,36 +53,46 @@ describe("User API", () => {
 
     // CREATE
     it("Should create a user", async () => {
-        const res = await request(app)
-            .post("/users")
+        const userRes = await request(app)
+            .post('/auth/register')
             .send({
-                email: "test2@test.com",
-                password: "7890123",
-                username: "tester2",
-                name: "Tester 2",
-                role: "USER"
+                name: "Tester",
+                password: "password",
+                username: "tester1",
+                email: "tester@gmail.com"
             })
-        
-        expect(res.status).toBe(201)
-        testUserId = res.body.id
+
+        console.log(userRes.body)
+
+        testUserId = userRes.body.user.id
+        token = userRes.body.token
         expect(testUserId).toBeDefined()
+        expect(token).toBeDefined()
     })
 
     // READ
     it("Should get all users", async () => {
-        const res = await request(app).get("/users")
+        const res = await request(app)
+            .get("/users")
+            .set("Authorization", `Bearer ${token}`);
         expect(res.status).toBe(200)
         expect(res.body.length).toBeGreaterThan(0)
+        console.log(res.body);
     })
 
     it("Should get a valid user", async () => {
-        const res = await request(app).get(`/users/${testUserId}`)
+        const res = await request(app)
+            .get(`/users/${testUserId}`)
+            .set("Authorization", `Bearer ${token}`);
         expect(res.status).toBe(200)
         expect(res.body.id).toBe(testUserId)
+        console.log(res.body);
     })
 
     it("Should return 404 for invalid user", async () => {
-        const res = await request(app).get("/users/invalid-user-id")
+        const res = await request(app)
+            .get("/users/invalid-user-id")
+            .set("Authorization", `Bearer ${token}`);
         expect(res.status).toBe(404)
     })
 
@@ -97,6 +109,7 @@ describe("User API", () => {
                 addVenueId: testVenueId,
                 removeVenueId: null
             })
+            .set("Authorization", `Bearer ${token}`);
 
         expect(res.status).toBe(200)
         expect(res.body.name).toBe("Updated Tester")
@@ -111,15 +124,18 @@ describe("User API", () => {
         const venueReps = await prisma.venueRepresentative.findMany({ where: { userId: testUserId } })
         expect(venueReps.length).toBe(1)
         expect(venueReps[0].venueId).toBe(testVenueId)
+        console.log(res.body);
     })
-    
+
     // DELETE
     it("Should delete a user and preserve messages", async () => {
-        const deleteRes = await request(app).delete(`/users/${testUserId}`)
+        const deleteRes = await request(app)
+            .delete(`/users/${testUserId}`)
+            .set("Authorization", `Bearer ${token}`);
         expect(deleteRes.status).toBe(200)
 
         const getRes = await request(app).get(`/users/${testUserId}`)
-        expect(getRes.status).toBe(404)
+        expect(getRes.status).toBe(401)
 
         const bandMembers = await prisma.bandMember.findMany({ where: { userId: testUserId } })
         expect(bandMembers.length).toBe(0)

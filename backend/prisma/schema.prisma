@@ -25,10 +25,21 @@ enum BandRole {
   MEMBER
 }
 
+enum VenueRole {
+  MANAGER
+  REPRESENTATIVE
+}
+
 enum ShowStatus {
   PENDING
   CONFIRMED
   CANCELLED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
 }
 
 enum ShowRole {
@@ -38,7 +49,7 @@ enum ShowRole {
 
 model User {
   id                String                    @id @default(cuid())
-  username          String
+  username          String                    @unique
   name              String
   email             String                    @unique
   password          String
@@ -51,6 +62,8 @@ model User {
   isPromoter        Boolean                   @default(false)
   messages          Message[]
   conversations     ConversationParticipant[]
+  bandInvites       BandInvite[]
+  venueInvites      VenueInvite[]
   rentalItems       RentalItem[]
   @@index([role])
 }
@@ -68,6 +81,7 @@ model Band {
   members           BandMember[]
   shows             ShowBand[]
   tours             BandTour[]        
+  invites           BandInvite[]
 }
 
 model BandMember {
@@ -94,6 +108,19 @@ model BandTour {
   @@unique([bandId, tourId])
 }
 
+model BandInvite {
+  id                String                    @id @default(cuid())
+  band              Band                      @relation(fields: [bandId], references: [id])
+  bandId            String
+  user              User                      @relation(fields: [userId], references: [id])
+  userId            String
+  status            InviteStatus              @default(PENDING)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@unique([bandId, userId])
+}
+
 model Venue {
   id                String                    @id @default(cuid())
   name              String
@@ -109,6 +136,7 @@ model Venue {
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
   shows             Show[]       
+  invites           VenueInvite[]
 
   @@index([city])
   @@index([capacity]) 
@@ -121,8 +149,24 @@ model VenueRepresentative {
   userId            String                    
   venue             Venue                     @relation(fields: [venueId], references: [id])
   venueId           String
+  role              VenueRole                 @default(REPRESENTATIVE)
   
   @@unique([userId, venueId])
+  @@index([venueId])
+  @@index([userId])
+}
+
+model VenueInvite {
+  id                String                    @id @default(cuid())
+  venue             Venue                     @relation(fields: [venueId], references: [id])
+  venueId           String
+  user              User                      @relation(fields: [userId], references: [id])
+  userId            String
+  status            InviteStatus              @default(PENDING)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  
+  @@unique([venueId, userId])
   @@index([venueId])
   @@index([userId])
 }

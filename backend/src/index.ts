@@ -7,6 +7,7 @@ import tourRoutes from './routes/tour.routes'
 import showRoutes from './routes/show.routes'
 import conversationRoutes from './routes/conversation.routes'
 import messageRoutes from './routes/message.routes'
+import authRoutes from './routes/auth.routes'
 
 const app = express()
 
@@ -19,6 +20,7 @@ app.use('/tours', tourRoutes)
 app.use('/shows', showRoutes)
 app.use('/conversations', conversationRoutes)
 app.use('/messages', messageRoutes)
+app.use("/auth", authRoutes)
 
 
 app.listen(3000, () =>

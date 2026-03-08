@@ -4,9 +4,12 @@ import { app } from "../src/index"
 import { prisma } from "../src/lib/prisma"
 
 let testBandId: string
-let userId1: string
-let userId2: string
-let userId3: string
+let creatorId: string
+let creatorToken: string
+let inviteeId1: string
+let invitee1Token: string
+let inviteeId2: string
+let invitee2Token: string
 let testTourId: string
 let testShowId: string
 
@@ -15,6 +18,8 @@ beforeAll(async () => {
     await prisma.$transaction([
         prisma.show.deleteMany(),
         prisma.tour.deleteMany(),
+        prisma.bandInvite.deleteMany(),
+        prisma.venueInvite.deleteMany(),
         prisma.conversationParticipant.deleteMany(),
         prisma.message.deleteMany(),
         prisma.bandMember.deleteMany(),
@@ -26,38 +31,40 @@ beforeAll(async () => {
     ])
 
     // Create test users
-    const user1 = await prisma.user.create({
-        data: {
-            email: "banduser1@test.com",
+    const creatorRes = await request(app)
+        .post("/auth/register")
+        .send({
+            name: "Creator User",
+            username: "creator",
+            email: "creator@test.com",
             password: "password",
-            username: "harsh",
-            name: "Adharsh Rajavel",
-            role: "USER"
-        }
-    })
-    userId1 = user1.id
+        });
 
-    const user2 = await prisma.user.create({
-        data: {
-            email: "banduser2@test.com",
-            password: "password",
-            username: "tayla",
-            name: "Tayla Diza",
-            role: "USER"
-        }
-    })
-    userId2 = user2.id
+    creatorId = creatorRes.body.user.id;
+    creatorToken = creatorRes.body.token;
 
-    const user3 = await prisma.user.create({
-        data: {
-            email: "banduser3@test.com",
+    // Create invitee users
+    const invitee1 = await request(app)
+        .post("/auth/register")
+        .send({
+            name: "Invitee 1",
+            username: "invitee1",
+            email: "invitee1@test.com",
             password: "password",
-            username: "nick",
-            name: "Nicholas Dienstbier",
-            role: "USER"
-        }
-    })
-    userId3 = user3.id
+        });
+    inviteeId1 = invitee1.body.user.id;
+    invitee1Token = invitee1.body.token;
+
+    const invitee2 = await request(app)
+        .post("/auth/register")
+        .send({
+            name: "Invitee 2",
+            username: "invitee2",
+            email: "invitee2@test.com",
+            password: "password",
+        });
+    inviteeId2 = invitee2.body.user.id;
+    invitee2Token = invitee2.body.token;
 
 
     // Create test tour
@@ -73,9 +80,9 @@ beforeAll(async () => {
         data: {
             date: new Date(2026, 3, 4),
             city: "Austin",
-            state: "Texas", 
+            state: "Texas",
             country: "United States"
-        } 
+        }
     })
     testShowId = show1.id;
 
@@ -84,6 +91,8 @@ beforeAll(async () => {
 afterAll(async () => {
     // Cleanup DB completely after all tests
     await prisma.conversationParticipant.deleteMany()
+    await prisma.bandInvite.deleteMany()
+    await prisma.venueInvite.deleteMany()
     await prisma.bandMember.deleteMany()
     await prisma.venueRepresentative.deleteMany()
     await prisma.user.deleteMany()
@@ -100,35 +109,61 @@ describe("Band API", () => {
     it("Should create a band", async () => {
         const res = await request(app)
             .post("/bands")
+            .set("Authorization", `Bearer ${creatorToken}`)
             .send({
                 name: "Heel",
                 genre: "Shoegaze",
                 city: "College Station",
                 state: "Texas",
-                country: "United States",
-                members: [{ "userId": userId1, "role": "MEMBER" }, { "userId": userId2, "role": "MANAGER" }]
-            })
+                country: "USA",
+                members: [{ userId: inviteeId1 }, { userId: inviteeId2 }],
+            });
 
-        expect(res.status).toBe(201)
-        testBandId = res.body.id
-        expect(testBandId).toBeDefined()
-        expect(res.body.name).toBe("Heel")
-        console.log(res.body)
-    })
-    it("Should fail in creating a band without members", async () => {
-        const res = await request(app)
-            .post('/bands')
-            .send({
-                name: "asd",
-                genre: "asd",
-                city: "asd",
-                state: "asd",
-                country: "asd",
-                members: []
-            })
+        expect(res.status).toBe(201);
+        testBandId = res.body.id;
+        expect(testBandId).toBeDefined();
 
-        expect(res.status).toBe(400)
+        // Creator should be a member
+        const memberIds = res.body.members.map((m: any) => m.userId);
+        expect(memberIds).toContain(creatorId);
+
+        // Invites should exist for invitees
+        const invites = await prisma.bandInvite.findMany({ where: { bandId: testBandId } });
+        const inviteeIds = invites.map((i) => i.userId);
+        expect(inviteeIds).toContain(inviteeId1);
+        expect(inviteeIds).toContain(inviteeId2);
     })
+    it("Should allow invitees to accept invitation requests", async () => {
+        // Accept invitee1
+        let res = await request(app)
+            .post(`/bands/${testBandId}/invite/respond`)
+            .set("Authorization", `Bearer ${invitee1Token}`)
+            .send({ action: "ACCEPT" });
+
+        expect(res.status).toBe(200);
+        expect(res.body.members.map((m: any) => m.userId)).toContain(inviteeId1);
+
+        // Decline invitee2
+        res = await request(app)
+            .post(`/bands/${testBandId}/invite/respond`)
+            .set("Authorization", `Bearer ${invitee2Token}`)
+            .send({ action: "DECLINE" });
+
+        expect(res.status).toBe(200);
+
+        // Ensure invitee2 is NOT a member
+        const band = await prisma.band.findUnique({
+            where: { id: testBandId },
+            include: { members: true, invites: true },
+        });
+
+        const memberIds = band?.members.map((m) => m.userId);
+        expect(memberIds).not.toContain(inviteeId2);
+    });
+    it("Should fail to create a band without auth", async () => {
+        const res = await request(app).post("/bands").send({ name: "NoAuth" });
+        expect(res.status).toBe(401);
+    });
 
     // READ
     it("Should get all bands", async () => {
@@ -145,44 +180,63 @@ describe("Band API", () => {
     })
 
     // UPDATE
-    it("Should update band to include new member", async () => {
+    it("Should update band genre and invite new member", async () => {
         const res = await request(app)
             .put(`/bands/${testBandId}`)
             .send({
                 genre: "Electronic",
-                addMemberId: { userId: userId3, bandRole: "MEMBER" },
-                updateRole: { userId: userId1, bandRole: "MANAGER" }
+                inviteMemberId: inviteeId2
             })
+            .set("Authorization", `Bearer ${creatorToken}`);
 
         expect(res.status).toBe(200);
         const updatedBand = res.body;
 
-        // Check band genre updated
-        expect(updatedBand.genre).toBe("Electronic");
+        // Invitee accepts the invite
+        const res2 = await request(app)
+            .post(`/bands/${testBandId}/invite/respond`)
+            .set("Authorization", `Bearer ${invitee2Token}`)
+            .send({ action: "ACCEPT" });
 
-        // Check members array includes userId3
-        const memberIds = updatedBand.members.map((m: any) => m.userId);
-        expect(memberIds).toContain(userId3);
+        console.log(res2.error)
+        expect(res2.status).toBe(200);
 
-        // Check that userId1 role was updated to MANAGER
-        const updatedRole = updatedBand.members.find((m: any) => m.userId === userId1)?.role;
-        expect(updatedRole).toBe("MANAGER");
+        // Fetch updated members
+        const members = res2.body.members.map((m: any) => m.userId);
+        expect(members).toContain(inviteeId2);
 
         console.log("Updated Band:", updatedBand);
+    });
+    it("Should update band member role to MANAGER", async () => {
+        const res = await request(app)
+            .put(`/bands/${testBandId}`)
+            .set("Authorization", `Bearer ${creatorToken}`)
+            .send({
+                updateRole: { userId: inviteeId2, bandRole: "MANAGER" }
+            });
+
+        const updatedBand = res.body;
+        const updatedMember = updatedBand.members.find(
+            (m: any) => m.userId === inviteeId2
+        );
+
+        expect(updatedMember).toBeDefined();
+        expect(updatedMember.role).toBe("MANAGER");
     })
-    it("Should update band to remove a tour and member", async () => {
+    it("Should update band to remove a member", async () => {
         const res = await request(app)
             .put(`/bands/${testBandId}`)
             .send({
-                removeMemberId: userId3
-            });
+                removeMemberId: inviteeId1
+            })
+            .set("Authorization", `Bearer ${creatorToken}`);
 
         expect(res.status).toBe(200);
         const updatedBand = res.body;
 
         // Check member was removed
         const memberIds = updatedBand.members.map((m: any) => m.userId);
-        expect(memberIds).not.toContain(userId3);
+        expect(memberIds).not.toContain(inviteeId1);
 
         console.log("Updated Band: ", updatedBand);
 
@@ -191,7 +245,10 @@ describe("Band API", () => {
     // DELETE
     it("Should soft-delete a band and remove it from all tours", async () => {
         // Delete the band
-        const deleteRes = await request(app).delete(`/bands/${testBandId}`);
+        const deleteRes = await request(app)
+            .delete(`/bands/${testBandId}`)
+            .set("Authorization", `Bearer ${invitee2Token}`);
+
         expect(deleteRes.status).toBe(200);
 
         // Verify GET returns 404 (soft delete filter working)

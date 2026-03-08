@@ -1,8 +1,9 @@
 import { Request, Response } from "express"
 import { prisma } from "../lib/prisma"
 import { userSafeSelect } from "../lib/prismaSelects"
+import { AuthRequest } from "../middlewares/auth.middleware"
 
-export const createMessage = async (req: Request, res: Response) => {
+export const createMessage = async (req: AuthRequest, res: Response) => {
   try {
     const { content, senderId, conversationId } = req.body
 
@@ -30,7 +31,7 @@ export const createMessage = async (req: Request, res: Response) => {
   }
 }
 
-export const getMessagesForConversation = async (req: Request, res: Response) => {
+export const getMessagesForConversation = async (req: AuthRequest, res: Response) => {
   try {
     const conversationId = req.params.conversationId as string;
 
@@ -49,7 +50,7 @@ export const getMessagesForConversation = async (req: Request, res: Response) =>
   }
 }
 
-export const deleteMessage = async (req: Request, res: Response) => {
+export const deleteMessage = async (req: AuthRequest, res: Response) => {
   try {
     const messageId = req.params.id as string;
 

@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
+import { AuthRequest } from '../middlewares/auth.middleware';
 
 // READ 
-export const getShows = async (req: Request, res: Response) => {
+export const getShows = async (req: AuthRequest, res: Response) => {
   try {
     const shows = await prisma.show.findMany({
       where: { deletedAt: null },
@@ -15,7 +16,7 @@ export const getShows = async (req: Request, res: Response) => {
   }
 };
 
-export const getShowById = async (req: Request, res: Response) => {
+export const getShowById = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     const show = await prisma.show.findFirst({
@@ -31,7 +32,7 @@ export const getShowById = async (req: Request, res: Response) => {
 };
 
 // CREATE
-export const createShow = async (req: Request, res: Response) => {
+export const createShow = async (req: AuthRequest, res: Response) => {
   try {
     const { date, city, state, country, venueId, tourId, bandIds, status, notes } = req.body;
 
@@ -60,7 +61,7 @@ export const createShow = async (req: Request, res: Response) => {
 };
 
 // UPDATE 
-export const updateShow = async (req: Request, res: Response) => {
+export const updateShow = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     const { date, city, state, country, venueId, tourId, addBandIds, removeBandIds, status, notes } = req.body;
@@ -111,7 +112,7 @@ export const updateShow = async (req: Request, res: Response) => {
 };
 
 // DELETE 
-export const deleteShow = async (req: Request, res: Response) => {
+export const deleteShow = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
 

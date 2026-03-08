@@ -1,9 +1,10 @@
 import { Request, Response } from "express"
 import { prisma } from "../lib/prisma"
 import { userSafeSelect } from "../lib/prismaSelects";
+import { AuthRequest } from '../middlewares/auth.middleware';
 
 // CREATE
-export const createConversation = async (req: Request, res: Response) => {
+export const createConversation = async (req: AuthRequest, res: Response) => {
   try {
     const { participantIds } = req.body;
 
@@ -37,7 +38,7 @@ export const createConversation = async (req: Request, res: Response) => {
 };
 
 // GET
-export const getConversationById = async (req: Request, res: Response) => {
+export const getConversationById = async (req: AuthRequest, res: Response) => {
   try {
     const conversationId = req.params.id as string
 
@@ -69,7 +70,7 @@ export const getConversationById = async (req: Request, res: Response) => {
   }
 }
 
-export const getUserConversations = async (req: Request, res: Response) => {
+export const getUserConversations = async (req: AuthRequest, res: Response) => {
   const userId = req.params.userId as string;
 
   try {
@@ -94,7 +95,7 @@ export const getUserConversations = async (req: Request, res: Response) => {
 };
 
 // UPDATE
-export const updateConversation = async (req: Request, res: Response) => {
+export const updateConversation = async (req: AuthRequest, res: Response) => {
   try {
     const conversationId = req.params.id as string
     const { name, addParticipantId, removeParticipantId } = req.body
@@ -136,7 +137,7 @@ export const updateConversation = async (req: Request, res: Response) => {
 }
 
 // DELETE
-export const deleteConversation = async (req: Request, res: Response) => {
+export const deleteConversation = async (req: AuthRequest, res: Response) => {
   try {
     const conversationId = req.params.id as string
 

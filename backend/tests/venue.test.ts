@@ -102,11 +102,32 @@ describe("Venue API", () => {
         expect(res.status).toBe(201)
         testVenueId = res.body.id
         expect(testVenueId).toBeDefined()
+        console.log(res.body)
+
+        const repIds = res.body.representatives.map((m: any) => m.userId);
+        expect(repIds).toContain(creatorId);
+
+        // Invites should exist for invitees
+        const invites = await prisma.venueInvite.findMany({ where: { venueId: testVenueId } });
+        const inviteeIds = invites.map((i) => i.userId);
+        expect(inviteeIds).toContain(inviteeId1);
+        expect(inviteeIds).toContain(inviteeId2);
     })
     it("Should allow invitees to accept venue invitation requests", async () => {
+        // Fetch the invites for the test venue
+        const invites = await prisma.venueInvite.findMany({
+            where: { venueId: testVenueId }
+        });
+
+        // Find each invitee's invite ID
+        const invite1 = invites.find(i => i.userId === inviteeId1);
+        const invite2 = invites.find(i => i.userId === inviteeId2);
+
+        if (!invite1 || !invite2) throw new Error("Venue invites not found for test users");
+
         // Accept invitee1
         let res = await request(app)
-            .post(`/venues/${testVenueId}/invite/respond`)
+            .post(`/users/venue-invites/${invite1.id}/respond`)
             .set("Authorization", `Bearer ${inviteeToken1}`)
             .send({ action: "ACCEPT" });
 
@@ -115,7 +136,7 @@ describe("Venue API", () => {
 
         // Decline invitee2
         res = await request(app)
-            .post(`/venues/${testVenueId}/invite/respond`)
+            .post(`/users/venue-invites/${invite2.id}/respond`)
             .set("Authorization", `Bearer ${inviteeToken2}`)
             .send({ action: "DECLINE" });
 
@@ -145,9 +166,8 @@ describe("Venue API", () => {
         expect(res.body.id).toBe(testVenueId)
     })
 
-    // UPDATE
     it("Should update venue to invite new representative and update capacity", async () => {
-        // Update venue capacity & send invite to user2
+        // Update venue capacity & send invite to invitee2
         const res = await request(app)
             .put(`/venues/${testVenueId}`)
             .set("Authorization", `Bearer ${creatorToken}`)
@@ -159,62 +179,76 @@ describe("Venue API", () => {
         expect(res.status).toBe(200);
         const updatedVenue = res.body;
 
-        // check venue capacity updated
+        // Check capacity updated
         expect(updatedVenue.capacity).toBe(300);
 
-        // Invitee2 accepts the invite
+        // Fetch the pending invite that should have been created
+        const invites = await prisma.venueInvite.findMany({ where: { venueId: testVenueId } });
+        console.log(invites)
+
+        const invite = await prisma.venueInvite.findFirst({
+            where: { venueId: testVenueId, userId: inviteeId2, status: "PENDING" }
+        });
+        expect(invite).toBeDefined();
+        const inviteId = invite!.id;
+
+        // Invitee2 accepts the invite via /users/venue-invites/:id/respond
         const res2 = await request(app)
-            .post(`/venues/${testVenueId}/invite/respond`)
+            .post(`/users/venue-invites/${inviteId}/respond`)
             .set("Authorization", `Bearer ${inviteeToken2}`)
             .send({ action: "ACCEPT" });
-        
-        console.log(res2.body)
+
+        console.log(res2.error)
         expect(res2.status).toBe(200);
 
-        // Check that representatives now includes invitee2
+        // Check that representatives now include invitee2
         const venueAfterAccept = res2.body;
         const representativeIds = venueAfterAccept.representatives.map((r: any) => r.userId);
         expect(representativeIds).toContain(inviteeId2);
-
-        const venue = await request(app).get(`/venues/${testVenueId}`)
-        
-
-        console.log(venue.body)
     });
+
     it("Should update venue representative role to MANAGER", async () => {
+        // Make sure invitee2 is already a representative
+        const rep = await prisma.venueRepresentative.findUnique({
+            where: { userId_venueId: { userId: inviteeId2, venueId: testVenueId } }
+        });
+        expect(rep).toBeDefined();
+
+        // Update role
         const res = await request(app)
             .put(`/venues/${testVenueId}`)
             .set("Authorization", `Bearer ${creatorToken}`)
             .send({
-                updateRole: { userId: inviteeId2, venueRole: "MANAGER"}
+                updateRole: { userId: inviteeId2, venueRole: "MANAGER" }
             });
-        
-        console.log(res.error)
+
         expect(res.status).toBe(200);
-
         const updatedVenue = res.body;
-        const updatedRepresentative = updatedVenue.representatives.find(
-            (m: any) => m.userId === inviteeId2
-        );
+        const updatedRep = updatedVenue.representatives.find((r: any) => r.userId === inviteeId2);
+        expect(updatedRep).toBeDefined();
+        expect(updatedRep.role).toBe("MANAGER");
+    });
 
-        expect(updatedRepresentative).toBeDefined();
-        expect(updatedRepresentative.role).toBe("MANAGER");
-    })
     it("Should update venue to remove a representative", async () => {
+        // Make sure invitee2 is currently a representative
+        const rep = await prisma.venueRepresentative.findUnique({
+            where: { userId_venueId: { userId: inviteeId2, venueId: testVenueId } }
+        });
+        expect(rep).toBeDefined();
+
+        // Remove representative
         const res = await request(app)
             .put(`/venues/${testVenueId}`)
             .set("Authorization", `Bearer ${creatorToken}`)
             .send({
                 removeRepresentativeId: inviteeId2
-            })
+            });
 
         expect(res.status).toBe(200);
         const updatedVenue = res.body;
-
-        // check representatives array doesnt include user 2
-        const repIds = updatedVenue.representatives.map((m: any) => m.userId);
-        expect(repIds).not.toContain(inviteeId2)
-    }) 
+        const repIds = updatedVenue.representatives.map((r: any) => r.userId);
+        expect(repIds).not.toContain(inviteeId2);
+    });
 
     // DELETE
     it("Should delete soft-delete a venue", async () => {

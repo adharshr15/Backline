@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getBands, getBandById, createBand, updateBand, deleteBand, respondToInvite } from '../controllers/band.controller'
+import { getBands, getBandById, createBand, updateBand, deleteBand, respondToShowInvite } from '../controllers/band.controller'
 import { authenticate } from '../middlewares/auth.middleware'
 
 const router = Router()
@@ -9,7 +9,7 @@ router.get('/:id', getBandById)
 
 router.use(authenticate)
 router.post('/', createBand)
-router.post("/:id/invite/respond", respondToInvite);
+router.post("/:id/respond-invite", respondToShowInvite);
 router.put("/:id", updateBand)  
 router.delete("/:id", deleteBand)
 

@@ -64,6 +64,7 @@ model User {
   conversations     ConversationParticipant[]
   bandInvites       BandInvite[]
   venueInvites      VenueInvite[]
+  showsCreated      Show[]                    @relation("createdByUser")
   rentalItems       RentalItem[]
   @@index([role])
 }
@@ -80,9 +81,11 @@ model Band {
   deletedAt         DateTime?
   members           BandMember[]
   shows             ShowBand[]
+  showsCreated      Show[]                    @relation("createdByBand")
   tours             BandTour[]        
   invites           BandInvite[]
   showInvites       ShowInvite[]
+  tourInvites       TourInvite[]
 }
 
 model BandMember {
@@ -119,7 +122,7 @@ model BandInvite {
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
 
-  @@unique([bandId, userId])
+  @@index([bandId, userId])
 }
 
 model Venue {
@@ -136,7 +139,8 @@ model Venue {
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
-  shows             Show[]    
+  shows             Show[]   
+  showInvites       ShowInvite[] 
   blocks            VenueBlock[]   
   invites           VenueInvite[]
 
@@ -168,9 +172,7 @@ model VenueInvite {
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   
-  @@unique([venueId, userId])
-  @@index([venueId])
-  @@index([userId])
+  @@index([venueId, userId])
 }
 
 model Tour {
@@ -182,9 +184,25 @@ model Tour {
   bands             BandTour[]
   shows             Show[]
 
+  tourInvites       TourInvite[]
+
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
+}
+
+model TourInvite {
+  id                String                    @id @default(cuid())
+  tourId            String
+  bandId            String
+  status            InviteStatus              @default(PENDING)
+
+  tour              Tour                      @relation(fields: [tourId], references: [id])
+  band              Band                      @relation(fields: [bandId], references: [id])
+
+  createdAt         DateTime                  @default(now())
+
+  @@index([tourId, bandId])
 }
 
 model Show {
@@ -208,8 +226,14 @@ model Show {
   bands             ShowBand[]
   showInvites       ShowInvite[]
 
-  startTime         DateTime
-  endTime           DateTime
+  startTime         DateTime?
+  endTime           DateTime?
+
+  createdByBandId   String?
+  createdByBand     Band?                     @relation("createdByBand", fields: [createdByBandId], references: [id])
+
+  createdByUserId   String?
+  createdByUser     User?                     @relation("createdByUser", fields: [createdByUserId], references: [id])
 
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
@@ -246,15 +270,17 @@ model ShowBand {
 model ShowInvite {
   id                String                    @id @default(cuid())
   showId            String
-  bandId            String
+  bandId            String?
+  venueId           String?
   status            InviteStatus              @default(PENDING)
 
   show              Show                      @relation(fields: [showId], references: [id])
-  band              Band                      @relation(fields: [bandId], references: [id])
+  band              Band?                     @relation(fields: [bandId], references: [id])
+  venue             Venue?                    @relation(fields: [venueId], references: [id])
 
   createdAt         DateTime                  @default(now())
 
-  @@unique([showId, bandId])
+  @@index([showId, bandId, venueId])
 }
 
 model Conversation {

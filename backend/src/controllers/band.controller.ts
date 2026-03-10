@@ -1,8 +1,9 @@
 import 'dotenv/config';
 import { prisma } from '../lib/prisma'
-import { BandRole } from '../../generated/prisma/client'
+import { BandRole, InviteStatus } from '../../generated/prisma/client'
 import { Request, Response } from 'express'
 import { AuthRequest } from '../middlewares/auth.middleware';
+import { request } from 'node:http';
 
 export const getBands = async (req: AuthRequest, res: Response) => {
   try {
@@ -58,6 +59,37 @@ export const getBandById = async (req: AuthRequest, res: Response) => {
   }
 }
 
+export const getMyShowInvites = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Find all bands the user is a member of
+    const userBands = await prisma.bandMember.findMany({
+      where: { userId },
+      select: { bandId: true },
+    });
+
+    const bandIds = userBands.map((b) => b.bandId);
+    if (!bandIds.length) return res.json([]); // user in no bands
+
+    // Fetch show invites for those bands
+    const invites = await prisma.showInvite.findMany({
+      where: { bandId: { in: bandIds }, status: InviteStatus.PENDING },
+      include: {
+        band: { select: { id: true, name: true } },
+        show: { include: { venue: true, tour: true, bands: { include: { band: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.status(200).json(invites);
+  } catch (error: any) {
+    console.error("Prisma getMyShowInvites error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export const createBand = async (req: AuthRequest, res: Response) => {
   try {
     const { name, genre, city, state, country, members } = req.body;
@@ -69,7 +101,7 @@ export const createBand = async (req: AuthRequest, res: Response) => {
     // Ensure at least the creator is a member
     const band = await prisma.band.create({
       data: {
-        name, genre, city, state, country, 
+        name, genre, city, state, country,
         members: {
           create: [
             {
@@ -89,7 +121,7 @@ export const createBand = async (req: AuthRequest, res: Response) => {
     // Send invites to any other users passed in `members`
     if (members && Array.isArray(members)) {
       for (const m of members) {
-        if (m.userId !== creatorId) {
+        if (m.userId && m.userId !== creatorId) {
           await prisma.bandInvite.create({
             data: {
               bandId: band.id,
@@ -115,17 +147,17 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
 
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, genre, city, state, country, updateRole, inviteMemberId, removeMemberId } : 
-    {
-      name?: string;
-      genre?: string;
-      city?: string;
-      state?: string;
-      country?: string;
-      updateRole?: { userId: string; bandRole: BandRole };
-      inviteMemberId?: string;
-      removeMemberId?: string;
-    } = req.body;
+    const { name, genre, city, state, country, updateRole, inviteMemberId, removeMemberId }:
+      {
+        name?: string;
+        genre?: string;
+        city?: string;
+        state?: string;
+        country?: string;
+        updateRole?: { userId: string; bandRole: BandRole };
+        inviteMemberId?: string;
+        removeMemberId?: string;
+      } = req.body;
 
     const updatedBand = await prisma.$transaction(async (tx) => {
       const updateData: any = {};
@@ -139,26 +171,30 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
       const requesterMembership = await tx.bandMember.findUnique({
         where: { userId_bandId: { userId, bandId } }
       });
-      const isManager = requesterMembership?.role === "MANAGER";
+      const isManager = requesterMembership?.role === "MANAGER" || requesterMembership?.role === "MEMBER";
 
       // Force remove member if requester is manager
       if (removeMemberId) {
-        if (!isManager) return res.status(403).json({ error: "Only managers can remove members" });
+        if (!isManager) throw new Error("Only managers can remove members");
 
         await tx.bandMember.delete({
           where: { userId_bandId: { userId: removeMemberId, bandId } }
         });
       }
 
-      // Add new member if provided
+      // Invite new member if provided
       if (inviteMemberId) {
-        if (!isManager) return res.status(403).json({ error: "Only managers can add members" });
+        if (!isManager) throw new Error("Only managers can add members");
 
         const existingMember = await tx.bandMember.findUnique({
           where: { userId_bandId: { userId: inviteMemberId, bandId } }
         });
-        const existingInvite = await tx.bandInvite.findUnique({
-          where: { bandId_userId: { bandId, userId: inviteMemberId } }
+        const existingInvite = await tx.bandInvite.findFirst({
+          where: {
+            bandId,
+            userId: inviteMemberId,
+            status: "PENDING"
+          }
         });
 
         if (!existingMember && !existingInvite) {
@@ -168,6 +204,8 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
 
       // Update member's role if provided
       if (updateRole) {
+        if (!isManager) throw new Error("Only managers can update roles");
+
         await tx.bandMember.update({
           where: { userId_bandId: { userId: updateRole.userId, bandId } },
           data: { role: updateRole.bandRole }
@@ -200,66 +238,182 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export const respondToInvite = async (req: AuthRequest, res: Response) => {
-  const { action } = req.body;
-  const bandId = req.params.id as string;
+export const respondToShowInvite = async (req: AuthRequest, res: Response) => {
+  try {
+    const showInviteId = req.params.id as string;
+    const { action } = req.body; // ACCEPT or DECLINE
+    const userId = req.user?.userId;
 
-  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const invite = await prisma.bandInvite.findUnique({
-    where: {
-      bandId_userId: { bandId, userId: req.user.userId }
-    }
-  });
-
-  if (!invite) return res.status(400).json({ error: "Invite not found" });
-
-  if (action === "ACCEPT") {
-    await prisma.bandMember.create({
-      data: {
-        userId: req.user.userId,
-        bandId,
-        role: "MEMBER"
-      }
+    // Fetch the invite and band members
+    const invite = await prisma.showInvite.findUnique({
+      where: { id: showInviteId },
+      include: { band: { include: { members: true } } },
     });
+
+    if (!invite) return res.status(404).json({ error: "Invite not found" });
+
+    if (!invite.bandId) {
+      return res.status(400).json({ error: "This invite is not for a band" });
+    }
+
+    const bandId = invite.bandId;
+
+    // Check if current user is in the band
+    const isBandMember = invite.band?.members.some((m) => m.userId === userId);
+    if (!isBandMember) return res.status(403).json({ error: "Not a band member" });
+
+    if (action === "ACCEPT") {
+      // Add band to the show
+      await prisma.$transaction(async (tx) => {
+        await tx.showBand.create({
+          data: {
+            showId: invite.showId,
+            bandId: bandId
+          }
+        });
+
+        // Update invite status
+        await tx.showInvite.update({
+          where: { id: showInviteId },
+          data: { status: InviteStatus.ACCEPTED },
+        });
+      })
+
+    } else if (action === "DECLINE") {
+      await prisma.showInvite.update({
+        where: { id: showInviteId },
+        data: { status: InviteStatus.DECLINED },
+      });
+    } else {
+      return res.status(400).json({ error: "Invalid action, must be ACCEPT or DECLINE" });
+    }
+
+    // Return updated show 
+    const updatedShow = await prisma.show.findUnique({
+      where: { id: invite.showId },
+      include: { bands: true },
+    });
+
+    res.status(200).json(updatedShow);
+  } catch (error: any) {
+    console.error("Prisma respondToShowInvite error:", error.message);
+    res.status(500).json({ error: error.message });
   }
+};
 
-  // Remove invite whether ACCEPT or DECLINE
-  await prisma.bandInvite.delete({ where: { id: invite.id } });
+export const respondToTourInvite = async (req: AuthRequest, res: Response) => {
+  try {
+    const tourInviteId = req.params.id as string;
+    const { action } = req.body; // ACCEPT or DECLINE
+    const userId = req.user?.userId;
 
-  const band = await prisma.band.findUnique({
-    where: { id: bandId },
-    include: { members: true }
-  });
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  res.status(200).json(band);
+    // Fetch the invite and band members
+    const invite = await prisma.tourInvite.findUnique({
+      where: { id: tourInviteId },
+      include: { band: { include: { members: true } } },
+    });
+
+    if (!invite) return res.status(404).json({ error: "Invite not found" });
+
+    // Check if current user is in the band
+    const isBandMember = invite.band.members.some((m) => m.userId === userId);
+    if (!isBandMember) return res.status(403).json({ error: "Not a band member" });
+
+    if (action === "ACCEPT") {
+      // Add band to the tour
+      await prisma.$transaction(async (tx) => {
+        await tx.bandTour.create({
+          data: {
+            tourId: invite.tourId,
+            bandId: invite.bandId,
+          },
+        });
+
+        // Update invite status
+        await tx.tourInvite.update({
+          where: { id: tourInviteId },
+          data: { status: InviteStatus.ACCEPTED },
+        });
+      })
+
+    } else if (action === "DECLINE") {
+      await prisma.tourInvite.update({
+        where: { id: tourInviteId },
+        data: { status: InviteStatus.DECLINED },
+      });
+    } else {
+      return res.status(400).json({ error: "Invalid action, must be ACCEPT or DECLINE" });
+    }
+
+    // Return updated show 
+    const updatedTour = await prisma.tour.findUnique({
+      where: { id: invite.tourId },
+      include: { bands: true },
+    });
+
+    res.status(200).json(updatedTour);
+  } catch (error: any) {
+    console.error("Prisma respondToTourInvite error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
 };
 
 export const deleteBand = async (req: AuthRequest, res: Response) => {
   try {
     const bandId = req.params.id as string;
-    const creatorId = req.user?.userId;
+    const userId = req.user?.userId;
 
-    if (!creatorId) return res.status(401).json({ error: "Unauthorized" });
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
     await prisma.$transaction(async (tx) => {
-      // Remove relationships (hard delete join rows only)
+
+      // Check if requester is a manager of this band
+      const membership = await tx.bandMember.findFirst({
+        where: {
+          bandId,
+          userId
+        }
+      });
+
+      if (!membership) {
+        throw new Error("Not a member of this band");
+      }
+
+      if (membership.role !== "MANAGER") {
+        throw new Error("Only band managers can delete the band");
+      }
+
+      // Remove relationships
       await tx.bandMember.deleteMany({ where: { bandId } });
       await tx.bandTour.deleteMany({ where: { bandId } });
       await tx.showBand.deleteMany({ where: { bandId } });
 
       // Soft delete band
-      const band = await tx.band.update({
+      await tx.band.update({
         where: { id: bandId },
         data: { deletedAt: new Date() }
       });
 
-      return band;
     });
 
     res.json({ message: "Band soft-deleted successfully" });
+
   } catch (error: any) {
     console.error("Prisma deleteBand error:", error.message);
+
+    if (error.message === "Not a member of this band") {
+      return res.status(403).json({ error: error.message });
+    }
+
+    if (error.message === "Only band managers can delete the band") {
+      return res.status(403).json({ error: error.message });
+    }
 
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Band not found" });

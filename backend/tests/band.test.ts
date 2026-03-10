@@ -15,20 +15,18 @@ let testShowId: string
 
 beforeAll(async () => {
     // Clean test database in correct order
-    await prisma.$transaction([
-        prisma.show.deleteMany(),
-        prisma.tour.deleteMany(),
-        prisma.bandInvite.deleteMany(),
-        prisma.venueInvite.deleteMany(),
-        prisma.conversationParticipant.deleteMany(),
-        prisma.message.deleteMany(),
-        prisma.bandMember.deleteMany(),
-        prisma.venueRepresentative.deleteMany(),
-        prisma.conversation.deleteMany(),
-        prisma.user.deleteMany(),
-        prisma.band.deleteMany(),
-        prisma.venue.deleteMany(),
-    ])
+    await prisma.show.deleteMany()
+    await prisma.tour.deleteMany()
+    await prisma.conversationParticipant.deleteMany()
+    await prisma.message.deleteMany()
+    await prisma.bandMember.deleteMany()
+    await prisma.venueRepresentative.deleteMany()
+    await prisma.bandInvite.deleteMany()
+    await prisma.venueInvite.deleteMany()
+    await prisma.conversation.deleteMany()
+    await prisma.user.deleteMany()
+    await prisma.band.deleteMany()
+    await prisma.venue.deleteMany()
 
     // Create test users
     const creatorRes = await request(app)
@@ -81,7 +79,8 @@ beforeAll(async () => {
             date: new Date(2026, 3, 4),
             city: "Austin",
             state: "Texas",
-            country: "United States"
+            country: "United States",
+            createdByBandId: "test"
         }
     })
     testShowId = show1.id;
@@ -90,17 +89,18 @@ beforeAll(async () => {
 
 afterAll(async () => {
     // Cleanup DB completely after all tests
+    await prisma.show.deleteMany()
+    await prisma.tour.deleteMany()
     await prisma.conversationParticipant.deleteMany()
-    await prisma.bandInvite.deleteMany()
-    await prisma.venueInvite.deleteMany()
+    await prisma.message.deleteMany()
     await prisma.bandMember.deleteMany()
     await prisma.venueRepresentative.deleteMany()
+    await prisma.bandInvite.deleteMany()
+    await prisma.venueInvite.deleteMany()
+    await prisma.conversation.deleteMany()
     await prisma.user.deleteMany()
     await prisma.band.deleteMany()
     await prisma.venue.deleteMany()
-    await prisma.tour.deleteMany()
-    await prisma.conversation.deleteMany()
-    await prisma.$disconnect()
 })
 
 describe("Band API", () => {
@@ -134,9 +134,19 @@ describe("Band API", () => {
         expect(inviteeIds).toContain(inviteeId2);
     })
     it("Should allow invitees to accept invitation requests", async () => {
+        // Fetch the invites from DB
+        const invites = await prisma.bandInvite.findMany({ where: { bandId: testBandId } });
+
+        // Find the invite IDs for each invitee
+        const invite1 = invites.find(i => i.userId === inviteeId1);
+        const invite2 = invites.find(i => i.userId === inviteeId2);
+
+        expect(invite1).toBeDefined();
+        expect(invite2).toBeDefined();
+
         // Accept invitee1
         let res = await request(app)
-            .post(`/bands/${testBandId}/invite/respond`)
+            .post(`/users/band-invites/${invite1!.id}/respond`) // Use invite ID
             .set("Authorization", `Bearer ${invitee1Token}`)
             .send({ action: "ACCEPT" });
 
@@ -145,7 +155,7 @@ describe("Band API", () => {
 
         // Decline invitee2
         res = await request(app)
-            .post(`/bands/${testBandId}/invite/respond`)
+            .post(`/users/band-invites/${invite2!.id}/respond`) // Use invite ID
             .set("Authorization", `Bearer ${invitee2Token}`)
             .send({ action: "DECLINE" });
 
@@ -181,6 +191,7 @@ describe("Band API", () => {
 
     // UPDATE
     it("Should update band genre and invite new member", async () => {
+        // Update band genre and invite a new member
         const res = await request(app)
             .put(`/bands/${testBandId}`)
             .send({
@@ -192,16 +203,28 @@ describe("Band API", () => {
         expect(res.status).toBe(200);
         const updatedBand = res.body;
 
-        // Invitee accepts the invite
+        // Get the invite ID for invitee2
+        const invite = await prisma.bandInvite.findFirst({
+            where: {
+                bandId: testBandId,
+                userId: inviteeId2,
+                status: "PENDING"
+            }
+        });
+        expect(invite).toBeDefined();
+        console.log(invite)
+        const inviteId = invite!.id;
+
+        // Invitee accepts the invite using invite ID
         const res2 = await request(app)
-            .post(`/bands/${testBandId}/invite/respond`)
+            .post(`/users/band-invites/${inviteId}/respond`)
             .set("Authorization", `Bearer ${invitee2Token}`)
             .send({ action: "ACCEPT" });
 
         console.log(res2.error)
         expect(res2.status).toBe(200);
 
-        // Fetch updated members
+        // Fetch updated members from response
         const members = res2.body.members.map((m: any) => m.userId);
         expect(members).toContain(inviteeId2);
 

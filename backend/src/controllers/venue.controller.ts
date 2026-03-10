@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { prisma } from '../lib/prisma';
 import { VenueRole } from '../../generated/prisma/client'
 import { Request, Response } from 'express';
+import { InviteStatus } from '../../generated/prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware';
 
 const authorizeVenueRep = async (venueId: string, userId: string) => {
@@ -63,6 +64,37 @@ export const getVenueById = async (req: AuthRequest, res: Response) => {
     }
 };
 
+export const getMyShowInvites = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+        // Find all bands the user is a member of
+        const userVenues = await prisma.venueRepresentative.findMany({
+            where: { userId },
+            select: { venueId: true },
+        });
+
+        const venueIds = userVenues.map((b) => b.venueId);
+        if (!venueIds.length) return res.json([]); // user in no bands
+
+        // Fetch show invites for those bands
+        const invites = await prisma.showInvite.findMany({
+            where: { bandId: { in: venueIds }, status: InviteStatus.PENDING },
+            include: {
+                band: { select: { id: true, name: true } },
+                show: { include: { venue: true, tour: true, bands: { include: { band: true } } } },
+            },
+            orderBy: { createdAt: "desc" },
+        });
+
+        res.status(200).json(invites);
+    } catch (error: any) {
+        console.error("Prisma getMyShowInvites error:", error.message);
+        res.status(500).json({ error: error.message });
+    }
+};
+
 export const createVenue = async (req: AuthRequest, res: Response) => {
     try {
         const { name, city, state, country, latitude, longitude, capacity, contactEmail, representatives } = req.body;
@@ -83,7 +115,10 @@ export const createVenue = async (req: AuthRequest, res: Response) => {
                     ]
                 }
             },
-            include: { representatives: { include: { user: true } } }
+            include: {
+                representatives: { include: { user: true } },
+                shows: true
+            }
         });
 
         // Send invites to any other users passed in `members`
@@ -149,7 +184,7 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
             const requesterMembership = await tx.venueRepresentative.findUnique({
                 where: { userId_venueId: { userId, venueId } }
             });
-            const isManager = requesterMembership?.role === "MANAGER";
+            const isManager = requesterMembership?.role === "MANAGER" || requesterMembership?.role === "REPRESENTATIVE";
 
             // Force remove representative if requester is manager
             if (removeRepresentativeId) {
@@ -160,7 +195,7 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
                 });
             }
 
-            // invite new representative if requester is manager
+            // invite new representative if provided
             if (inviteRepresentativeId) {
                 if (!isManager)
                     throw new Error("Only managers can add representatives");
@@ -169,11 +204,16 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
                 const existingRep = await tx.venueRepresentative.findUnique({
                     where: { userId_venueId: { userId: inviteRepresentativeId, venueId } }
                 });
-                const existingInvite = await tx.venueInvite.findUnique({
-                    where: { venueId_userId: { venueId, userId: inviteRepresentativeId } }
+                const existingInvite = await tx.venueInvite.findFirst({
+                    where: {
+                        venueId,
+                        userId: inviteRepresentativeId,
+                        status: "PENDING"
+                    }
                 });
 
                 if (!existingRep && !existingInvite) {
+                    console.log("Creating Venue Invite")
                     await tx.venueInvite.create({ data: { venueId, userId: inviteRepresentativeId } });
                 }
             }
@@ -192,7 +232,7 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
             const venue = await tx.venue.update({
                 where: { id: venueId },
                 data: updateData,
-                include: { representatives: true }
+                include: { representatives: true, shows: true }
             });
 
             return venue;
@@ -206,45 +246,67 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
     }
 };
 
-export const respondToInvite = async (req: AuthRequest, res: Response) => {
-  try {
-    const venueId = req.params.id as string;
-    const userId = req.user?.userId;
-    const { action } = req.body;
+export const respondToShowInvite = async (req: AuthRequest, res: Response) => {
+    try {
+        const showInviteId = req.params.id as string;
+        const { action } = req.body;
+        const userId = req.user?.userId;
 
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const invite = await prisma.venueInvite.findUnique({
-      where: { venueId_userId: { venueId, userId } }
-    });
-
-    if (!invite) return res.status(404).json({ error: "Invite not found" });
-
-    if (action === "ACCEPT") {
-      // Check if user is already a representative
-      const existingRep = await prisma.venueRepresentative.findUnique({
-        where: { userId_venueId: { userId, venueId } }
-      });
-      if (!existingRep) {
-        await prisma.venueRepresentative.create({
-          data: { venueId, userId, role: "REPRESENTATIVE" }
+        // Fetch the invite and venue representatives
+        const invite = await prisma.showInvite.findUnique({
+            where: { id: showInviteId },
+            include: { venue: { include: { representatives: true } } }
         });
-      }
+
+        if (!invite) return res.status(404).json({ error: "Invite not found" });
+
+        if (!invite.venueId) return res.status(400).json({ error: "This invite is not for a Venue" });
+
+        const venueId = invite.venueId;
+
+        // Check if current user is representative of venue
+        const isVenueRep = invite.venue?.representatives.some((m) => m.userId === userId)
+        if (!isVenueRep) return res.status(403).json({ error: "Not a venue representative" });
+
+        if (action === "ACCEPT") {
+            await prisma.$transaction(async (tx) => {
+                // Update show to include venue
+                await tx.show.update({
+                    where: { id: invite.showId },
+                    data: {
+                        venueId: invite.venueId,
+                        status: "CONFIRMED"
+                    }
+                });
+
+                // Update invite status
+                await tx.showInvite.update({
+                    where: { id: showInviteId },
+                    data: { status: InviteStatus.ACCEPTED }
+                });
+            })
+        } else if (action === "DECLINE") {
+            await prisma.showInvite.update({
+                where: { id: showInviteId },
+                data: { status: InviteStatus.DECLINED }
+            });
+        } else {
+            return res.status(400).json({ error: "Invalid action, must be either ACCEPT or DECLINE" })
+        }
+
+        // Return updated show
+        const updatedShow = await prisma.show.findUnique({
+            where: { id: invite.showId },
+            include: { bands: true },
+        });
+
+        res.status(200).json(updatedShow);
+    } catch (error: any) {
+        console.error("Prisma respondtoShowInvite error:", error.message);
+        res.status(500).json({ error: error.message})
     }
-
-    // Delete the invite regardless of action
-    await prisma.venueInvite.delete({ where: { id: invite.id } });
-
-    const venue = await prisma.venue.findUnique({
-      where: { id: venueId },
-      include: { representatives: true }
-    });
-
-    res.status(200).json(venue);
-  } catch (error: any) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
-  }
 };
 
 export const deleteVenue = async (req: AuthRequest, res: Response) => {

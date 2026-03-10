@@ -139,9 +139,10 @@ describe("User API", () => {
         const res = await request(app)
             .post(`/users/band-invites/${testBandInviteId}/respond`)
             .set("Authorization", `Bearer ${token}`)
-            .send({ response: "ACCEPTED" })
+            .send({ action: "ACCEPT" })
 
         expect(res.status).toBe(200)
+        console.log(res.body)
 
         const membership = await prisma.bandMember.findFirst({
             where: {
@@ -150,17 +151,20 @@ describe("User API", () => {
             }
         })
 
-        expect(membership).not.toBeNull()
+        expect(membership).toBeDefined()
 
         const bandMembers = await prisma.bandMember.findMany({ where: { userId: testUserId } })
         expect(bandMembers.length).toBe(1)
+
+        const bandInvite = await prisma.bandInvite.findUnique({ where: { id: testBandInviteId }})
+        expect(bandInvite).toBeDefined()
     })
 
     it("Should accept a venue invite", async () => {
         const res = await request(app)
             .post(`/users/venue-invites/${testVenueInviteId}/respond`)
             .set("Authorization", `Bearer ${token}`)
-            .send({ response: "ACCEPTED" })
+            .send({ action: "ACCEPT" })
 
         expect(res.status).toBe(200)
 

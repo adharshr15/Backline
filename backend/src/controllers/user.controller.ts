@@ -2,9 +2,11 @@ import 'dotenv/config';
 import { prisma } from '../lib/prisma'
 import { Request, Response } from 'express'
 import bcrypt from "bcrypt";
+import { InviteStatus } from '../../generated/prisma/enums'
 import { AuthRequest } from '../middlewares/auth.middleware';
 
 export const getUsers = async (req: AuthRequest, res: Response) => {
+  // Gets all Users
   try {
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 20;
@@ -30,6 +32,7 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
 };
 
 export const getUserById = async (req: AuthRequest, res: Response) => {
+  // Gets a specific User
   try {
     const id = req.params.id as string;
     console.log(id)
@@ -59,6 +62,7 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
 };
 
 export const getMyInvites = async (req: AuthRequest, res: Response) => {
+  // Gets all Band and Venue invites for a specific User
   try {
     const userId = req.params.id as string;
 
@@ -93,18 +97,15 @@ export const getMyInvites = async (req: AuthRequest, res: Response) => {
 };
 
 export const createUser = async (req: AuthRequest, res: Response) => {
+  // Creates a User
   try {
-    const {
-      username,
-      name,
-      email,
-      password,
-      role
-    } = req.body;
+    const { username, name, email, password, role } = req.body;
 
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      return res.status(400).json({ error: "Email already exists" });
+    const emailExisting = await prisma.user.findUnique({ where: { email } });
+    const usernameExisting = await prisma.user.findUnique({ where: { username } });
+
+    if (emailExisting || usernameExisting) {
+      throw new Error("Username or Email already exists");
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -130,12 +131,14 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 export const updateUser = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
+    const userId = req.user?.userId;
+
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
     const {
       username,
       name,
       email,
       password,
-      role,
       removeBandId,
       removeVenueId
     } = req.body;
@@ -146,7 +149,6 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       if (username) updateData.username = username;
       if (name) updateData.name = name;
       if (email) updateData.email = email;
-      if (role) updateData.role = role;
 
       if (password) {
         updateData.password = await bcrypt.hash(password, 10);
@@ -198,54 +200,68 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
   }
 };
 
+
 export const respondToBandInvite = async (req: AuthRequest, res: Response) => {
   try {
-    const inviteId = req.params.id as string;
-    const { response } = req.body;
     const userId = req.user?.userId as string;
+    const inviteId = req.params.id as string;
+    const { action } = req.body;
 
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Fetch the invite by its ID
     const invite = await prisma.bandInvite.findUnique({
-      where: { id: inviteId }
+      where: { id: inviteId },
     });
 
-    if (!invite || invite.userId !== userId) {
-      return res.status(404).json({ error: "Invite not found" });
-    }
+    if (!invite) return res.status(404).json({ error: "Invite not found" });
+    if (invite.userId !== userId) return res.status(403).json({ error: "Not your invite" });
 
     if (invite.status !== "PENDING") {
       return res.status(400).json({ error: "Invite already responded to" });
     }
 
-    await prisma.$transaction(async (tx) => {
-
-      if (response === "ACCEPTED") {
+    if (action === "ACCEPT") {
+      await prisma.$transaction(async (tx) => {
+        // Add the user as a member
         await tx.bandMember.create({
-          data: {
-            userId: userId!,
-            bandId: invite.bandId,
-            role: "MEMBER"
-          }
+          data: { bandId: invite.bandId, userId, role: "MEMBER" },
         });
-      }
 
-      await tx.bandInvite.update({
-        where: { id: inviteId },
-        data: { status: response }
+        // Update invite to be ACCEPTED
+        await tx.bandInvite.update({
+          where: { id: inviteId },
+          data: { status: InviteStatus.ACCEPTED }
+        });
       });
+    }
 
+    else if (action === "DECLINE") {
+      // Update invite to be DECLINED
+      await prisma.bandInvite.update({
+        where: { id: inviteId },
+        data: { status: InviteStatus.DECLINED }
+      });
+    }
+
+    else { return res.status(400).json({ error: "Invalid action, must be ACCEPT or DECLINE"})}
+
+    const updatedBand = await prisma.band.findUnique({
+      where: { id: invite.bandId },
+      include: { members: true },
     });
 
-    res.json({ message: `Band invite ${response.toLowerCase()}` });
-
-  } catch (error) {
-    res.status(500).json({ error: "Failed to respond to band invite" });
+    res.status(200).json(updatedBand);
+  } catch (error: any) {
+    console.error("respondToBandInvite error:", error.message);
+    res.status(500).json({ error: error.message });
   }
 };
 
 export const respondToVenueInvite = async (req: AuthRequest, res: Response) => {
   try {
     const inviteId = req.params.id as string;
-    const { response } = req.body;
+    const { action } = req.body;
     const userId = req.user?.userId;
 
     const invite = await prisma.venueInvite.findUnique({
@@ -260,27 +276,44 @@ export const respondToVenueInvite = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: "Invite already responded to" });
     }
 
-    await prisma.$transaction(async (tx) => {
-
-      if (response === "ACCEPTED") {
+    if (action === "ACCEPT") {
+      await prisma.$transaction(async (tx) => {
+        // Add as representative
         await tx.venueRepresentative.create({
           data: {
             userId: userId!,
             venueId: invite.venueId
           }
         });
-      }
 
-      await tx.venueInvite.update({
-        where: { id: inviteId },
-        data: { status: response }
+        // Update invite to be ACCEPTED
+        await tx.venueInvite.update({
+          where: { id: inviteId },
+          data: { status: InviteStatus.ACCEPTED }
+        });
+
       });
+    }
 
+    else if (action === "DECLINE") {
+      await prisma.venueInvite.update({
+        where: { id: inviteId },
+        data: { status: InviteStatus.DECLINED }
+      });
+    }
+
+    else { return res.status(400).json({ error: "Invalid action, must be ACCEPT or DECLINE"})}
+
+    // Fetch updated venue with representatives
+    const updatedVenue = await prisma.venue.findUnique({
+      where: { id: invite.venueId },
+      include: { representatives: true }
     });
 
-    res.json({ message: `Venue invite ${response.toLowerCase()}` });
+    res.json(updatedVenue);
 
   } catch (error) {
+    console.error("respondToVenueInvite error:", error);
     res.status(500).json({ error: "Failed to respond to venue invite" });
   }
 };

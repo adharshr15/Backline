@@ -2,6 +2,21 @@ import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { AuthRequest } from '../middlewares/auth.middleware';
 
+const canManageTour = async (tourId: string, userId: string) => {
+  const tour = await prisma.tour.findUnique({
+    where: { id: tourId },
+    include: {
+      createdByBand: { include: { members: true } }
+    }
+  });
+
+  if (!tour) return false;
+
+  const isCreatorBandMember = tour.createdByBand?.members.some(m => m.userId === userId);
+
+  return isCreatorBandMember;
+}
+
 // READ
 export const getTours = async (req: AuthRequest, res: Response) => {
   try {
@@ -31,73 +46,146 @@ export const getTourById = async (req: AuthRequest, res: Response) => {
   }
 };
 
+
 // CREATE
 export const createTour = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, startDate, endDate, bandIds } = req.body;
+    const userId = req.user?.userId as string;
+    const { name, startDate, endDate, bandIds, creatorBandId }: {
+      name: string
+      startDate?: string
+      endDate?: string
+      bandIds: string[]
+      creatorBandId: string
+    } = req.body
+
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    if (!creatorBandId) return res.status(400).json({ error: "creatorBandId is required" });
+
+    // Check that user is in the creator band
+    const membership = await prisma.bandMember.findFirst({ where: { bandId: creatorBandId, userId } });
+    if (!membership) return res.status(403).json({ error: "You must be a member of the creator band" });
 
     if (!name) { return res.status(400).json({ error: "Tour name is required." }); }
 
-    const tour = await prisma.tour.create({
-      data: {
-        name,
-        startDate: startDate ? new Date(startDate) : undefined,
-        endDate: endDate ? new Date(endDate) : undefined,
-        bands: bandIds?.length
-          ? {
-              create: bandIds.map((bandId: string) => ({ bandId }))
-            }
-          : undefined
-      },
-      include: { bands: true }
+    const tour = await prisma.$transaction(async (tx) => {
+      const newTour = await tx.tour.create({
+        data: {
+          name,
+          startDate: startDate ? new Date(startDate) : undefined,
+          endDate: endDate ? new Date(endDate) : undefined,
+          createdByBandId: creatorBandId
+        }
+      });
+
+      if (bandIds.length) {
+        // Automatically add the creator band to the show
+        await tx.bandTour.create({
+          data: {
+            bandId: creatorBandId,
+            tourId: newTour.id
+          }
+        });
+
+        // Invite the rest of the specified bands
+        const uniqueBandIds = [...new Set(bandIds)];
+        const bandsToInvite = uniqueBandIds.filter(id => id !== creatorBandId);
+
+        if (bandsToInvite.length) {
+          await tx.tourInvite.createMany({
+            data: bandsToInvite.map((bandId: string) => ({
+              bandId,
+              tourId: newTour.id,
+              status: "PENDING"
+            }))
+          });
+        }
+      }
+
+      return newTour;
     });
 
-    res.status(201).json(tour);
+    const fullTour = await prisma.tour.findUnique({
+      where: { id: tour.id },
+      include: {
+        shows: true,
+        bands: { include: { band: true } },
+        tourInvites: { include: { band: true } }
+      }
+    });
+
+
+    res.status(201).json(fullTour);
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: error.message });
   }
 };
 
-
-
 // UPDATE
 export const updateTour = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
-    const { name, startDate, endDate, addBandIds, removeBandIds } = req.body;
+    const userId = req.user?.userId as string;
+
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const allowed = await canManageTour(id, userId);
+    if (!allowed) return res.status(403).json({ error: "Forbidden" });
+
+    const { name, startDate, endDate, addBandId, removeBandId } = req.body;
 
     const updatedTour = await prisma.$transaction(async (tx) => {
-      // Update main fields
-      const tour = await tx.tour.update({
+      await tx.tour.update({
         where: { id },
         data: {
-          name,
+          name: name || undefined,
           startDate: startDate ? new Date(startDate) : undefined,
           endDate: endDate ? new Date(endDate) : undefined
-        },
-        include: { bands: true }
+        }
       });
 
-      // Add bands
-      if (addBandIds?.length) {
-        for (const bandId of addBandIds) {
-          await tx.bandTour.upsert({
-            where: { bandId_tourId: { bandId, tourId: id } },
-            create: { bandId, tourId: id },
-            update: {}
+      // Add band invites
+      if (addBandId) {
+        const existingInvite = await tx.tourInvite.findFirst({
+          where: {
+            tourId: id,
+            bandId: addBandId,
+            status: "PENDING"
+          }
+        });
+
+        if (!existingInvite) {
+          await tx.tourInvite.create({
+            data: {
+              tourId: id,
+              bandId: addBandId,
+              status: "PENDING"
+            }
           });
         }
       }
 
-      // Remove bands
-      if (removeBandIds?.length) {
-        await tx.bandTour.deleteMany({
-          where: { tourId: id, bandId: { in: removeBandIds } }
+      // Remove band from show
+      if (removeBandId) {
+        await tx.bandTour.delete({
+          where: {
+            bandId_tourId: {
+              bandId: removeBandId,
+              tourId: id
+            }
+          }
         });
       }
 
-      return tour;
+      return tx.tour.findUnique({
+        where: { id },
+        include: {
+          bands: { include: { band: true } },
+          tourInvites: { include: { band: true } },
+          createdByBand: { include: { members: true } }
+        }
+      })
     });
 
     res.json(updatedTour);

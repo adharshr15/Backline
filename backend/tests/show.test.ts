@@ -213,7 +213,7 @@ describe("Show API", () => {
   })
   it("Should allow band to accept show invite", async () => {
     const res = await request(app)
-      .post(`/bands/${bandInviteId}/respond-invite`)
+      .post(`/bands/shows/invites/${bandInviteId}/respond`)
       .send({ action: "ACCEPT" })
       .set('Authorization', `Bearer ${otherUserToken}`)
 
@@ -242,7 +242,7 @@ describe("Show API", () => {
   })
   it("Should allow venue to accept show invite", async () => {
     const res = await request(app)
-      .post(`/venues/${venueInviteId}/respond-invite`)
+      .post(`/venues/shows/invites/${venueInviteId}/respond`)
       .send({ action: "ACCEPT" })
       .set("Authorization", `Bearer ${venueUserToken}`)
 

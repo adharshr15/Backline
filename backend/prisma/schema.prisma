@@ -64,7 +64,7 @@ model User {
   conversations     ConversationParticipant[]
   bandInvites       BandInvite[]
   venueInvites      VenueInvite[]
-  showsCreated      Show[]                    @relation("createdByUser")
+  showsCreated      Show[]                    @relation("showCreatedByUser")
   rentalItems       RentalItem[]
   @@index([role])
 }
@@ -81,7 +81,8 @@ model Band {
   deletedAt         DateTime?
   members           BandMember[]
   shows             ShowBand[]
-  showsCreated      Show[]                    @relation("createdByBand")
+  showsCreated      Show[]                    @relation("showCreatedByBand")
+  toursCreated      Tour[]                    @relation("tourCreatedByBand")
   tours             BandTour[]        
   invites           BandInvite[]
   showInvites       ShowInvite[]
@@ -186,6 +187,9 @@ model Tour {
 
   tourInvites       TourInvite[]
 
+  createdByBandId   String?
+  createdByBand     Band?                     @relation("tourCreatedByBand", fields: [createdByBandId], references: [id])
+
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
@@ -230,10 +234,10 @@ model Show {
   endTime           DateTime?
 
   createdByBandId   String?
-  createdByBand     Band?                     @relation("createdByBand", fields: [createdByBandId], references: [id])
+  createdByBand     Band?                     @relation("showCreatedByBand", fields: [createdByBandId], references: [id])
 
   createdByUserId   String?
-  createdByUser     User?                     @relation("createdByUser", fields: [createdByUserId], references: [id])
+  createdByUser     User?                     @relation("showCreatedByUser", fields: [createdByUserId], references: [id])
 
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt

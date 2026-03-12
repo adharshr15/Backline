@@ -10,7 +10,7 @@ router.get('/:id', getVenueById)
 router.use(authenticate)
 router.post('/', createVenue)
 router.put("/:id", updateVenue)  
-router.post('/:id/respond-invite', respondToShowInvite);
+router.post('/shows/invites/:id/respond', respondToShowInvite);
 router.delete("/:id", deleteVenue)
 
 export default router

@@ -103,6 +103,8 @@ export const createVenue = async (req: AuthRequest, res: Response) => {
         if (!creatorId) return res.status(401).json({ error: "Unauthorized" });
         if (!name) return res.status(400).json({ error: "Venue name is required." });
 
+        if (!city || !state || !country) return res.status(400).json({ error: "Location is required" })
+
         const venue = await prisma.venue.create({
             data: {
                 name, city, state, country, latitude, longitude, capacity, contactEmail,

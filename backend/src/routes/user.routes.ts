@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getUsers, getUserById, getMyInvites, createUser, updateUser, respondToBandInvite, respondToVenueInvite, deleteUser, } from '../controllers/user.controller'
+import { getUsers, getUserById, getMyInvites, getMyBandInvites, getMyVenueInvites, createUser, updateUser, respondToBandInvite, respondToVenueInvite, deleteUser, } from '../controllers/user.controller'
 import { authenticate } from '../middlewares/auth.middleware'
 
 const router = Router()
@@ -9,12 +9,21 @@ router.post('/', createUser)
 
 // protected routes
 router.use(authenticate)
-router.get('/', getUsers)
-router.get('/:id', getUserById)
-router.put("/:id", updateUser)  
+
+// invites
 router.get("/me/invites", getMyInvites)
+router.get("/me/band-invites", getMyBandInvites)
+router.get("/me/venue-invites", getMyVenueInvites)
+
 router.post("/band-invites/:id/respond", respondToBandInvite)
 router.post("/venue-invites/:id/respond", respondToVenueInvite)
-router.delete("/:id", deleteUser)
+
+// get users
+router.get('/', getUsers)
+router.get('/:id', getUserById)
+
+// update and delete yourself
+router.put("/me", updateUser)
+router.delete("/me", deleteUser)
 
 export default router

@@ -47,6 +47,15 @@ enum ShowRole {
   SUPPORT
 }
 
+enum ConversationType {
+  USER_USER
+  USER_BAND
+  USER_VENUE
+  BAND_BAND
+  BAND_VENUE
+  VENUE_VENUE
+}
+
 model User {
   id                String                    @id @default(cuid())
   username          String                    @unique
@@ -60,8 +69,10 @@ model User {
   bandMemberships   BandMember[]
   venueReps         VenueRepresentative[]
   isPromoter        Boolean                   @default(false)
-  messages          Message[]
   conversations     ConversationParticipant[]
+  sentMessages      Message[]                 @relation("UserMessages")
+  sentConversationInvites                     ConversationInvite[]          @relation("ConversationInviteSenderUser")
+  receivedConversationInvites                 ConversationInvite[]          @relation("ConversationInviteRecipientUser")
   bandInvites       BandInvite[]
   venueInvites      VenueInvite[]
   showsCreated      Show[]                    @relation("showCreatedByUser")
@@ -87,6 +98,10 @@ model Band {
   invites           BandInvite[]
   showInvites       ShowInvite[]
   tourInvites       TourInvite[]
+  conversations     ConversationParticipant[]
+  sentMessages      Message[]                 @relation("BandMessages")
+  sentConversationInvites                     ConversationInvite[]        @relation("ConversationInviteSenderBand")
+  receivedConversationInvites                 ConversationInvite[]        @relation("ConversationInviteRecipientBand")
 }
 
 model BandMember {
@@ -144,6 +159,10 @@ model Venue {
   showInvites       ShowInvite[] 
   blocks            VenueBlock[]   
   invites           VenueInvite[]
+  conversations     ConversationParticipant[]
+  sentMessages      Message[]                 @relation("VenueMessages")
+  sentConversationInvites                     ConversationInvite[]          @relation("ConversationInviteSenderVenue")
+  receivedConversationInvites                 ConversationInvite[]          @relation("ConversationInviteRecipientVenue")
 
   @@index([city])
   @@index([capacity]) 
@@ -295,33 +314,85 @@ model Conversation {
   deletedAt         DateTime?
   participants      ConversationParticipant[]
   messages          Message[]
+  invites           ConversationInvite[]
 }
 
 model ConversationParticipant {
   id                String                    @id @default(cuid())
-  user              User                      @relation(fields: [userId], references: [id])
-  userId            String
   conversation      Conversation              @relation(fields: [conversationId], references: [id])
-  conversationId    String 
+  conversationId    String
 
-  @@unique([userId, conversationId])
-  @@index([userId])
+  user              User?                     @relation(fields: [userId], references: [id])
+  userId            String?
+
+  band              Band?                     @relation(fields: [bandId], references: [id])
+  bandId            String?
+
+  venue             Venue?                    @relation(fields: [venueId], references: [id])
+  venueId           String?
+
+  joinedAt          DateTime                  @default(now())
+
   @@index([conversationId])
+  @@index([userId])
+  @@index([bandId])
+  @@index([venueId])
+}
+
+model ConversationInvite {
+  id                String                    @id @default(cuid())
+  createdAt         DateTime                  @default(now())
+  status            InviteStatus              @default(PENDING)
+
+  message           String
+
+  senderUserId      String?
+  senderUser        User?                     @relation("ConversationInviteSenderUser", fields: [senderUserId], references: [id])
+
+  senderBandId      String?
+  senderBand        Band?                     @relation("ConversationInviteSenderBand", fields: [senderBandId], references: [id])
+
+  senderVenueId     String?
+  senderVenue       Venue?                    @relation("ConversationInviteSenderVenue", fields: [senderVenueId], references: [id])
+
+  recipientUserId   String?
+  recipientUser     User?                     @relation("ConversationInviteRecipientUser", fields: [recipientUserId], references: [id])
+
+  recipientBandId   String?
+  recipientBand     Band?                     @relation("ConversationInviteRecipientBand", fields: [recipientBandId], references: [id])
+
+  recipientVenueId  String?
+  recipientVenue    Venue?                    @relation("ConversationInviteRecipientVenue", fields: [recipientVenueId], references: [id])
+
+  conversationId    String?
+  conversation      Conversation?             @relation(fields: [conversationId], references: [id])
+
+  @@index([senderUserId])
+  @@index([senderBandId])
+  @@index([senderVenueId])
+  @@index([recipientUserId])
+  @@index([recipientBandId])
+  @@index([recipientVenueId])
 }
 
 model Message {
-  id                String                    @id @default(cuid())
-  content           String 
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
-  deletedAt         DateTime?
-  sender            User?                     @relation(fields: [senderId], references: [id])
-  senderId          String?
-  conversation      Conversation              @relation(fields: [conversationId], references: [id])
-  conversationId    String  
-  
+  id              String                      @id @default(cuid())
+  content         String
+  createdAt       DateTime                    @default(now())
+  deletedAt       DateTime?
 
-  @@index([senderId])
+  conversation    Conversation                @relation(fields: [conversationId], references: [id])
+  conversationId  String
+
+  senderUser      User?                       @relation("UserMessages", fields: [senderUserId], references: [id])
+  senderUserId    String?
+
+  senderBand      Band?                       @relation("BandMessages", fields: [senderBandId], references: [id])
+  senderBandId    String?
+
+  senderVenue     Venue?                      @relation("VenueMessages", fields: [senderVenueId], references: [id])
+  senderVenueId   String?
+
   @@index([conversationId])
   @@index([createdAt])
 }

@@ -35,8 +35,7 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
   // Gets a specific User
   try {
     const id = req.params.id as string;
-    console.log(id)
-
+    
     const user = await prisma.user.findUnique({
       where: { id },
       include: {
@@ -62,39 +61,78 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
 };
 
 export const getMyInvites = async (req: AuthRequest, res: Response) => {
-  // Gets all Band and Venue invites for a specific User
   try {
-    const userId = req.params.id as string;
+    const userId = req.user?.userId
+
+    if (!userId) return res.status(401).json({ error: "Unauthorized" })
+
+    const [bandInvites, venueInvites] = await Promise.all([
+      prisma.bandInvite.findMany({
+        where: {
+          userId,
+          status: "PENDING"
+        },
+        include: { band: true },
+        orderBy: { createdAt: "desc" }
+      }),
+      prisma.venueInvite.findMany({
+        where: {
+          userId,
+          status: "PENDING"
+        },
+        include: { venue: true },
+        orderBy: { createdAt: "desc" }
+      })
+    ])
+
+    res.json({ bandInvites, venueInvites })
+
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch invites" })
+  }
+}
+
+export const getMyBandInvites = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId
+    if (!userId) return res.status(401).json({ error: "Unauthorized" })
 
     const bandInvites = await prisma.bandInvite.findMany({
       where: {
         userId,
         status: "PENDING"
       },
-      include: {
-        band: true
-      }
-    });
+      include: { band: true },
+      orderBy: { createdAt: "desc" }
+    })
+
+    res.json({ bandInvites })
+
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch band invites" })
+  }
+}
+
+export const getMyVenueInvites = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId
+    if (!userId) return res.status(401).json({ error: "Unauthorized" })
 
     const venueInvites = await prisma.venueInvite.findMany({
       where: {
         userId,
         status: "PENDING"
       },
-      include: {
-        venue: true
-      }
-    });
+      include: { venue: true },
+      orderBy: { createdAt: "desc" }
+    })
 
-    res.json({
-      bandInvites,
-      venueInvites
-    });
+    res.json({ venueInvites })
 
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch invites" });
+    res.status(500).json({ error: "Failed to fetch venue invites" })
   }
-};
+}
 
 export const createUser = async (req: AuthRequest, res: Response) => {
   // Creates a User
@@ -130,10 +168,10 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 
 export const updateUser = async (req: AuthRequest, res: Response) => {
   try {
-    const id = req.params.id as string;
     const userId = req.user?.userId;
 
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
     const {
       username,
       name,
@@ -156,9 +194,22 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
 
       // remove user from band
       if (removeBandId) {
+        // check if user is in band
+        const membership = await tx.bandMember.findFirst({
+          where: {
+            userId,
+            bandId: removeBandId
+          }
+        });
+
+        if (!membership) {
+          throw new Error("Not a member of this band");
+        }
+
+        // leave band
         await tx.bandMember.deleteMany({
           where: {
-            userId: id,
+            userId,
             bandId: removeBandId
           }
         });
@@ -166,9 +217,22 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
 
       // remove user from venue
       if (removeVenueId) {
+        // check if user is in venue
+        const membership = await tx.venueRepresentative.findFirst({
+          where: {
+            userId,
+            venueId: removeVenueId
+          }
+        });
+
+        if (!membership) {
+          throw new Error("Not a member of this venue");
+        }
+
+        // leave venue
         await tx.venueRepresentative.deleteMany({
           where: {
-            userId: id,
+            userId,
             venueId: removeVenueId
           }
         });
@@ -176,7 +240,7 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
 
       // update user information
       const user = await tx.user.update({
-        where: { id },
+        where: { id: userId },
         data: updateData,
         include: {
           bandMemberships: {
@@ -213,7 +277,7 @@ export const respondToBandInvite = async (req: AuthRequest, res: Response) => {
     const invite = await prisma.bandInvite.findUnique({
       where: { id: inviteId },
     });
-
+    
     if (!invite) return res.status(404).json({ error: "Invite not found" });
     if (invite.userId !== userId) return res.status(403).json({ error: "Not your invite" });
 
@@ -244,7 +308,7 @@ export const respondToBandInvite = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    else { return res.status(400).json({ error: "Invalid action, must be ACCEPT or DECLINE"})}
+    else { return res.status(400).json({ error: "Invalid action, must be ACCEPT or DECLINE" }) }
 
     const updatedBand = await prisma.band.findUnique({
       where: { id: invite.bandId },
@@ -302,7 +366,7 @@ export const respondToVenueInvite = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    else { return res.status(400).json({ error: "Invalid action, must be ACCEPT or DECLINE"})}
+    else { return res.status(400).json({ error: "Invalid action, must be ACCEPT or DECLINE" }) }
 
     // Fetch updated venue with representatives
     const updatedVenue = await prisma.venue.findUnique({
@@ -320,7 +384,7 @@ export const respondToVenueInvite = async (req: AuthRequest, res: Response) => {
 
 export const deleteUser = async (req: AuthRequest, res: Response) => {
   try {
-    const id = req.params.id as string;
+    const id = req.user?.userId as string;
 
     await prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
@@ -361,8 +425,8 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
       // ---- Handle Messages: preserve in conversation ----
       // Message stays, sender removed
       await tx.message.updateMany({
-        where: { senderId: id },
-        data: { senderId: null }
+        where: { senderUserId: id },
+        data: { senderUserId: null }
       });
 
       // ---- Remove user from conversation participants ----

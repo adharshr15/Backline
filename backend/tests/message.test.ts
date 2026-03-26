@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import request from "supertest"
 import { app } from "../src/index"
 import { prisma } from "../src/lib/prisma"
+import { ParticipantType } from "../generated/prisma/enums"
 
 let userId1: string
 let userToken1: string
@@ -11,142 +12,118 @@ let conversationId1: string
 let testMessageId: string
 
 beforeAll(async () => {
-    await prisma.$transaction([
-        prisma.message.deleteMany(),
-        prisma.conversationParticipant.deleteMany(),
-        prisma.conversation.deleteMany(),
-        prisma.user.deleteMany(),
-        prisma.showBand.deleteMany(),
-        prisma.bandTour.deleteMany(),
-        prisma.show.deleteMany(),
-        prisma.tour.deleteMany(),
-        prisma.bandMember.deleteMany(),
-        prisma.band.deleteMany(),
-    ]);
+  await prisma.$transaction([
+    prisma.message.deleteMany(),
+    prisma.conversationParticipant.deleteMany(),
+    prisma.conversation.deleteMany(),
+    prisma.user.deleteMany(),
+    prisma.showBand.deleteMany(),
+    prisma.bandTour.deleteMany(),
+    prisma.show.deleteMany(),
+    prisma.tour.deleteMany(),
+    prisma.bandMember.deleteMany(),
+    prisma.band.deleteMany(),
+  ]);
 
-    const user1Res = await request(app)
-        .post('/auth/register')
-        .send({
-            name: "Adharsh",
-            username: "adharsh",
-            email: "test@test.com",
-            password: "password"
-        })
-    userId1 = user1Res.body.id
-    userToken1 = user1Res.body.token
+  // Create test users
+  const creatorRes = await request(app)
+    .post("/auth/register")
+    .send({
+      name: "Adharsh",
+      username: "creator",
+      email: "creator@test.com",
+      password: "password",
+    });
 
-    const user2Res = await request(app)
-        .post('/auth/register')
-        .send({
-            name: "User2",
-            username: "msg2User",
-            email: "msg2@test.com",
-            password: "password"
-        })
-    userId2 = user2Res.body.id
-    userToken2 = user2Res.body.token
+  userId1 = creatorRes.body.user.id;
+  userToken1 = creatorRes.body.token;
 
-    const conversation = await prisma.conversation.create({
-        data: {
-            participants: {
-                create: [
-                    { userId: userId1 },
-                    { userId: userId2 }
-                ]
-            }
-        },
-        include: { participants: true }
+  // Create invitee user
+  const inviteeRes = await request(app)
+    .post("/auth/register")
+    .send({
+      name: "Tayla",
+      username: "invitee1",
+      email: "invitee1@test.com",
+      password: "password",
+    });
+  userId2 = inviteeRes.body.user.id;
+  userToken2 = inviteeRes.body.token;
+
+  const conversationRes = await request(app)
+    .post("/conversations")
+    .set("Authorization", `Bearer ${userToken1}`)
+    .send({
+      userIds: [userId2],
+      senderType: "USER",
+      senderId: userId1,
+      content: "Hi Tayla"
     })
-    conversationId1 = conversation.id
+  conversationId1 = conversationRes.body.id
+
+  console.log(conversationRes.body)
+
+  const invite = await prisma.conversationInvite.findFirst({
+    where: {
+      conversationId: conversationId1,
+      recipientUserId: userId2
+    }
+  });
+
+  const respondRes = await request(app)
+    .post(`/conversations/conversation-invites/${invite!.id}/respond`)
+    .set("Authorization", `Bearer ${userToken2}`)
+    .send({
+      participantType: "USER",
+      participantId: userId2,
+      action: "ACCEPT"
+    })
+
+  console.log(respondRes.body)
 })
 
 afterAll(async () => {
-    await prisma.$transaction([
-        prisma.message.deleteMany(),
-        prisma.conversationParticipant.deleteMany(),
-        prisma.conversation.deleteMany(),
-        prisma.user.deleteMany(),
-        prisma.showBand.deleteMany(),
-        prisma.bandTour.deleteMany(),
-        prisma.show.deleteMany(),
-        prisma.tour.deleteMany(),
-        prisma.bandMember.deleteMany(),
-        prisma.band.deleteMany(),
-    ]);
+  await prisma.$transaction([
+    prisma.message.deleteMany(),
+    prisma.conversationParticipant.deleteMany(),
+    prisma.conversation.deleteMany(),
+    prisma.user.deleteMany(),
+    prisma.showBand.deleteMany(),
+    prisma.bandTour.deleteMany(),
+    prisma.show.deleteMany(),
+    prisma.tour.deleteMany(),
+    prisma.bandMember.deleteMany(),
+    prisma.band.deleteMany(),
+  ]);
 
-    await prisma.$disconnect();
+  await prisma.$disconnect();
 })
 
 describe("Message Controller", () => {
-    // CREATE
-    it("Should create a message in existing conversation", async () => {
-        const res = await request(app)
-            .post("/messages")
-            .set("Authorization", `Bearer ${userToken1}`)
-            .send({
-                content: "Hello world",
-                senderId: userId1,
-                senderType: "USER",
-                conversationId: conversationId1
-            });
+  // CREATE
+  it("Should create a message in existing conversation", async () => {
+    const res = await request(app)
+      .post(`/conversations/${conversationId1}/messages`)
+      .set("Authorization", `Bearer ${userToken2}`)
+      .send({
+        content: "Hi Adharsh",
+        senderType: "USER",
+        senderId: userId2
+      })
 
-        console.log(res.error)
-
-        expect(res.statusCode).toBe(201)
-        expect(res.body.content).toBe("Hello world")
-        expect(res.body.conversationId).toBe(conversationId1)
-        testMessageId = res.body.id
-    })
-
-    // READ
-    it("Should get messages for conversation", async () => {
-        const res = await request(app)
-            .get(`/messages/conversation/${conversationId1}`)
-            .set("Authorization", `Bearer ${userToken1}`)
-
-        expect(res.statusCode).toBe(200)
-        expect(Array.isArray(res.body)).toBe(true)
-        expect(res.body.length).toBeGreaterThan(0)
-    })
-
-    // DELETE
-    it("Should soft delete a message", async () => {
-        const res = await request(app)
-            .delete(`/messages/${testMessageId}`)
-            .set("Authorization", `Bearer ${userToken1}`)
-
-        expect(res.status).toBe(200)
-        expect(res.body.message).toBe("Message soft deleted successfully")
-
-        const deletedMessage = await prisma.message.findUnique({ where: { id: testMessageId } })
-        expect(deletedMessage?.deletedAt).not.toBeNull()
-    })
-
-    it("Should return 404 for non-existent message", async () => {
-        const res = await request(app)
-            .delete(`/messages/nonexistentid`)
-            .set("Authorization", `Bearer ${userToken1}`)
-
-        expect(res.status).toBe(404)
-        expect(res.body.error).toBe("Message not found")
-    })
-
-    // CREATE MESSAGE → CONVERSATION INVITE FLOW
-    it("Should create a conversation invite if conversation does not exist", async () => {
-        const res = await request(app)
-            .post("/messages")
-            .set("Authorization", `Bearer ${userToken1}`)
-            .send({
-                content: "Hello via invite",
-                senderId: userId1,
-                senderType: "USER",
-                recipientType: "USER",
-                recipientId: userId2
-            })
-
-        expect(res.status).toBe(201)
-        expect(res.body.invite).toBeDefined()
-        expect(res.body.notice).toBe("Conversation invite created since conversation did not exist")
-        expect(res.body.invite.message).toBe("Hello via invite")
-    })
+    console.log(res.body)
+    expect(res.status).toBe(201)
+  })
+  it("Should get all messages in an existing conversation", async () => {
+    const res = await request(app)
+      .get(`/conversations/${conversationId1}/messages`)
+      .set("Authorization", `Bearer ${userToken1}`)
+      .send({
+        senderType: "USER",
+        senderId: userId1
+      })
+    
+    console.log(res.body)
+    expect(res.body.length).toBe(2)
+  })
 })

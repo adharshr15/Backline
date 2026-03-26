@@ -1,77 +1,148 @@
 import { Response } from "express"
 import { prisma } from "../lib/prisma"
 import { AuthRequest } from "../middlewares/auth.middleware"
+import { ParticipantType } from "../../generated/prisma/enums"
 
-
-// GET
+// GET 
 export const getMessages = async (req: AuthRequest, res: Response) => {
   try {
-    const id = req.params.id as string
-    const userId = req.user?.userId as string
+    const conversationId = req.params.id as string;
+    const userId = req.user?.userId as string;
 
-    if (!userId) return res.status(401).json({ error: "Unauthorized"})
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { senderType, senderId }: { senderType: ParticipantType; senderId: string } = req.body;
+
+    if (!senderType || !senderId) {
+      return res.status(400).json({ error: "senderType and senderId are required" });
+    }
+
+    // validate participant type
+    if (![ParticipantType.USER, ParticipantType.BAND, ParticipantType.VENUE].includes(senderType)) {
+      return res.status(400).json({ error: "Invalid senderType" });
+    }
+
+    // authorization: validate requestor is user or in band/venue
+    if (senderType === ParticipantType.USER) {
+      if (senderId !== userId) return res.status(403).json({ error: "Forbidden" });
+    }
+
+    if (senderType === ParticipantType.BAND) {
+      const membership = await prisma.bandMember.findFirst({
+        where: { bandId: senderId, userId },
+      });
+      if (!membership) return res.status(403).json({ error: "Not a member of this band" });
+    }
+
+    if (senderType === ParticipantType.VENUE) {
+      const membership = await prisma.venueRepresentative.findFirst({
+        where: { venueId: senderId, userId },
+      });
+      if (!membership) return res.status(403).json({ error: "Not a representative of this venue" });
+    }
+
+    // verify that  sender is in conversation
+    let participantFilter: any = {};
+    if (senderType === ParticipantType.USER) participantFilter = { userId: senderId };
+    if (senderType === ParticipantType.BAND) participantFilter = { bandId: senderId };
+    if (senderType === ParticipantType.VENUE) participantFilter = { venueId: senderId };
 
     const participant = await prisma.conversationParticipant.findFirst({
-      where: {
-        conversationId: id,
-        userId
-      }
-    })
+      where: { conversationId, ...participantFilter },
+    });
 
-    if (!participant) return res.status(403).json({ error: "Not a participant" })
+    if (!participant) return res.status(403).json({ error: "Sender is not in this conversation" });
 
+    // fetch all messages in chronological order
     const messages = await prisma.message.findMany({
-      where: {
-        conversationId: id
-      },
-      orderBy: {
-        createdAt: "asc"
-      }
-    })
+      where: { conversationId },
+      orderBy: { createdAt: "asc" },
+    });
 
-    res.json(messages)
+    return res.status(200).json(messages);
   } catch (error) {
-    console.error(error)
-    res.status(500).json({ error: "Failed to get messages" })
+    console.error(error);
+    return res.status(500).json({ error: "Failed to get messages" });
   }
-}
+};
 
-
-// SEND
+// CREATE
 export const sendMessage = async (req: AuthRequest, res: Response) => {
   try {
-    const id = req.params.id as string
+    const conversationId = req.params.id as string
     const userId = req.user?.userId as string
 
     if (!userId) return res.status(401).json({ error: "Unauthorized" })
 
-    const { content } = req.body
+    const { content, senderType, senderId }: { 
+      content: string; 
+      senderType: ParticipantType; 
+      senderId: string 
+    } = req.body
+
+    if (!content || !senderType || !senderId) {
+      return res.status(400).json({ error: "content, senderType, and senderId are required" })
+    }
+
+    // validate senderType
+    if (![ParticipantType.USER, ParticipantType.BAND, ParticipantType.VENUE].includes(senderType)) {
+      return res.status(400).json({ error: "Invalid senderType" })
+    }
+
+    // verify requestor is authorized to send as this entity
+    if (senderType === ParticipantType.USER && senderId !== userId) {
+      return res.status(403).json({ error: "You cannot send as this user" })
+    }
+
+    if (senderType === ParticipantType.BAND) {
+      const membership = await prisma.bandMember.findFirst({
+        where: { bandId: senderId, userId }
+      })
+      if (!membership) return res.status(403).json({ error: "You are not a member of this band" })
+    }
+
+    if (senderType === ParticipantType.VENUE) {
+      const membership = await prisma.venueRepresentative.findFirst({
+        where: { venueId: senderId, userId }
+      })
+      if (!membership) return res.status(403).json({ error: "You are not a representative of this venue" })
+    }
+
+    // verify sender is a participant in the conversation
+    const participantFilter: any = {}
+    if (senderType === ParticipantType.USER) participantFilter.userId = senderId
+    if (senderType === ParticipantType.BAND) participantFilter.bandId = senderId
+    if (senderType === ParticipantType.VENUE) participantFilter.venueId = senderId
 
     const participant = await prisma.conversationParticipant.findFirst({
       where: {
-        conversationId: id,
-        userId
+        conversationId,
+        ...participantFilter
       }
     })
 
-    if (!participant) return res.status(403).json({ error: "Not a participant" })
-    
-    const message = await prisma.message.create({
-      data: {
-        conversationId: id,
-        senderUserId: userId,
-        content
-      }
-    })
+    if (!participant) return res.status(403).json({ error: "Sender is not a participant in this conversation" })
 
+    // create message
+    const messageData: any = {
+      conversationId,
+      content
+    }
+    if (senderType === ParticipantType.USER) messageData.senderUserId = senderId
+    if (senderType === ParticipantType.BAND) messageData.senderBandId = senderId
+    if (senderType === ParticipantType.VENUE) messageData.senderVenueId = senderId
+
+    const message = await prisma.message.create({ data: messageData })
+
+    // update conversation updatedAt
     await prisma.conversation.update({
-      where: { id },
+      where: { id: conversationId },
       data: { updatedAt: new Date() }
     })
 
-    res.status(201).json(message)
+    return res.status(201).json(message)
   } catch (error) {
     console.error(error)
-    res.status(500).json({ error: "Failed to send message", content: req.body.content })
+    return res.status(500).json({ error: "Failed to send message", content: req.body.content })
   }
 }

@@ -9,8 +9,8 @@ router.get('/:id', getBandById)
 
 router.use(authenticate)
 router.post('/', createBand)
-router.post("/shows/invites/:id/respond", respondToShowInvite);
-router.post("/tours/invites/:id/respond", respondToTourInvite)
+router.post("/show-invites/:id/respond", respondToShowInvite);
+router.post("/tour-invites/:id/respond", respondToTourInvite)
 router.put("/:id", updateBand)  
 router.delete("/:id", deleteBand)
 

@@ -47,6 +47,12 @@ enum ShowRole {
   SUPPORT
 }
 
+enum ParticipantType {
+  USER
+  BAND
+  VENUE
+}
+
 enum ConversationType {
   USER_USER
   USER_BAND
@@ -322,6 +328,8 @@ model ConversationParticipant {
   conversation      Conversation              @relation(fields: [conversationId], references: [id])
   conversationId    String
 
+  participantType   ParticipantType
+
   user              User?                     @relation(fields: [userId], references: [id])
   userId            String?
 
@@ -337,6 +345,9 @@ model ConversationParticipant {
   @@index([userId])
   @@index([bandId])
   @@index([venueId])
+  @@unique([conversationId, userId])
+  @@unique([conversationId, bandId])
+  @@unique([conversationId, venueId])
 }
 
 model ConversationInvite {
@@ -344,7 +355,7 @@ model ConversationInvite {
   createdAt         DateTime                  @default(now())
   status            InviteStatus              @default(PENDING)
 
-  message           String
+  message           String?
 
   senderUserId      String?
   senderUser        User?                     @relation("ConversationInviteSenderUser", fields: [senderUserId], references: [id])

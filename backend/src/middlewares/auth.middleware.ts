@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express"
+import { RateLimiterMemory } from "rate-limiter-flexible"
 import jwt from "jsonwebtoken"
 
 export interface AuthRequest extends Request {
@@ -7,6 +8,7 @@ export interface AuthRequest extends Request {
     role: string
   }
 }
+
 
 export const authenticate = (
   req: AuthRequest,

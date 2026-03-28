@@ -102,11 +102,11 @@ export const getConversation = async (req: AuthRequest, res: Response) => {
     const conversationId = req.params.id as string;
     if (!conversationId) return res.status(400).json({ error: "Conversation ID is required" });
 
-    const { senderType, senderId }: { 
-      senderType: ParticipantType; 
-      senderId: string 
+    const { senderType, senderId }: {
+      senderType: ParticipantType;
+      senderId: string
     } = req.body;
-    
+
     if (!senderType || !senderId) {
       return res.status(400).json({ error: "senderType and senderId are required" });
     }
@@ -681,6 +681,9 @@ export const leaveConversation = async (req: AuthRequest, res: Response) => {
 
     // hard delete if no more participants
     if (remainingParticipants === 0) {
+      await prisma.message.deleteMany({
+        where: { conversationId: conversationId }
+      })
       await prisma.conversation.delete({
         where: { id: conversationId }
       });

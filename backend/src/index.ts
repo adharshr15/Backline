@@ -8,10 +8,13 @@ import showRoutes from './routes/show.routes'
 import conversationRoutes from './routes/conversation.routes'
 import messageRoutes from './routes/message.routes'
 import authRoutes from './routes/auth.routes'
+import { generalRateLimiter } from './middlewares/rateLimit.middleware';
 
 const app = express()
 
 app.use(express.json())
+
+app.use(generalRateLimiter)
 
 app.use('/users', userRoutes)
 app.use('/bands', bandRoutes)

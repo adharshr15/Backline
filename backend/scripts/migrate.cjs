@@ -1,4 +1,3 @@
-// scripts/migrate.js
 const { execSync } = require('child_process');
 
 const migrationName = process.argv[2];

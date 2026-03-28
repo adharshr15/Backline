@@ -17,3 +17,6 @@ prisma/client/
 # Mac / VSCode / OS files
 .DS_Store
 .vscode/
+
+# Expo env
+expo-env.d.ts

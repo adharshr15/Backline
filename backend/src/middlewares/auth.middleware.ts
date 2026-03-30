@@ -6,7 +6,10 @@ export interface AuthRequest extends Request {
   user?: {
     userId: string
     role: string
-  }
+  };
+  files?: { 
+    [fieldName: string]: Express.Multer.File[] 
+  };
 }
 
 

@@ -4,6 +4,8 @@ import { BandRole, InviteStatus } from '../../generated/prisma/client'
 import { Request, Response } from 'express'
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { request } from 'node:http';
+import fs from 'fs';
+import path from 'path';
 
 export const getBands = async (req: AuthRequest, res: Response) => {
   try {
@@ -92,8 +94,18 @@ export const getMyShowInvites = async (req: AuthRequest, res: Response) => {
 
 export const createBand = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, genre, city, state, country, members } = req.body;
+    const { name, genre, city, state, country, bio, members } = req.body;
     const creatorId = req.user?.userId;
+
+    const files = req.files as Record<string, Express.Multer.File[]>;
+
+    const profileImageUrl = files?.profileImage?.[0]
+      ? `/uploads/${files.profileImage[0].filename}`
+      : undefined
+
+    const headerImageUrl = files?.headerImage?.[0]
+      ? `/uploads/${files.headerImage[0].filename}`
+      : undefined
 
     if (!creatorId) return res.status(401).json({ error: "Unauthorized" });
     if (!name) return res.status(400).json({ error: "Band name is required." });
@@ -103,7 +115,7 @@ export const createBand = async (req: AuthRequest, res: Response) => {
     // Ensure at least the creator is a member
     const band = await prisma.band.create({
       data: {
-        name, genre, city, state, country, accountType,
+        name, genre, city, state, country, accountType, bio, profileImageUrl, headerImageUrl,
         members: {
           create: [
             {
@@ -148,17 +160,22 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
 
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, genre, city, state, country, updateRole, inviteMemberId, removeMemberId }:
+    const { name, genre, city, state, country, bio, updateRole, inviteMemberId, removeMemberId }:
       {
         name?: string;
         genre?: string;
         city?: string;
         state?: string;
         country?: string;
+        bio?: string;
         updateRole?: { userId: string; bandRole: BandRole };
         inviteMemberId?: string;
         removeMemberId?: string;
       } = req.body;
+
+    const files = req.files as Record<string, Express.Multer.File[]>;
+
+    const currentBand = await prisma.user.findUnique({ where: { id: bandId } });
 
     const updatedBand = await prisma.$transaction(async (tx) => {
       const updateData: any = {};
@@ -167,6 +184,24 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
       if (city) updateData.city = city;
       if (state) updateData.state = state;
       if (country) updateData.country = country;
+      if (bio) updateData.bio = bio;
+
+      if (files?.profileImage?.[0]) {
+        if (currentBand?.profileImageUrl) {
+          // Deletes old profile image
+          const oldPath = path.join(__dirname, "../../", currentBand.profileImageUrl);
+          if (fs.existsSync(oldPath)) { fs.unlinkSync(oldPath); }
+        }
+        updateData.profileImageUrl = `/uploads/${files.profileImage[0].filename}`;
+      }
+      if (files?.headerImage?.[0]) {
+        if (currentBand?.headerImageUrl) {
+          // Deletes old header image
+          const oldPath = path.join(__dirname, "../../", currentBand.headerImageUrl);
+          if (fs.existsSync(oldPath)) { fs.unlinkSync(oldPath); }
+        }
+        updateData.headerImageUrl = `/uploads/${files.headerImage[0].filename}`;
+      }
 
       // Check if requester is a manager
       const requesterMembership = await tx.bandMember.findUnique({

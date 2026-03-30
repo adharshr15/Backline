@@ -4,6 +4,8 @@ import { VenueRole } from '../../generated/prisma/client'
 import { Request, Response } from 'express';
 import { InviteStatus } from '../../generated/prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware';
+import fs from 'fs';
+import path from 'path';
 
 const authorizeVenueRep = async (venueId: string, userId: string) => {
     const rep = await prisma.venueRepresentative.findUnique({
@@ -97,8 +99,18 @@ export const getMyShowInvites = async (req: AuthRequest, res: Response) => {
 
 export const createVenue = async (req: AuthRequest, res: Response) => {
     try {
-        const { name, city, state, country, latitude, longitude, capacity, contactEmail, representatives } = req.body;
+        const { name, city, state, country, latitude, longitude, capacity, bio, contactEmail, representatives } = req.body;
         const creatorId = req.user?.userId
+
+        const files = req.files as Record<string, Express.Multer.File[]>;
+
+        const profileImageUrl = files?.profileImage?.[0]
+            ? `/uploads/${files.profileImage[0].filename}`
+            : undefined
+
+        const headerImageUrl = files?.headerImage?.[0]
+            ? `/uploads/${files.headerImage[0].filename}`
+            : undefined
 
         if (!creatorId) return res.status(401).json({ error: "Unauthorized" });
         if (!name) return res.status(400).json({ error: "Venue name is required." });
@@ -109,7 +121,7 @@ export const createVenue = async (req: AuthRequest, res: Response) => {
 
         const venue = await prisma.venue.create({
             data: {
-                name, city, state, country, latitude, longitude, capacity, contactEmail, accountType,
+                name, city, state, country, latitude, longitude, capacity, bio, contactEmail, accountType, profileImageUrl, headerImageUrl,
                 representatives: {
                     create: [
                         {
@@ -173,6 +185,10 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
             removeRepresentativeId?: string;
         } = req.body;
 
+        const files = req.files as Record<string, Express.Multer.File[]>;
+
+        const currentVenue = await prisma.venue.findUnique({ where: { id: venueId } });
+
         const updatedVenue = await prisma.$transaction(async (tx) => {
             const updateData: any = {};
             if (name) updateData.name = name;
@@ -183,6 +199,23 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
             if (longitude !== undefined) updateData.longitude = longitude;
             if (capacity !== undefined) updateData.capacity = capacity;
             if (contactEmail) updateData.contactEmail = contactEmail;
+
+            if (files?.profileImage?.[0]) {
+                if (currentVenue?.profileImageUrl) {
+                    // Deletes old profile image
+                    const oldPath = path.join(__dirname, "../../", currentVenue.profileImageUrl);
+                    if (fs.existsSync(oldPath)) { fs.unlinkSync(oldPath); }
+                }
+                updateData.profileImageUrl = `/uploads/${files.profileImage[0].filename}`;
+            }
+            if (files?.headerImage?.[0]) {
+                if (currentVenue?.headerImageUrl) {
+                    // Deletes old header image
+                    const oldPath = path.join(__dirname, "../../", currentVenue.headerImageUrl);
+                    if (fs.existsSync(oldPath)) { fs.unlinkSync(oldPath); }
+                }
+                updateData.headerImageUrl = `/uploads/${files.headerImage[0].filename}`;
+            }
 
             // Check if requester is a manager
             const requesterMembership = await tx.venueRepresentative.findUnique({
@@ -309,7 +342,7 @@ export const respondToShowInvite = async (req: AuthRequest, res: Response) => {
         res.status(200).json(updatedShow);
     } catch (error: any) {
         console.error("Prisma respondtoShowInvite error:", error.message);
-        res.status(500).json({ error: error.message})
+        res.status(500).json({ error: error.message })
     }
 };
 

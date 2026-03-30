@@ -75,6 +75,7 @@ model User {
   email             String                    @unique
   password          String
   accountType       AccountType
+  bio               String?
   profileImageUrl   String?
   headerImageUrl    String?
   createdAt         DateTime                  @default(now())
@@ -102,6 +103,7 @@ model Band {
   country           String?
   profileImageUrl   String?
   headerImageUrl    String?
+  bio               String?
   accountType       AccountType
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
@@ -170,6 +172,7 @@ model Venue {
   contactEmail      String?
   profileImageUrl   String?
   headerImageUrl    String?
+  bio               String?
   representatives   VenueRepresentative[]
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt

@@ -5,6 +5,9 @@ import bcrypt from "bcrypt";
 import { InviteStatus } from '../../generated/prisma/enums'
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { AccountType } from '../../generated/prisma/enums';
+import fs from 'fs';
+import path from 'path';
+
 
 export const getUsers = async (req: AuthRequest, res: Response) => {
   // Gets all Users
@@ -36,7 +39,7 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
   // Gets a specific User
   try {
     const id = req.params.id as string;
-    
+
     const user = await prisma.user.findUnique({
       where: { id },
       include: {
@@ -138,7 +141,17 @@ export const getMyVenueInvites = async (req: AuthRequest, res: Response) => {
 export const createUser = async (req: AuthRequest, res: Response) => {
   // Creates a User
   try {
-    const { username, name, email, password } = req.body;
+    const { username, name, email, password, bio } = req.body;
+
+    const files = req.files as Record<string, Express.Multer.File[]>;
+
+    const profileImageUrl = files?.profileImage?.[0]
+      ? `/uploads/${files.profileImage[0].filename}`
+      : undefined
+
+    const headerImageUrl = files?.headerImage?.[0]
+      ? `/uploads/${files.headerImage[0].filename}`
+      : undefined
 
     const emailExisting = await prisma.user.findUnique({ where: { email } });
     const usernameExisting = await prisma.user.findUnique({ where: { username } });
@@ -155,7 +168,10 @@ export const createUser = async (req: AuthRequest, res: Response) => {
         name,
         email,
         password: hashedPassword,
-        accountType: AccountType.USER
+        accountType: AccountType.USER,
+        bio,
+        profileImageUrl,
+        headerImageUrl
       }
     });
 
@@ -178,9 +194,14 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       name,
       email,
       password,
+      bio,
       removeBandId,
       removeVenueId
     } = req.body;
+
+    const files = req.files as Record<string, Express.Multer.File[]>;
+
+    const currentUser = await prisma.user.findUnique({ where: { id: userId } });
 
     const updatedUser = await prisma.$transaction(async (tx) => {
       const updateData: any = {}
@@ -188,6 +209,25 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       if (username) updateData.username = username;
       if (name) updateData.name = name;
       if (email) updateData.email = email;
+      if (bio) updateData.bio = bio;
+
+
+      if (files?.profileImage?.[0]) {
+        if (currentUser?.profileImageUrl) {
+          // Deletes old profile image
+          const oldPath = path.join(__dirname, "../../", currentUser.profileImageUrl);
+          if (fs.existsSync(oldPath)) { fs.unlinkSync(oldPath); }
+        }
+        updateData.profileImageUrl = `/uploads/${files.profileImage[0].filename}`;
+      }
+      if (files?.headerImage?.[0]) {
+        if (currentUser?.headerImageUrl) {
+          // Deletes old header image
+          const oldPath = path.join(__dirname, "../../", currentUser.headerImageUrl);
+          if (fs.existsSync(oldPath)) { fs.unlinkSync(oldPath); }
+        }
+        updateData.headerImageUrl = `/uploads/${files.headerImage[0].filename}`;
+      }
 
       if (password) {
         updateData.password = await bcrypt.hash(password, 10);
@@ -278,7 +318,7 @@ export const respondToBandInvite = async (req: AuthRequest, res: Response) => {
     const invite = await prisma.bandInvite.findUnique({
       where: { id: inviteId },
     });
-    
+
     if (!invite) return res.status(404).json({ error: "Invite not found" });
     if (invite.userId !== userId) return res.status(403).json({ error: "Not your invite" });
 

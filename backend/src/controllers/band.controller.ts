@@ -125,7 +125,7 @@ export const createBand = async (req: AuthRequest, res: Response) => {
         }
       },
       include: {
-        members: { include: { user: true } },
+        members: { include: { user: { select: { name: true, id: true } } } },
         tours: { include: { tour: true } },
         shows: { include: { show: true } }
       }
@@ -175,7 +175,7 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
 
     const files = req.files as Record<string, Express.Multer.File[]>;
 
-    const currentBand = await prisma.user.findUnique({ where: { id: bandId } });
+    const currentBand = await prisma.band.findUnique({ where: { id: bandId } });
 
     const updatedBand = await prisma.$transaction(async (tx) => {
       const updateData: any = {};
@@ -252,7 +252,7 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
         where: { id: bandId },
         data: updateData,
         include: {
-          members: true,
+          members: { include: { user: { select: { name: true, id: true } } } },
           tours: { include: { tour: true } },
           shows: { include: { show: true } }
         }

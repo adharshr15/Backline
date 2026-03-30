@@ -132,7 +132,7 @@ export const createVenue = async (req: AuthRequest, res: Response) => {
                 }
             },
             include: {
-                representatives: { include: { user: true } },
+                representatives: { include: { user: { select: { name: true, id: true } } } },
                 shows: true
             }
         });
@@ -269,7 +269,7 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
             const venue = await tx.venue.update({
                 where: { id: venueId },
                 data: updateData,
-                include: { representatives: true, shows: true }
+                include: { representatives: { include: { user: { select: { name: true, id: true } } } }, shows: true }
             });
 
             return venue;

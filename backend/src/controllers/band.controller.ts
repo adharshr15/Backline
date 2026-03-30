@@ -98,15 +98,16 @@ export const createBand = async (req: AuthRequest, res: Response) => {
     if (!creatorId) return res.status(401).json({ error: "Unauthorized" });
     if (!name) return res.status(400).json({ error: "Band name is required." });
 
+    const accountType = "BAND";
+
     // Ensure at least the creator is a member
     const band = await prisma.band.create({
       data: {
-        name, genre, city, state, country,
+        name, genre, city, state, country, accountType,
         members: {
           create: [
             {
-              userId: creatorId,
-              role: "MANAGER"
+              userId: creatorId
             }
           ]
         }

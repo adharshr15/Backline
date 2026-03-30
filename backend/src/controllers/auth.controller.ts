@@ -3,6 +3,7 @@ import bcrypt from "bcrypt"
 import { prisma } from "../lib/prisma"
 import { generateToken } from "../lib/auth"
 import { AuthRequest } from "../middlewares/auth.middleware"
+import { AccountType } from "../../generated/prisma/enums"
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -28,7 +29,7 @@ export const register = async (req: Request, res: Response) => {
         username,
         email,
         password: hashedPassword,
-        role: "USER"
+        accountType: "USER"
       }
     })
 
@@ -41,7 +42,7 @@ export const register = async (req: Request, res: Response) => {
         name: user.name,
         username: user.username,
         email: user.email,
-        role: user.role
+        accountType: user.accountType
       }
     })
   } catch (error: any) {
@@ -76,7 +77,7 @@ export const login = async (req: Request, res: Response) => {
         name: user.name,
         username: user.username,
         email: user.email,
-        role: user.role
+        accountType: user.accountType
       }
     })
   } catch (error: any) {

@@ -20,6 +20,12 @@ enum Role {
   ADMIN
 }
 
+enum AccountType {
+  USER
+  BAND
+  VENUE
+}
+
 enum BandRole {
   MANAGER
   MEMBER
@@ -68,7 +74,9 @@ model User {
   name              String
   email             String                    @unique
   password          String
-  role              Role
+  accountType       AccountType
+  profileImageUrl   String?
+  headerImageUrl    String?
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
@@ -83,7 +91,6 @@ model User {
   venueInvites      VenueInvite[]
   showsCreated      Show[]                    @relation("showCreatedByUser")
   rentalItems       RentalItem[]
-  @@index([role])
 }
 
 model Band {
@@ -93,6 +100,9 @@ model Band {
   city              String?
   state             String?
   country           String?
+  profileImageUrl   String?
+  headerImageUrl    String?
+  accountType       AccountType
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
@@ -156,7 +166,10 @@ model Venue {
   latitude          Float?
   longitude         Float?
   capacity          Int?
+  accountType       AccountType
   contactEmail      String?
+  profileImageUrl   String?
+  headerImageUrl    String?
   representatives   VenueRepresentative[]
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt

@@ -105,9 +105,11 @@ export const createVenue = async (req: AuthRequest, res: Response) => {
 
         if (!city || !state || !country) return res.status(400).json({ error: "Location is required" })
 
+        const accountType = "VENUE";
+
         const venue = await prisma.venue.create({
             data: {
-                name, city, state, country, latitude, longitude, capacity, contactEmail,
+                name, city, state, country, latitude, longitude, capacity, contactEmail, accountType,
                 representatives: {
                     create: [
                         {

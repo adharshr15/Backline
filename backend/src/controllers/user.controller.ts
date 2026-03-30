@@ -4,6 +4,7 @@ import { Request, Response } from 'express'
 import bcrypt from "bcrypt";
 import { InviteStatus } from '../../generated/prisma/enums'
 import { AuthRequest } from '../middlewares/auth.middleware';
+import { AccountType } from '../../generated/prisma/enums';
 
 export const getUsers = async (req: AuthRequest, res: Response) => {
   // Gets all Users
@@ -20,7 +21,7 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
         username: true,
         name: true,
         email: true,
-        role: true,
+        accountType: true,
         createdAt: true
       }
     });
@@ -137,7 +138,7 @@ export const getMyVenueInvites = async (req: AuthRequest, res: Response) => {
 export const createUser = async (req: AuthRequest, res: Response) => {
   // Creates a User
   try {
-    const { username, name, email, password, role } = req.body;
+    const { username, name, email, password } = req.body;
 
     const emailExisting = await prisma.user.findUnique({ where: { email } });
     const usernameExisting = await prisma.user.findUnique({ where: { username } });
@@ -154,7 +155,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
         name,
         email,
         password: hashedPassword,
-        role
+        accountType: AccountType.USER
       }
     });
 

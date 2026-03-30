@@ -45,16 +45,6 @@ beforeAll(async () => {
     await prisma.band.deleteMany()
     await prisma.venue.deleteMany()
 
-    // Create band, venue, conversation for testing
-    const band = await prisma.band.create({ data: { name: "Test Band" } })
-    testBandId = band.id
-
-    const venue = await prisma.venue.create({ data: { name: "Test Venue", city: "Austin", state: "Texas", country: "United States" } })
-    testVenueId = venue.id
-
-    const conversation = await prisma.conversation.create({ data: {} })
-    testConversationId = conversation.id
-
 })
 
 afterAll(async () => {
@@ -86,7 +76,7 @@ describe("User API", () => {
                 username: "adharsh",
                 email: "adharsh@gmail.com"
             })
-
+        console.log(adharshRes.error)
         adharshId = adharshRes.body.user.id
         adharshToken = adharshRes.body.token
 

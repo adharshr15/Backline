@@ -1,5 +1,5 @@
 import { RequestHandler, Router } from 'express'
-import { getUsers, getUserById, getMyInvites, getMyBandInvites, getMyVenueInvites, createUser, updateUser, respondToBandInvite, respondToVenueInvite, deleteUser, } from '../controllers/user.controller'
+import { getUsers, getUserById, getMyProfiles, getMyInvites, getMyBandInvites, getMyVenueInvites, createUser, updateUser, respondToBandInvite, respondToVenueInvite, deleteUser, } from '../controllers/user.controller'
 import { authenticate } from '../middlewares/auth.middleware'
 import { upload } from '../config/multer'
 
@@ -16,12 +16,17 @@ router.get("/me/invites", getMyInvites as RequestHandler)
 router.get("/me/band-invites", getMyBandInvites as RequestHandler)
 router.get("/me/venue-invites", getMyVenueInvites as RequestHandler)
 
+// get profiles
+router.get('/me/profiles', getMyProfiles as RequestHandler)
+
 router.post("/band-invites/:id/respond", respondToBandInvite as RequestHandler)
 router.post("/venue-invites/:id/respond", respondToVenueInvite as RequestHandler)
 
 // get users
 router.get('/', getUsers as RequestHandler)
 router.get('/:id', getUserById as RequestHandler)
+
+
 
 // update and delete yourself
 router.put("/me", upload.fields([

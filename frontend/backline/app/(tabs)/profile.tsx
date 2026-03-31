@@ -1,13 +1,16 @@
 import { Image } from 'expo-image';
-import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity, SafeAreaViewBase } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { useState } from 'react';
-
+import { useState, useEffect } from 'react';
+import { useAuth, type ActiveProfile, type Band, type Venue } from '@/context/AuthContext'
+import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ShowCarousel, type Show } from '@/components/show-carousel';
 import { TabSwitcher } from '@/components/ui/tab-switcher';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { getMyProfiles } from '@/services/profile.service';
 
 export const AVATAR_SIZE = 80;
 const BORDER_WIDTH = 3;
@@ -46,12 +49,93 @@ const mockShows: Show[] = [
 type Tab = 'shows' | 'tours';
 
 export default function Profile() {
+  const { user, activeProfile, setActiveProfile, loading } = useAuth();
+
   const { width } = useWindowDimensions();
   const sideWidth = (width - AVATAR_SIZE) / 2;
+
   const [webViewUrl, setWebViewUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('shows');
-
+  const [switcherVisible, setSwitcherVisible] = useState(false);
+  const [bands, setBands] = useState<Band[]>([]);
+  const [venues, setVenues] = useState<Venue[]>([]);
   const borderColor = useThemeColor({}, 'text');
+
+  // Fetch all bands/venues user belongs to
+  useEffect(() => {
+    console.log('loading:', loading);
+    console.log('activeProfile:', activeProfile);
+
+    if (loading) return;
+
+    console.log('fetching profiles...');
+    getMyProfiles().then(({ bands, venues }) => {
+      console.log('bands:', bands);
+      console.log('venues:', venues);
+      setBands(bands);
+      setVenues(venues);
+    }).catch((error) => {
+      console.log('profiles error:', error.response?.status, error.response?.data);
+    });
+  }, [loading]);
+
+  const profilePicture = user?.profileImageUrl
+    ? { uri: `${BASE_URL}${user.profileImageUrl}` }
+    : require("@/assets/images/default/profileImage.png")
+
+  const headerImage = user?.headerImageUrl
+    ? { uri: `{BASE_URL}${user.headerImageUrl}` }
+    : require("@/assets/images/default/headerImage.png")
+
+  // Meta fields
+  const renderMeta = () => {
+    if (!activeProfile) return null;
+
+    if (activeProfile.accountType === 'USER') {
+      const u = activeProfile as typeof user;
+      return (
+        <View style={styles.metaRow}>
+          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
+            {u?.city && u?.state ? `${u?.city}, ${u?.state}` : ''}
+          </ThemedText>
+          <View style={{ width: AVATAR_SIZE }} />
+          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
+            {u?.country ? `${u?.country}` : ''}
+          </ThemedText>
+        </View>
+      )
+    }
+
+    if (activeProfile.accountType === 'BAND') {
+      const b = activeProfile as Band;
+      return (
+        <View style={styles.metaRow}>
+          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
+            @{b?.city}, @{b?.state}
+          </ThemedText>
+          <View style={{ width: AVATAR_SIZE }} />
+          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
+            @{b?.genre}
+          </ThemedText>
+        </View>
+      )
+    }
+
+    if (activeProfile.accountType === 'VENUE') {
+      const v = activeProfile as Venue;
+      return (
+        <View style={styles.metaRow}>
+          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
+            {v?.address}
+          </ThemedText>
+          <View style={{ width: AVATAR_SIZE }} />
+          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
+            @{v?.city}, @{v?.state}
+          </ThemedText>
+        </View>
+      )
+    }
+  }
 
   return (
     <>
@@ -60,42 +144,36 @@ export default function Profile() {
         headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
         headerImage={
           <Image
-            source={mockBandProfile.headerImage}
+            source={headerImage}
             style={{ width: '100%', height: 250 }}
           />
         }
       >
         {/* pfp straddles the top of the ThemedView */}
         <View style={styles.pfpContainer}>
-          <View style={styles.pfpWrapper}>
-            <Image
-              source={mockBandProfile.profilePicture}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          </View>
+          <TouchableOpacity onPress={() => setSwitcherVisible(true)}>
+            <View style={[styles.pfpWrapper, { borderColor }]}>
+              <Image
+                source={profilePicture}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            </View>
+          </TouchableOpacity>
         </View>
 
-        {/* location + genre */}
-        <View style={styles.metaRow}>
-          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
-            {mockBandProfile.city}, {mockBandProfile.state}
-          </ThemedText>
-          <View style={{ width: AVATAR_SIZE }} />
-          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
-            {mockBandProfile.genre}
-          </ThemedText>
-        </View>
+        {/* meta row*/}
+        {renderMeta()}
 
-        {/* band name */}
+        {/* name */}
         <Text
           numberOfLines={1}
           adjustsFontSizeToFit
           style={[styles.bandName, { maxWidth: width - 64 }]}
         >
-          {mockBandProfile.name}
+          {user?.name}
         </Text>
 
-        {/* link */}
+        {/* bio */}
         <TouchableOpacity onPress={() => setWebViewUrl(mockBandProfile.link)} style={styles.linkContainer}>
           <ThemedText style={styles.linkText} numberOfLines={1}>
             {mockBandProfile.link.replace(/^https?:\/\//, '')}
@@ -132,6 +210,85 @@ export default function Profile() {
 
       </ParallaxScrollView>
 
+      {/* Account Switcher */}
+      <Modal
+        visible={switcherVisible}
+        animationType='slide'
+        presentationStyle='pageSheet'
+        onRequestClose={() => setSwitcherVisible(false)}
+      >
+        <SafeAreaView style={styles.switcherContainer}>
+          <View style={styles.switcherHeader}>
+            <ThemedText style={styles.switcherTitle}>Switch Account</ThemedText>
+            <TouchableOpacity onPress={() => setSwitcherVisible(false)}>
+              <ThemedText style={styles.closeText}>Done</ThemedText>
+            </TouchableOpacity>
+          </View>
+
+
+          {/* User Account */}
+          <TouchableOpacity
+            style={[styles.switcherRow, activeProfile?.id === user?.id && styles.switcherRowActive]}
+            onPress={() => { setActiveProfile(user!); setSwitcherVisible(false); }}
+          >
+            <Image
+              source={user?.profileImageUrl ? { uri: user.profileImageUrl } : require('@/assets/images/default/profileImage.png')}
+              style={styles.switcherAvatar}
+            />
+            <View>
+              <ThemedText style={styles.switcherName}>{user?.name}</ThemedText>
+              <ThemedText style={styles.switcherSub}>@{user?.username}</ThemedText>
+            </View>
+          </TouchableOpacity>
+
+          {/* Band Accounts */}
+          {bands.map(band => (
+            <TouchableOpacity
+              key={band.id}
+              style={[styles.switcherRow, activeProfile?.id === band.id && styles.switcherRowActive]}
+              onPress={() => { setActiveProfile(band); setSwitcherVisible(false); }}
+            >
+              <Image
+                source={band.profileImageUrl ? { uri: band.profileImageUrl } : require('@/assets/images/default/profileImage.png')}
+                style={styles.switcherAvatar}
+              />
+              <View>
+                <ThemedText style={styles.switcherName}>{band.name}</ThemedText>
+                <ThemedText style={styles.switcherSub}>Band</ThemedText>
+              </View>
+            </TouchableOpacity>
+          ))}
+
+          {/* Venue Accounts */}
+          {venues.map(venue => (
+            <TouchableOpacity
+              key={venue.id}
+              style={[styles.switcherRow, activeProfile?.id === venue.id && styles.switcherRowActive]}
+              onPress={() => { setActiveProfile(venue); setSwitcherVisible(false); }}
+            >
+              <Image
+                source={venue.profileImageUrl ? { uri: venue.profileImageUrl } : require('@/assets/images/default/profileImage.png')}
+                style={styles.switcherAvatar}
+              />
+              <View>
+                <ThemedText style={styles.switcherName}>{venue.name}</ThemedText>
+                <ThemedText style={styles.switcherSub}>Venue</ThemedText>
+              </View>
+            </TouchableOpacity>
+          ))}
+
+          {/* Create New */}
+          <TouchableOpacity style={styles.createRow}>
+            <ThemedText style={styles.createText}>+ Create a Band</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.createRow}>
+            <ThemedText style={styles.createText}>+ Create a Venue</ThemedText>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </Modal>
+
+
+      {/* Web View Modal*/}
       <Modal
         visible={webViewUrl !== null}
         animationType="slide"
@@ -230,4 +387,26 @@ const styles = StyleSheet.create({
   webView: {
     flex: 1,
   },
+  switcherContainer: { flex: 1 },
+  switcherHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#333',
+  },
+  switcherTitle: { fontSize: 16, fontWeight: '600' },
+  switcherRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  switcherRowActive: { opacity: 0.5 },
+  switcherAvatar: { width: 44, height: 44, borderRadius: 12 },
+  switcherName: { fontSize: 15, fontWeight: '600' },
+  switcherSub: { fontSize: 12, opacity: 0.5 },
+  createRow: { padding: 16 },
+  createText: { fontSize: 15, color: '#4A90D9' },
 });

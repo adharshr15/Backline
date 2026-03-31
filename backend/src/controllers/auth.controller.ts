@@ -100,6 +100,12 @@ export const getMe = async (req: AuthRequest, res: Response) => {
         name: true,
         username: true,
         email: true,
+        accountType: true,
+        city: true,
+        state: true,
+        country: true,
+        profileImageUrl: true,
+        headerImageUrl: true,
         createdAt: true,
         bandMemberships: true,
         venueReps: true

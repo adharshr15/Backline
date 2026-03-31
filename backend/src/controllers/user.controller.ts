@@ -64,6 +64,52 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const getMyProfiles = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId
+
+    if (!userId) return res.status(401).json({ error: "Unauthorized" })
+
+    const bands = await prisma.band.findMany({
+      where: { members: { some: { userId } }, deletedAt: null },
+      select: { 
+        id: true,
+        name: true,
+        genre: true,
+        city: true, 
+        state: true,
+        country: true,
+        bio: true,
+        profileImageUrl: true,
+        headerImageUrl: true,
+        accountType: true
+      }
+    })
+
+    const venues = await prisma.venue.findMany({
+      where: { representatives: { some: { userId } }, deletedAt: null },
+      select: { 
+        id: true,
+        name: true,
+        city: true, 
+        state: true,
+        country: true,
+        address: true,
+        bio: true,
+        profileImageUrl: true,
+        headerImageUrl: true,
+        accountType: true
+      }
+    })
+
+    res.status(201).json({ bands, venues });
+  }
+  catch (error) {
+    res.status(500).json({ error: "Failed to get profiles"})
+  }
+  
+}
+
 export const getMyInvites = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId
@@ -141,7 +187,7 @@ export const getMyVenueInvites = async (req: AuthRequest, res: Response) => {
 export const createUser = async (req: AuthRequest, res: Response) => {
   // Creates a User
   try {
-    const { username, name, email, password, bio } = req.body;
+    const { username, name, email, password, bio, city, state, country } = req.body;
 
     const files = req.files as Record<string, Express.Multer.File[]>;
 
@@ -170,6 +216,9 @@ export const createUser = async (req: AuthRequest, res: Response) => {
         password: hashedPassword,
         accountType: AccountType.USER,
         bio,
+        city,
+        state,
+        country,
         profileImageUrl,
         headerImageUrl
       }
@@ -195,6 +244,9 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       email,
       password,
       bio,
+      city,
+      state,
+      country,
       removeBandId,
       removeVenueId
     } = req.body;
@@ -210,6 +262,9 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       if (name) updateData.name = name;
       if (email) updateData.email = email;
       if (bio) updateData.bio = bio;
+      if (city) updateData.city = city;
+      if (state) updateData.state = state;
+      if (country) updateData.country = country;
 
 
       if (files?.profileImage?.[0]) {

@@ -2,7 +2,6 @@ import { View, Text, Alert, TextInput, Image, TouchableOpacity, StyleSheet, Acti
 import { useRouter } from 'expo-router'
 import { useAuth } from '@/context/AuthContext'
 import { useState } from 'react'
-import { useSSO } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser'
 import * as ImagePicker from 'expo-image-picker';
 import { registerUser, checkEmailUnique, checkUsernameUnique } from '@/services/auth.service'
@@ -37,6 +36,10 @@ export default function RegisterScreen() {
       Alert.alert('Error', 'Please enter a valid email');
       return;
     }
+    if (/[^a-zA-Z0-9._-]/.test(username)) {
+      Alert.alert('Error', 'Username can only contain letters, numbers, periods, underscores, and hyphens');
+      return;
+    }
     if (password.length < 8) {
       Alert.alert('Error', 'Password must be at least 8 characters');
       return;
@@ -63,7 +66,20 @@ export default function RegisterScreen() {
     }
   }
 
-  const handleStep2 = async () => {
+  const pickImage = async (type: 'profile' | 'header') => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    })
+
+    if (!result.canceled) {
+      if (type == 'profile') setProfileImage(result.assets[0].uri);
+      else setHeaderImage(result.assets[0].uri);
+    }
+  }
+
+  const handleSubmit = async () => {
     if (!name || !username) {
       Alert.alert('Error', 'Please fill in all fields')
       return;
@@ -83,32 +99,6 @@ export default function RegisterScreen() {
         Alert.alert('Error', 'An account with this username already exists')
         return;
       }
-
-    }
-    catch (error: any) {
-      Alert.alert('Error', 'Something went wrong');
-    }
-    finally {
-      setLoading(false);
-    }
-  }
-
-  const pickImage = async (type: 'profile' | 'header') => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    })
-
-    if (!result.canceled) {
-      if (type == 'profile') setProfileImage(result.assets[0].uri);
-      else setHeaderImage(result.assets[0].uri);
-    }
-  }
-
-  const handleSubmit = async () => {
-    try {
-      setLoading(true);
 
       const formData = new FormData();
       formData.append('name', name);
@@ -179,7 +169,8 @@ export default function RegisterScreen() {
                 placeholder="Password"
                 value={password}
                 onChangeText={setPassword}
-                autoCapitalize='none'>
+                autoCapitalize='none'
+                secureTextEntry>
               </TextInput>
 
               <TouchableOpacity style={styles.button} onPress={handleStep1} disabled={loading}>

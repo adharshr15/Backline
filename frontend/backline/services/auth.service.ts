@@ -4,10 +4,25 @@
 
 import api from './api'
 
+interface loginReq {
+    username?: string
+    email?: string
+    password: string
+}
+
 export const registerUser = async (formData: FormData) => {
     const response = await api.post('/auth/register', formData, {
         headers: { 'Content-Type': 'multipart/form-data'}
     })
+    return response.data;
+}
+
+export const loginUser = async (req: loginReq) => {
+    if (!req.email && !req.username) {
+        throw new Error('Email or Username is required');
+    }
+    
+    const response = await api.post('/auth/login', req)
     return response.data;
 }
 

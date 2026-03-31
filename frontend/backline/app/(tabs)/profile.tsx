@@ -11,6 +11,8 @@ import { TabSwitcher } from '@/components/ui/tab-switcher';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getMyProfiles } from '@/services/profile.service';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 export const AVATAR_SIZE = 80;
 const BORDER_WIDTH = 3;
@@ -49,7 +51,10 @@ const mockShows: Show[] = [
 type Tab = 'shows' | 'tours';
 
 export default function Profile() {
+  const router = useRouter();
+  
   const { user, activeProfile, setActiveProfile, loading } = useAuth();
+  const bio = activeProfile && 'bio' in activeProfile ? activeProfile.bio : '';
 
   const { width } = useWindowDimensions();
   const sideWidth = (width - AVATAR_SIZE) / 2;
@@ -60,23 +65,18 @@ export default function Profile() {
   const [bands, setBands] = useState<Band[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const borderColor = useThemeColor({}, 'text');
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+
 
   // Fetch all bands/venues user belongs to
   useEffect(() => {
-    console.log('loading:', loading);
-    console.log('activeProfile:', activeProfile);
 
     if (loading) return;
 
-    console.log('fetching profiles...');
     getMyProfiles().then(({ bands, venues }) => {
-      console.log('bands:', bands);
-      console.log('venues:', venues);
       setBands(bands);
       setVenues(venues);
-    }).catch((error) => {
-      console.log('profiles error:', error.response?.status, error.response?.data);
-    });
+    })
   }, [loading]);
 
   const profilePicture = user?.profileImageUrl
@@ -137,6 +137,39 @@ export default function Profile() {
     }
   }
 
+  const isValidUrl = (text: string) => {
+    try {
+      new URL(text);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const renderBioWithLinks = (text: string) => {
+    return text.split(urlRegex).map((part, index) => {
+      const isLink = part.match(urlRegex);
+
+      if (isLink) {
+        return (
+          <ThemedText
+            key={index}
+            style={styles.linkText}
+            onPress={() => setWebViewUrl(part)}
+          >
+            {part.replace(/^https?:\/\//, '')}
+          </ThemedText>
+        );
+      }
+
+      return (
+        <ThemedText key={index} style={styles.bioText}>
+          {part}
+        </ThemedText>
+      );
+    });
+  };
+
   return (
     <>
       <ParallaxScrollView
@@ -174,11 +207,24 @@ export default function Profile() {
         </Text>
 
         {/* bio */}
-        <TouchableOpacity onPress={() => setWebViewUrl(mockBandProfile.link)} style={styles.linkContainer}>
-          <ThemedText style={styles.linkText} numberOfLines={1}>
-            {mockBandProfile.link.replace(/^https?:\/\//, '')}
-          </ThemedText>
-        </TouchableOpacity>
+        {bio ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            {renderBioWithLinks(bio)}
+          </View>
+        ) : null}
+
+        {/* action buttons */}
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.actionButton} onPress={() => console.log('Calendar')}>
+            <Ionicons name="calendar-outline" size={22} color="white"/>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton} onPress={() => console.log('Share Profile')}>
+            <Ionicons name="share-outline" size={22} color="white"/>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/settings')}>
+            <Ionicons name="settings-outline" size={22} color="white"/>
+          </TouchableOpacity>
+        </View>
 
         {/* tab content */}
         <TabSwitcher
@@ -337,7 +383,7 @@ const styles = StyleSheet.create({
     color: 'white',
     marginTop: -2,
   },
-  linkContainer: {
+  bioContainer: {
     alignItems: 'center',
     marginTop: -16,
   },
@@ -345,6 +391,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#4A90D9',
     textDecorationLine: 'underline',
+  },
+  bioText: {
+    fontSize: 12,
+    color: 'grey'
   },
   metaRow: {
     flexDirection: 'row',
@@ -409,4 +459,20 @@ const styles = StyleSheet.create({
   switcherSub: { fontSize: 12, opacity: 0.5 },
   createRow: { padding: 16 },
   createText: { fontSize: 15, color: '#4A90D9' },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
+  },
+  actionButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 45,
+    backgroundColor: '#282828', 
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionText: {
+    fontSize: 20,
+  },
 });

@@ -108,6 +108,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const clearAuth = async () => {
         setUser(null);
         setToken(null);
+        setActiveProfile(null);
+        delete api.defaults.headers.common['Authorization'];
         await SecureStore.deleteItemAsync('token')
     }
 

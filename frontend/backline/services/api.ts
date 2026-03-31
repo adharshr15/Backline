@@ -1,18 +1,7 @@
-const BASE_URL = "http://YOUR_BACKEND_URL"; // e.g. ngrok or localhost
+import axios from 'axios';
 
-export async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      // add auth token later
-      ...(options?.headers || {}),
-    },
-    ...options,
-  });
+const api = axios.create({
+  baseURL: 'http://192.168.1.113:3000'
+})
 
-  if (!res.ok) {
-    throw new Error(`API error: ${res.status}`);
-  }
-
-  return res.json();
-}
+export default api;

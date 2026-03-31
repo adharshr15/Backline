@@ -116,3 +116,15 @@ export const getMe = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: "Internal server error" })
   }
 }
+
+export const checkEmail = async (req: Request, res: Response) => {
+  const { email } = req.query;
+  const existing = await prisma.user.findUnique({ where: { email: String(email) } });
+  res.json({ isUnique: !existing });
+};
+
+export const checkUsername = async (req: Request, res: Response) => {
+  const { username } = req.query;
+  const existing = await prisma.user.findUnique({ where: {username: String(username) } });
+  res.json({ isUnique: !existing });
+}

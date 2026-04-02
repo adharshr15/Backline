@@ -7,9 +7,8 @@ import { upload } from "../config/multer"
 const router = Router()
 
 router.post("/register", authRateLimiter, upload.fields([
-    { name: "profileImage", maxCount: 1 },
-    { name: "headerImage", maxCount: 1 }
-]), register)
+    { name: "profileImage", maxCount: 1 }
+]), register as RequestHandler)
 
 router.post("/login", authRateLimiter, login)
 

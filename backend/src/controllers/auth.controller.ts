@@ -5,13 +5,19 @@ import { generateToken } from "../lib/auth"
 import { AuthRequest } from "../middlewares/auth.middleware"
 import { AccountType } from "../../generated/prisma/enums"
 
-export const register = async (req: Request, res: Response) => {
+export const register = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, username, email, password } = req.body
+    const { name, username, email, password, city, state, country } = req.body
 
-    if (!name || !username || !email || !password) {
+    if (!name || !username || !email || !password || !city || !state || !country) {
       return res.status(400).json({ error: "Missing required fields" });
     }
+
+    const files = req.files as Record<string, Express.Multer.File[]>;
+
+    const profileImageUrl = files?.profileImage?.[0]
+      ? `/uploads/${files.profileImage[0].filename}`
+      : null
 
     // Check if username already exists
     const existingUsername = await prisma.user.findUnique({ where: { username } });
@@ -28,12 +34,17 @@ export const register = async (req: Request, res: Response) => {
         name,
         username,
         email,
+        city,
+        state,
+        country,
         password: hashedPassword,
+        profileImageUrl,
         accountType: "USER"
       }
     })
 
     const token = generateToken(user.id)
+
 
     res.status(201).json({
       token,
@@ -42,7 +53,11 @@ export const register = async (req: Request, res: Response) => {
         name: user.name,
         username: user.username,
         email: user.email,
-        accountType: user.accountType
+        city: user.city,
+        state: user.state,
+        country: user.country,
+        accountType: user.accountType,
+        profileImageUrl: user.profileImageUrl
       }
     })
   } catch (error: any) {
@@ -131,6 +146,6 @@ export const checkEmail = async (req: Request, res: Response) => {
 
 export const checkUsername = async (req: Request, res: Response) => {
   const { username } = req.query;
-  const existing = await prisma.user.findUnique({ where: {username: String(username) } });
+  const existing = await prisma.user.findUnique({ where: { username: String(username) } });
   res.json({ isUnique: !existing });
 }

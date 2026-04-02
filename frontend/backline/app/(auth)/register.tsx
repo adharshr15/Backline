@@ -22,6 +22,9 @@ export default function RegisterScreen() {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [country, setCountry] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<Step>(1);
@@ -68,7 +71,7 @@ export default function RegisterScreen() {
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images', 
+      mediaTypes: 'images',
       allowsEditing: true,
       quality: 0.8,
     });
@@ -105,15 +108,19 @@ export default function RegisterScreen() {
       formData.append('username', username);
       formData.append('email', email);
       formData.append('password', password);
+      formData.append('city', city);
+      formData.append('state', state);
+      formData.append('country', country);
 
       if (profileImage) {
         const fileExtension = profileImage.split('.').pop();
         formData.append('profileImage', {
           uri: profileImage,
           name: `profile.${fileExtension || 'jpg'}`,
-          type: 'image/*',
-        } as any)
+          type: `image/${fileExtension || 'jpeg'}`,
+        } as any);
       }
+
 
       // Register user and get auth info back
       const { user, token } = await registerUser(formData);
@@ -122,7 +129,7 @@ export default function RegisterScreen() {
       await saveAuth(user, token);
 
       // Attach token to future requests
-      setAuthToken(token);      
+      setAuthToken(token);
 
       // Navigate to (tabs) screen
       router.replace('/(tabs)')
@@ -203,30 +210,31 @@ export default function RegisterScreen() {
                 onChangeText={(t) => setUsername(t.toLowerCase())} // force lowercase
                 autoCapitalize="none"
               />
+              <View style={styles.row}>
+                <TextInput
+                  style={styles.inputThree}
+                  placeholder="City"
+                  value={city}
+                  onChangeText={setCity} // force lowercase
+                  autoCapitalize="none"
+                />
 
-              <TextInput
-                style={styles.inputThree}
-                placeholder="City"
-                value={username}
-                onChangeText={(t) => setUsername(t.toLowerCase())} // force lowercase
-                autoCapitalize="none"
-              />
+                <TextInput
+                  style={styles.inputThree}
+                  placeholder="State"
+                  value={state}
+                  onChangeText={setState} // force lowercase
+                  autoCapitalize="none"
+                />
 
-              <TextInput
-                style={styles.inputThree}
-                placeholder="State"
-                value={username}
-                onChangeText={(t) => setUsername(t.toLowerCase())} // force lowercase
-                autoCapitalize="none"
-              />
-
-              <TextInput
-                style={styles.inputThree}
-                placeholder="Country"
-                value={username}
-                onChangeText={(t) => setUsername(t.toLowerCase())} // force lowercase
-                autoCapitalize="none"
-              />
+                <TextInput
+                  style={styles.inputThree}
+                  placeholder="Country"
+                  value={country}
+                  onChangeText={setCountry} // force lowercase
+                  autoCapitalize="none"
+                />
+              </View>
 
               {/* Submit */}
               <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={loading}>
@@ -258,6 +266,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24
   },
+  row: {
+    flexDirection: 'row',
+    gap: 8
+  },
   title: {
     fontSize: 32,
     color: 'white',
@@ -279,14 +291,14 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16
   },
-   inputThree: {
+  inputThree: {
+    flex: 1,
     color: 'white',
     borderWidth: 1,
     borderColor: '#ccc',
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
-    width: '33%'
   },
   button: {
     backgroundColor: '#5c5c5c',

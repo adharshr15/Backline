@@ -92,7 +92,11 @@ export const login = async (req: Request, res: Response) => {
         name: user.name,
         username: user.username,
         email: user.email,
-        accountType: user.accountType
+        city: user.city,
+        state: user.state,
+        country: user.country,
+        accountType: user.accountType,
+        profileImageUrl: user.profileImageUrl
       }
     })
   } catch (error: any) {

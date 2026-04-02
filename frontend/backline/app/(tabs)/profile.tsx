@@ -88,6 +88,7 @@ export default function Profile() {
   const profilePicture = user?.profileImageUrl
     ? { uri: `${BASE_URL}${user.profileImageUrl}` }
     : require("@/assets/images/default/profileImage.png")
+  
 
   const headerImage = user?.headerImageUrl
     ? { uri: `{BASE_URL}${user.headerImageUrl}` }
@@ -205,7 +206,7 @@ export default function Profile() {
               <View style={[styles.pfpWrapper, { borderColor }]}>
                 <Image
                   source={profilePicture}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  style={{ width: '100%', height: '100%' }}
                 />
               </View>
             </TouchableOpacity>
@@ -296,7 +297,7 @@ export default function Profile() {
             onPress={() => { setActiveProfile(user!); setSwitcherVisible(false); }}
           >
             <Image
-              source={user?.profileImageUrl ? { uri: user.profileImageUrl } : require('@/assets/images/default/profileImage.png')}
+              source={user?.profileImageUrl ? { uri: `${BASE_URL}${user.profileImageUrl}` } : null}
               style={styles.switcherAvatar}
             />
             <View>

@@ -1,5 +1,5 @@
 /* 
-    Holds register/login API calls
+    Holds register/login api calls
 */
 
 import api from './api'
@@ -11,6 +11,8 @@ interface loginReq {
 }
 
 export const registerUser = async (formData: FormData) => {
+    delete api.defaults.headers.common['Authorization'];
+
     const response = await api.post('/auth/register', formData, {
         headers: { 'Content-Type': 'multipart/form-data'}
     })
@@ -21,7 +23,7 @@ export const loginUser = async (req: loginReq) => {
     if (!req.email && !req.username) {
         throw new Error('Email or Username is required');
     }
-    
+
     const response = await api.post('/auth/login', req)
     return response.data;
 }

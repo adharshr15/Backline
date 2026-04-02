@@ -6,6 +6,7 @@ import * as WebBrowser from 'expo-web-browser'
 import * as ImagePicker from 'expo-image-picker';
 import { registerUser, checkEmailUnique, checkUsernameUnique } from '@/services/auth.service'
 import ParallaxScrollView from '@/components/parallax-scroll-view-original';
+import { setAuthToken } from '@/services/api';
 
 type Step = 1 | 2;
 
@@ -21,7 +22,6 @@ export default function RegisterScreen() {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [headerImage, setHeaderImage] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<Step>(1);
@@ -66,18 +66,17 @@ export default function RegisterScreen() {
     }
   }
 
-  const pickImage = async (type: 'profile' | 'header') => {
+  const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images', 
       allowsEditing: true,
       quality: 0.8,
-    })
+    });
 
     if (!result.canceled) {
-      if (type == 'profile') setProfileImage(result.assets[0].uri);
-      else setHeaderImage(result.assets[0].uri);
+      setProfileImage(result.assets[0].uri);
     }
-  }
+  };
 
   const handleSubmit = async () => {
     if (!name || !username) {
@@ -91,6 +90,7 @@ export default function RegisterScreen() {
 
     try {
       setLoading(true);
+
 
       // Make sure username hasn't been taken yet
       const isUnique = await checkUsernameUnique(username);
@@ -107,18 +107,11 @@ export default function RegisterScreen() {
       formData.append('password', password);
 
       if (profileImage) {
+        const fileExtension = profileImage.split('.').pop();
         formData.append('profileImage', {
           uri: profileImage,
-          name: 'profile.jpg',
-          type: 'image/jpeg',
-        } as any)
-      }
-
-      if (headerImage) {
-        formData.append('headerImage', {
-          uri: headerImage,
-          name: 'header.jpg',
-          type: 'image/jpeg'
+          name: `profile.${fileExtension || 'jpg'}`,
+          type: 'image/*',
         } as any)
       }
 
@@ -127,6 +120,9 @@ export default function RegisterScreen() {
 
       // Save authentication information
       await saveAuth(user, token);
+
+      // Attach token to future requests
+      setAuthToken(token);      
 
       // Navigate to (tabs) screen
       router.replace('/(tabs)')
@@ -187,7 +183,7 @@ export default function RegisterScreen() {
               <Text style={styles.title}>Your Profile</Text>
               <Text style={styles.subtitle}>What should we call you?</Text>
 
-              <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage('profile')}>
+              <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage()}>
                 {profileImage
                   ? <Image source={{ uri: profileImage }} style={styles.profilePreview} />
                   : <Text style={styles.imagePickerText}>+ Profile Photo</Text>
@@ -207,6 +203,31 @@ export default function RegisterScreen() {
                 onChangeText={(t) => setUsername(t.toLowerCase())} // force lowercase
                 autoCapitalize="none"
               />
+
+              <TextInput
+                style={styles.inputThree}
+                placeholder="City"
+                value={username}
+                onChangeText={(t) => setUsername(t.toLowerCase())} // force lowercase
+                autoCapitalize="none"
+              />
+
+              <TextInput
+                style={styles.inputThree}
+                placeholder="State"
+                value={username}
+                onChangeText={(t) => setUsername(t.toLowerCase())} // force lowercase
+                autoCapitalize="none"
+              />
+
+              <TextInput
+                style={styles.inputThree}
+                placeholder="Country"
+                value={username}
+                onChangeText={(t) => setUsername(t.toLowerCase())} // force lowercase
+                autoCapitalize="none"
+              />
+
               {/* Submit */}
               <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={loading}>
                 {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Account</Text>}
@@ -257,6 +278,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 16
+  },
+   inputThree: {
+    color: 'white',
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    width: '33%'
   },
   button: {
     backgroundColor: '#5c5c5c',

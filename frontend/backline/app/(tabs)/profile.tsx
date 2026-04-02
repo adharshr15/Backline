@@ -13,6 +13,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { getMyProfiles } from '@/services/profile.service';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import api from '@/services/api';
 
 export const AVATAR_SIZE = 80;
 const BORDER_WIDTH = 3;
@@ -52,7 +53,7 @@ type Tab = 'shows' | 'tours';
 
 export default function Profile() {
   const router = useRouter();
-  
+
   const { user, activeProfile, setActiveProfile, loading } = useAuth();
   const bio = activeProfile && 'bio' in activeProfile ? activeProfile.bio : '';
 
@@ -70,13 +71,18 @@ export default function Profile() {
 
   // Fetch all bands/venues user belongs to
   useEffect(() => {
-
     if (loading) return;
 
-    getMyProfiles().then(({ bands, venues }) => {
-      setBands(bands);
-      setVenues(venues);
-    })
+    const fetchProfiles = async () => {
+      try {
+        const response = await api.get('users/me/profiles');
+        return response.data;
+      } catch (error) {
+        console.log('Error fetching bands and venues', error);
+      }
+    };
+
+    fetchProfiles();
   }, [loading]);
 
   const profilePicture = user?.profileImageUrl
@@ -89,7 +95,16 @@ export default function Profile() {
 
   // Meta fields
   const renderMeta = () => {
-    if (!activeProfile) return null;
+    if (!activeProfile) {
+      // Return empty placeholder to maintain layout
+      return (
+        <View style={styles.metaRow}>
+          <ThemedText style={[styles.metaText, { width: sideWidth }]}> </ThemedText>
+          <View style={{ width: AVATAR_SIZE }} />
+          <ThemedText style={[styles.metaText, { width: sideWidth }]}> </ThemedText>
+        </View>
+      );
+    }
 
     if (activeProfile.accountType === 'USER') {
       const u = activeProfile as typeof user;
@@ -182,77 +197,80 @@ export default function Profile() {
           />
         }
       >
-        {/* pfp straddles the top of the ThemedView */}
-        <View style={styles.pfpContainer}>
-          <TouchableOpacity onPress={() => setSwitcherVisible(true)}>
-            <View style={[styles.pfpWrapper, { borderColor }]}>
-              <Image
-                source={profilePicture}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            </View>
-          </TouchableOpacity>
-        </View>
 
-        {/* meta row*/}
-        {renderMeta()}
-
-        {/* name */}
-        <Text
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          style={[styles.bandName, { maxWidth: width - 64 }]}
-        >
-          {user?.name}
-        </Text>
-
-        {/* bio */}
-        {bio ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-            {renderBioWithLinks(bio)}
+        <>
+          {/* pfp straddles the top of the ThemedView */}
+          <View style={styles.pfpContainer}>
+            <TouchableOpacity onPress={() => setSwitcherVisible(true)}>
+              <View style={[styles.pfpWrapper, { borderColor }]}>
+                <Image
+                  source={profilePicture}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </View>
+            </TouchableOpacity>
           </View>
-        ) : null}
 
-        {/* action buttons */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.actionButton} onPress={() => console.log('Calendar')}>
-            <Ionicons name="calendar-outline" size={22} color="white"/>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={() => console.log('Share Profile')}>
-            <Ionicons name="share-outline" size={22} color="white"/>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/settings')}>
-            <Ionicons name="settings-outline" size={22} color="white"/>
-          </TouchableOpacity>
-        </View>
+          {/* meta row*/}
+          {renderMeta()}
 
-        {/* tab content */}
-        <TabSwitcher
-          tabs={[
-            {
-              key: 'shows',
-              content: (
-                <View style={{ marginHorizontal: -32 }}>
-                  <ShowCarousel
-                    shows={mockShows}
-                    onSeePastShows={() => console.log('see past shows')}
-                  />
-                </View>
-              ),
-            },
-            {
-              key: 'tours',
-              content: (
-                <View style={{ alignItems: 'center' }}>
-                  <ThemedText style={{ opacity: 0.4, fontSize: 13 }}>No tours yet.</ThemedText>
-                </View>
-              ),
-            },
-          ]}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          marginHorizontal={32}
-        />
+          {/* name */}
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            style={[styles.name, { maxWidth: width - 64 }]}
+          >
+            {user?.name}
+          </Text>
+
+          {/* bio */}
+          {bio ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {renderBioWithLinks(bio)}
+            </View>
+          ) : null}
+
+          {/* action buttons */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={styles.actionButton} onPress={() => console.log('Calendar')}>
+              <Ionicons name="calendar-outline" size={22} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton} onPress={() => console.log('Share Profile')}>
+              <Ionicons name="share-outline" size={22} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/settings')}>
+              <Ionicons name="settings-outline" size={22} color="white" />
+            </TouchableOpacity>
+          </View>
+
+          {/* tab content */}
+          <TabSwitcher
+            tabs={[
+              {
+                key: 'shows',
+                content: (
+                  <View style={{ marginHorizontal: -32 }}>
+                    <ShowCarousel
+                      shows={mockShows}
+                      onSeePastShows={() => console.log('see past shows')}
+                    />
+                  </View>
+                ),
+              },
+              {
+                key: 'tours',
+                content: (
+                  <View style={{ alignItems: 'center' }}>
+                    <ThemedText style={{ opacity: 0.4, fontSize: 13 }}>No tours yet.</ThemedText>
+                  </View>
+                ),
+              },
+            ]}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            marginHorizontal={32}
+          />
+        </>
 
       </ParallaxScrollView>
 
@@ -376,7 +394,7 @@ const styles = StyleSheet.create({
     borderColor: '#ffffff',
     overflow: 'hidden',
   },
-  bandName: {
+  name: {
     fontSize: 24,
     fontWeight: 'bold',
     textAlign: 'center',
@@ -468,7 +486,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 45,
-    backgroundColor: '#282828', 
+    backgroundColor: '#282828',
     alignItems: 'center',
     justifyContent: 'center',
   },

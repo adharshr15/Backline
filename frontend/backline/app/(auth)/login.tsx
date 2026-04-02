@@ -2,9 +2,7 @@ import { View, Text, Alert, TextInput, Image, TouchableOpacity, StyleSheet, Acti
 import { useRouter } from 'expo-router'
 import { useAuth } from '@/context/AuthContext'
 import { useState } from 'react'
-import { loginUser, } from '@/services/auth.service'
-
-type Step = 1 | 2;
+import { loginUser } from '@/services/auth.service'
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -12,8 +10,6 @@ export default function LoginScreen() {
 
     // Step 1
     const [emailOrUsername, setEmailOrUsername] = useState('');
-    const email = null;
-    const username = null;
     const [password, setPassword] = useState('');
 
     const [loading, setLoading] = useState(false);

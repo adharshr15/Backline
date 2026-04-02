@@ -99,9 +99,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Save authorization info for user
     const saveAuth = async (user: User, token: string) => {
-        setUser(user);
-        setToken(token);
-        await SecureStore.setItemAsync('token', token);
+        try {
+            setUser(user);
+            setToken(token);
+            setActiveProfile(user); 
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            await SecureStore.setItemAsync('token', token);
+        }
+        catch (error: any) {
+            return error;
+        }
     };
 
     // Delete authorization info for user

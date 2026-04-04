@@ -5,6 +5,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import EditProfileModal from './settings/edit-profile'
+import { ThemedView } from '@/components/themed-view';
 
 export default function SettingsScreen() {
   const { clearAuth } = useAuth();
@@ -15,11 +16,11 @@ export default function SettingsScreen() {
   // All settings items in one column
   const settingsItems = [
     { label: 'Edit Profile', action: () => setEditProfileVisible(true) },
-    { label: 'Account Settings', action: () => {} },
-    { label: 'Privacy', action: () => {} },
-    { label: 'Notifications', action: () => {} },
-    { label: 'Privacy Policy', action: () => {} },
-    { label: 'Terms of Use', action: () => {} },
+    { label: 'Account Settings', action: () => { } },
+    { label: 'Privacy', action: () => { } },
+    { label: 'Notifications', action: () => { } },
+    { label: 'Privacy Policy', action: () => { } },
+    { label: 'Terms of Use', action: () => { } },
     { label: 'Log Out', action: async () => { await clearAuth(); router.replace('/(auth)/login'); }, isDestructive: true }, // red text
   ];
 
@@ -29,42 +30,42 @@ export default function SettingsScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-    <ScrollView style={styles.content}>
-      {/* Search bar */}
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search settings..."
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-      />
+    <ThemedView style={styles.container}>
+      <ScrollView style={styles.content}>
+        {/* Search bar */}
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search settings..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
 
-      {/* Settings rows */}
-      {filteredItems.map((item, index) => (
-        <TouchableOpacity
-          key={index}
-          style={styles.row}
-          onPress={item.action}
-        >
-          <ThemedText
-            style={[styles.text, item.isDestructive && styles.destructiveText]}
+        {/* Settings rows */}
+        {filteredItems.map((item, index) => (
+          <TouchableOpacity
+            key={index}
+            style={styles.row}
+            onPress={item.action}
           >
-            {item.label}
-          </ThemedText>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+            <ThemedText
+              style={[styles.text, item.isDestructive && styles.destructiveText]}
+            >
+              {item.label}
+            </ThemedText>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
-    {/* Edit Profile Modal */}
-    {editProfileVisible && (
-      <EditProfileModal onClose={() => setEditProfileVisible(false)} />
-    )}
-  </SafeAreaView>
+      {/* Edit Profile Modal */}
+      {editProfileVisible && (
+        <EditProfileModal onClose={() => setEditProfileVisible(false)} />
+      )}
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, marginTop: -24 },
+  container: { flex: 1, paddingTop: 20 },
   content: { flex: 1 },
   searchInput: {
     borderWidth: 1,

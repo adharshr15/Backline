@@ -18,16 +18,6 @@ import api from '@/services/api';
 export const AVATAR_SIZE = 80;
 const BORDER_WIDTH = 3;
 
-const mockBandProfile = {
-  name: "Heel",
-  genre: "Shoegaze",
-  city: "College Station",
-  state: "TX",
-  headerImage: require("@/assets/images/example/heel-header-example.jpg"),
-  profilePicture: require("@/assets/images/example/heel-pfp-example.png"),
-  link: 'https://linktr.ee/heelband',
-};
-
 const mockShows: Show[] = [
   {
     id: 'asdfsa',
@@ -51,7 +41,15 @@ const mockShows: Show[] = [
 
 type Tab = 'shows' | 'tours';
 
-export default function Profile() {
+export default function ProfileScreen() {
+  const { activeProfile } = useAuth();
+
+  if (activeProfile?.accountType === 'BAND') return ;
+  if (activeProfile?.accountType === 'VENUE') return ;
+  return <UserProfile />;
+}
+
+export function UserProfile() {
   const router = useRouter();
 
   const { activeProfile, setActiveProfile, loading } = useAuth();

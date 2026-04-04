@@ -1,19 +1,9 @@
 // services/user.service.ts
 import api from './api';
-import { User } from '@/context/AuthContext';
-
-interface UpdateUserPayload {
-  name?: string;
-  bio?: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  profileImage?: string | null; // local URI for RN ImagePicker
-  headerImage?: string | null;
-}
 
 export const updateMe = async (data: {
   name: string;
+  username: string;
   bio?: string;
   city?: string;
   state?: string;
@@ -23,7 +13,8 @@ export const updateMe = async (data: {
 }) => {
   const formData = new FormData();
 
-  formData.append('name', data.name);
+  if (data.name) formData.append('name', data.name);
+  if (data.username) formData.append('username', data.username);
   if (data.bio) formData.append('bio', data.bio);
   if (data.city) formData.append('city', data.city);
   if (data.state) formData.append('state', data.state);
@@ -37,8 +28,6 @@ export const updateMe = async (data: {
       type: 'image/jpeg',
     } as any);
   }
-
-  console.log("In user.service, data.headerImage", data.headerImage)
 
   if (data.headerImage?.startsWith('file://')) {
     formData.append('headerImage', {

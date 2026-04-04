@@ -50,13 +50,14 @@ export function EditUserProfileModal({ onClose }: { onClose: () => void }) {
 
     const scrollToInput = (inputRef: React.RefObject<TextInput | null>) => {
         setTimeout(() => {
-            inputRef.current?.measure((x, y, width, height, pageX, pageY) => {
-                scrollViewRef.current?.scrollTo({
-                    y: pageY - 120,
-                    animated: true,
-                });
+            inputRef.current?.measure((fx, fy, width, height, px, py) => {
+                scrollViewRef.current?.scrollResponderScrollNativeHandleToKeyboard(
+                    inputRef.current as any,
+                    150,
+                    true
+                );
             });
-        }, 100);
+        }, 200);
     };
 
     const handleSave = async () => {
@@ -69,12 +70,10 @@ export function EditUserProfileModal({ onClose }: { onClose: () => void }) {
             country == user.country &&
             profileImage == user.profileImageUrl &&
             headerImage == user.headerImageUrl
-        ) {
-          router.back();
-        }
+        ) return user;
 
         // Check if new username is available
-        if (username != user.username && !(await checkUsernameUnique(username))) {
+        if (!(await checkUsernameUnique(username))) {
             return Alert.alert("Error", "That username has already been taken")
         }
 
@@ -131,8 +130,6 @@ export function EditUserProfileModal({ onClose }: { onClose: () => void }) {
             if (imageType == 'header') setHeaderImage(result.assets[0].uri)
         }
 
-        if (imageType == 'profile') console.log(profileImage)
-        if (imageType == 'header') console.log(headerImage)
     };
 
     const getImageUri = (img: string) => {

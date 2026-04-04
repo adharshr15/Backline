@@ -32,8 +32,6 @@ export default function LoginScreen() {
             // Save auth info
             await saveAuth(user, token)
 
-            console.log(user)
-
             // Navigate to (tabs) screen
             router.replace('/(tabs)')
 

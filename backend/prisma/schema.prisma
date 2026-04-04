@@ -94,6 +94,7 @@ model User {
   bandInvites       BandInvite[]
   venueInvites      VenueInvite[]
   showsCreated      Show[]                    @relation("showCreatedByUser")
+  showsReposted     Show[]                    @relation("showRepostedByUser")
   rentalItems       RentalItem[]
 }
 
@@ -115,6 +116,7 @@ model Band {
   shows             ShowBand[]
   showsCreated      Show[]                    @relation("showCreatedByBand")
   toursCreated      Tour[]                    @relation("tourCreatedByBand")
+  showsReposted     Show[]                    @relation("showRepostedByBand")
   tours             BandTour[]        
   invites           BandInvite[]
   showInvites       ShowInvite[]
@@ -182,6 +184,7 @@ model Venue {
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
   shows             Show[]   
+  showsReposted     Show[]                    @relation("showRepostedByVenue")
   showInvites       ShowInvite[] 
   blocks            VenueBlock[]   
   invites           VenueInvite[]
@@ -274,6 +277,10 @@ model Show {
 
   bands             ShowBand[]
   showInvites       ShowInvite[]
+
+  repostedByUsers   User[]                    @relation("showRepostedByUser")
+  repostedByBands   Band[]                    @relation("showRepostedByBand")
+  repostedByVenues  Venue[]                   @relation("showRepostedByVenue")
 
   startTime         DateTime?
   endTime           DateTime?

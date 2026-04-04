@@ -95,8 +95,10 @@ export const login = async (req: Request, res: Response) => {
         city: user.city,
         state: user.state,
         country: user.country,
+        bio: user.bio,
         accountType: user.accountType,
-        profileImageUrl: user.profileImageUrl
+        profileImageUrl: user.profileImageUrl,
+        headerImageUrl: user.headerImageUrl
       }
     })
   } catch (error: any) {
@@ -123,6 +125,7 @@ export const getMe = async (req: AuthRequest, res: Response) => {
         city: true,
         state: true,
         country: true,
+        bio: true,
         profileImageUrl: true,
         headerImageUrl: true,
         createdAt: true,

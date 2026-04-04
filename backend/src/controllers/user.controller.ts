@@ -102,9 +102,6 @@ export const getMyProfiles = async (req: AuthRequest, res: Response) => {
       }
     })
 
-    console.log(bands)
-    console.log(bands)
-
     res.status(201).json({ bands, venues });
   }
   catch (error) {

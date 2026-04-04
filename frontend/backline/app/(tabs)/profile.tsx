@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useAuth, type ActiveProfile, type User, type Band, type Venue } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
+import ViewSwitcher from '@/components/ui/view-switcher';
 import { ShowCarousel, type Show } from '@/components/show-carousel';
 import { TabSwitcher } from '@/components/ui/tab-switcher';
 import { ThemedText } from '@/components/themed-text';
@@ -14,6 +15,7 @@ import { getMyProfiles } from '@/services/profile.service';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import api from '@/services/api';
+import ProfileShowsSection from '@/components/profile/shows-section';
 
 export const AVATAR_SIZE = 80;
 const BORDER_WIDTH = 3;
@@ -39,13 +41,38 @@ const mockShows: Show[] = [
   },
 ];
 
-type Tab = 'shows' | 'tours';
+const renderBioWithLinks = (text: string, setWebViewUrl: any) => {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  return text.split(urlRegex).map((part, index) => {
+    const isLink = part.match(urlRegex);
+
+    if (isLink) {
+      return (
+        <ThemedText
+          key={index}
+          style={styles.linkText}
+          onPress={() => setWebViewUrl(part)}
+        >
+          {part.replace(/^https?:\/\//, '')}
+        </ThemedText>
+      );
+    }
+
+    return (
+      <ThemedText key={index} style={styles.bioText}>
+        {part}
+      </ThemedText>
+    );
+  });
+};
+
+type Tab = 'shows' | 'listings';
 
 export default function ProfileScreen() {
   const { activeProfile } = useAuth();
 
-  if (activeProfile?.accountType === 'BAND') return ;
-  if (activeProfile?.accountType === 'VENUE') return ;
+  if (activeProfile?.accountType === 'BAND') return;
+  if (activeProfile?.accountType === 'VENUE') return;
   return <UserProfile />;
 }
 
@@ -53,6 +80,8 @@ export function UserProfile() {
   const router = useRouter();
 
   const { activeProfile, setActiveProfile, loading } = useAuth();
+  if (!activeProfile || activeProfile.accountType !== 'USER') return null;
+  const user = activeProfile;
 
   const { width } = useWindowDimensions();
   const sideWidth = (width - AVATAR_SIZE) / 2;
@@ -60,10 +89,12 @@ export function UserProfile() {
   const [webViewUrl, setWebViewUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('shows');
   const [switcherVisible, setSwitcherVisible] = useState(false);
+  const [showView, setShowView] = useState<'poster' | 'list'>('poster');
   const [bands, setBands] = useState<Band[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const borderColor = useThemeColor({}, 'text');
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+  const hasListings = false // user.listings
 
   // Fetch all bands/venues user belongs to
   useEffect(() => {
@@ -81,72 +112,14 @@ export function UserProfile() {
     fetchProfiles();
   }, [loading]);
 
-  const profilePicture = activeProfile?.profileImageUrl
-    ? { uri: `${BASE_URL}${activeProfile.profileImageUrl}` }
+  const profilePicture = user?.profileImageUrl
+    ? { uri: `${BASE_URL}${user.profileImageUrl}` }
     : require("@/assets/images/default/profileImage.png")
-  
-  const headerImage = activeProfile?.headerImageUrl
-    ? { uri: `${BASE_URL}${activeProfile.headerImageUrl}` }
+
+  const headerImage = user?.headerImageUrl
+    ? { uri: `${BASE_URL}${user.headerImageUrl}` }
     : require("@/assets/images/default/headerImage.png")
 
-  // Meta fields
-  const renderMeta = () => {
-    if (!activeProfile) {
-      // Return empty placeholder to maintain layout
-      return (
-        <View style={styles.metaRow}>
-          <ThemedText style={[styles.metaText, { width: sideWidth }]}> </ThemedText>
-          <View style={{ width: AVATAR_SIZE }} />
-          <ThemedText style={[styles.metaText, { width: sideWidth }]}> </ThemedText>
-        </View>
-      );
-    }
-
-    if (activeProfile.accountType === 'USER') {
-      const u = activeProfile as User;
-      return (
-        <View style={styles.metaRow}>
-          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
-            {u?.city && u?.state ? `${u?.city}, ${u?.state}` : ''}
-          </ThemedText>
-          <View style={{ width: AVATAR_SIZE }} />
-          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
-            {u?.country ? `${u?.country}` : ''}
-          </ThemedText>
-        </View>
-      )
-    }
-
-    if (activeProfile.accountType === 'BAND') {
-      const b = activeProfile as Band;
-      return (
-        <View style={styles.metaRow}>
-          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
-            @{b?.city}, @{b?.state}
-          </ThemedText>
-          <View style={{ width: AVATAR_SIZE }} />
-          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
-            @{b?.genre}
-          </ThemedText>
-        </View>
-      )
-    }
-
-    if (activeProfile.accountType === 'VENUE') {
-      const v = activeProfile as Venue;
-      return (
-        <View style={styles.metaRow}>
-          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
-            {v?.address}
-          </ThemedText>
-          <View style={{ width: AVATAR_SIZE }} />
-          <ThemedText style={[styles.metaText, { width: sideWidth }]}>
-            @{v?.city}, @{v?.state}
-          </ThemedText>
-        </View>
-      )
-    }
-  }
 
   const isValidUrl = (text: string) => {
     try {
@@ -156,30 +129,6 @@ export function UserProfile() {
       return false;
     }
   }
-
-  const renderBioWithLinks = (text: string) => {
-    return text.split(urlRegex).map((part, index) => {
-      const isLink = part.match(urlRegex);
-
-      if (isLink) {
-        return (
-          <ThemedText
-            key={index}
-            style={styles.linkText}
-            onPress={() => setWebViewUrl(part)}
-          >
-            {part.replace(/^https?:\/\//, '')}
-          </ThemedText>
-        );
-      }
-
-      return (
-        <ThemedText key={index} style={styles.bioText}>
-          {part}
-        </ThemedText>
-      );
-    });
-  };
 
   return (
     <>
@@ -208,7 +157,15 @@ export function UserProfile() {
           </View>
 
           {/* meta row*/}
-          {renderMeta()}
+          <View style={styles.metaRow}>
+            <ThemedText style={[styles.metaText, { width: sideWidth }]}>
+              {user?.city && user?.state ? `${user?.city}, ${user?.state}` : ''}
+            </ThemedText>
+            <View style={{ width: AVATAR_SIZE }} />
+            <ThemedText style={[styles.metaText, { width: sideWidth }]}>
+              {user?.country ? `${user?.country}` : ''}
+            </ThemedText>
+          </View>
 
           {/* name */}
           <Text
@@ -222,7 +179,7 @@ export function UserProfile() {
           {/* bio */}
           {activeProfile?.bio ? (
             <View style={styles.bioRow}>
-              {renderBioWithLinks(activeProfile.bio)}
+              {renderBioWithLinks(activeProfile.bio, setWebViewUrl)}
             </View>
           ) : null}
 
@@ -240,32 +197,61 @@ export function UserProfile() {
           </View>
 
           {/* tab content */}
-          <TabSwitcher
-            tabs={[
-              {
-                key: 'shows',
-                content: (
-                  <View style={{ marginHorizontal: -32 }}>
-                    <ShowCarousel
+          {hasListings ? (
+            <TabSwitcher
+              tabs={[
+                {
+                  key: 'shows',
+                  content: (
+                    <ProfileShowsSection
+                      showView={showView}
+                      setShowView={setShowView}
                       shows={mockShows}
+                      isOwner={true}
                       onSeePastShows={() => console.log('see past shows')}
+                      onCreateShow={() => console.log('create show')}
                     />
-                  </View>
-                ),
-              },
-              {
-                key: 'tours',
-                content: (
-                  <View style={{ alignItems: 'center' }}>
-                    <ThemedText style={{ opacity: 0.4, fontSize: 13 }}>No tours yet.</ThemedText>
-                  </View>
-                ),
-              },
-            ]}
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            marginHorizontal={32}
-          />
+                  ),
+                },
+                {
+                  key: 'listings',
+                  content: (
+                    <View style={{ alignItems: 'center' }}>
+                      <ThemedText style={{ opacity: 0.4, fontSize: 13 }}>
+                        No Listings yet.
+                      </ThemedText>
+                    </View>
+                  ),
+                },
+              ]}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              marginHorizontal={32}
+            />
+          ) : (
+            <>
+              {/* divider ABOVE shows */}
+              <View
+                style={{
+                  height: StyleSheet.hairlineWidth,
+                  backgroundColor: '#616161',
+                  marginHorizontal: -32,
+                  marginTop: 4,
+                  marginBottom: 12,
+                }}
+              />
+
+              {/* shows always visible when no tabs */}
+              <ProfileShowsSection
+                showView={showView}
+                setShowView={setShowView}
+                shows={mockShows}
+                isOwner={true}
+                onSeePastShows={() => console.log('see past shows')}
+                onCreateShow={() => console.log('create show')}
+              />
+            </>
+          )}
         </>
 
       </ParallaxScrollView>
@@ -397,10 +383,10 @@ const styles = StyleSheet.create({
     color: 'white',
     marginTop: -2,
   },
-  bioRow: { 
-    flexDirection: 'row', 
-    flexWrap: 'wrap', 
-    justifyContent: 'center', 
+  bioRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     marginTop: -10,
     marginBottom: -8
   },

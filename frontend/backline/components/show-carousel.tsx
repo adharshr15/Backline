@@ -132,19 +132,40 @@ function ShowCard({ show, cardWidth }: ShowCardProps) {
 type Props = {
   shows: Show[];
   onSeePastShows: () => void;
+  onCreateShow: () => void;
+  isOwner: boolean;
 };
 
-export function ShowCarousel({ shows, onSeePastShows }: Props) {
+export function ShowCarousel({ shows, onSeePastShows, onCreateShow, isOwner }: Props) {
   const { width } = useWindowDimensions();
   const CARD_WIDTH = width * 0.85;
   const borderColor = useThemeColor({}, 'text');
+  const scrollViewRef = useRef<ScrollView>(null);
 
   return (
     <ScrollView
+      ref={scrollViewRef}
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.scrollContent}
+      onContentSizeChange={() => {
+        if (isOwner && scrollViewRef.current) {
+          // Start at first show poster, not create show button
+          const createButtonWidth = (CARD_WIDTH * 0.7) / 2;
+          scrollViewRef.current.scrollTo({ x: createButtonWidth, animated: false });
+        }
+      }}
     >
+      {isOwner && (
+        <TouchableOpacity
+        onPress={onCreateShow}
+        style={[styles.pastShowsButton, { borderColor, width: (CARD_WIDTH * 0.7) / 2, height: CARD_WIDTH * 0.7 * 1.4 }]}
+      >
+        <ThemedText style={styles.pastShowsText}>Create{'\n'}Show</ThemedText>
+        <ThemedText style={styles.pastShowsArrow}>+</ThemedText>
+      </TouchableOpacity>
+      )}
+
       {shows.map(show => (
         <ShowCard key={show.id} show={show} cardWidth={CARD_WIDTH} />
       ))}

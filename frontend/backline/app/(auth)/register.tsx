@@ -26,8 +26,35 @@ export default function RegisterScreen() {
   const [state, setState] = useState('');
   const [country, setCountry] = useState('');
 
+  const [locationQuery, setLocationQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<Step>(1);
+
+  const fetchLocations = async (query: string) => {
+    if (!query) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `https://photon.komoot.io/api/?q=${query}&limit=5`
+      )
+
+      const data = await res.json();
+
+      setSuggestions(data.features || []);
+      setShowSuggestions(true);
+    }
+    catch (error: any) {
+      console.log("Photon Error: ", error);
+      setSuggestions([]);
+    }
+  }
 
   const handleStep1 = async () => {
     // Validation
@@ -210,30 +237,45 @@ export default function RegisterScreen() {
                 onChangeText={(t) => setUsername(t.toLowerCase())} // force lowercase
                 autoCapitalize="none"
               />
-              <View style={styles.row}>
+
+              <View>
                 <TextInput
-                  style={styles.inputThree}
-                  placeholder="City"
-                  value={city}
-                  onChangeText={setCity} // force lowercase
-                  autoCapitalize="none"
+                  style={styles.input}
+                  placeholder="Location"
+                  value={locationQuery}
+                  onChangeText={(text) => {
+                    setLocationQuery(text);
+                    fetchLocations(text);
+                  }}
                 />
 
-                <TextInput
-                  style={styles.inputThree}
-                  placeholder="State"
-                  value={state}
-                  onChangeText={setState} // force lowercase
-                  autoCapitalize="none"
-                />
+                {showSuggestions && suggestions?.length > 0 && (
+                  <View style={styles.dropdown}>
+                    {suggestions.map((item, index) => {
+                      const props = item.properties;
 
-                <TextInput
-                  style={styles.inputThree}
-                  placeholder="Country"
-                  value={country}
-                  onChangeText={setCountry} // force lowercase
-                  autoCapitalize="none"
-                />
+                      const display =
+                        `${props.name || ''}, ${props.state || ''}, ${props.country || ''}`;
+
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          style={styles.dropdownItem}
+                          onPress={() => {
+                            setCity(props.name || '');
+                            setState(props.state || '');
+                            setCountry(props.country || '');
+
+                            setLocationQuery(display);
+                            setShowSuggestions(false);
+                          }}
+                        >
+                          <Text style={{ color: 'white' }}>{display}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
 
               {/* Submit */}
@@ -299,6 +341,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
+  },
+  dropdown: {
+    backgroundColor: '#222',
+    borderRadius: 8,
+    marginTop: -10,
+    marginBottom: 16,
+  },
+  dropdownItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#444',
   },
   button: {
     backgroundColor: '#5c5c5c',

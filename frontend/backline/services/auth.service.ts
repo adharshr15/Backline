@@ -13,8 +13,6 @@ interface loginReq {
 export const registerUser = async (formData: FormData) => {
     delete api.defaults.headers.common['Authorization'];
 
-    console.log("form data after registerUser is called", formData)
-
     const response = await api.post('/auth/register', formData)
 
     return response.data;

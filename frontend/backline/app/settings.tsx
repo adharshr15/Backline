@@ -1,72 +1,85 @@
 import { useAuth } from '@/context/AuthContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, TextInput, ScrollView } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import EditProfileModal from './settings/edit-profile'
 
 export default function SettingsScreen() {
-    const { clearAuth } = useAuth();
-    const router = useRouter();
+  const { clearAuth } = useAuth();
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [editProfileVisible, setEditProfileVisible] = useState(false);
 
-    return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.section}>
-                <TouchableOpacity style={styles.row}>
-                    <ThemedText style={styles.text}>Edit Profile</ThemedText>
-                </TouchableOpacity>
+  // All settings items in one column
+  const settingsItems = [
+    { label: 'Edit Profile', action: () => setEditProfileVisible(true) },
+    { label: 'Account Settings', action: () => {} },
+    { label: 'Privacy', action: () => {} },
+    { label: 'Notifications', action: () => {} },
+    { label: 'Privacy Policy', action: () => {} },
+    { label: 'Terms of Use', action: () => {} },
+    { label: 'Log Out', action: async () => { await clearAuth(); router.replace('/(auth)/login'); }, isDestructive: true }, // red text
+  ];
 
-                <TouchableOpacity style={styles.row}>
-                    <ThemedText style={styles.text}>Account Settings</ThemedText>
-                </TouchableOpacity>
+  // Filter items based on search
+  const filteredItems = settingsItems.filter(item =>
+    item.label.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-                <TouchableOpacity style={styles.row}>
-                    <ThemedText style={styles.text}>Privacy</ThemedText>
-                </TouchableOpacity>
-            </View>
+  return (
+    <SafeAreaView style={styles.container}>
+    <ScrollView style={styles.content}>
+      {/* Search bar */}
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Search settings..."
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
 
-            {/* Logout */}
-            <View style={styles.logoutContainer}>
-                <TouchableOpacity
-                    style={styles.logoutButton}
-                    onPress={async () => {
-                        await clearAuth();
-                        router.replace('/(auth)/login');
-                    }}
-                >
-                    <ThemedText style={styles.logoutText}>Log Out</ThemedText>  
-                </TouchableOpacity>
-            </View>
-        </SafeAreaView>
-    )
+      {/* Settings rows */}
+      {filteredItems.map((item, index) => (
+        <TouchableOpacity
+          key={index}
+          style={styles.row}
+          onPress={item.action}
+        >
+          <ThemedText
+            style={[styles.text, item.isDestructive && styles.destructiveText]}
+          >
+            {item.label}
+          </ThemedText>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+
+    {/* Edit Profile Modal */}
+    {editProfileVisible && (
+      <EditProfileModal onClose={() => setEditProfileVisible(false)} />
+    )}
+  </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        justifyContent: 'space-between',
-    },
-    section: {
-        padding: 16,
-    },
-    row: {
-        paddingVertical: 16,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#333',
-    },
-    text: {
-        fontSize: 16,
-    },
-    logoutContainer: {
-        padding: 16,
-    },
-    logoutButton: {
-        padding: 14,
-        borderRadius: 12,
-        backgroundColor: '#ff3b30',
-        alignItems: 'center',
-    },
-    logoutText: {
-        color: 'white',
-        fontWeight: '600',
-    },
+  container: { flex: 1, marginTop: -24 },
+  content: { flex: 1 },
+  searchInput: {
+    borderWidth: 1,
+    color: 'white',
+    borderColor: '#ccc',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 16,
+    marginHorizontal: 16
+  },
+  row: {
+    padding: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#333',
+  },
+  text: { fontSize: 16 },
+  destructiveText: { color: '#ff3b30', fontWeight: '600' },
 });

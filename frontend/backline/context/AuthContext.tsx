@@ -7,7 +7,7 @@ import * as SecureStore from 'expo-secure-store';
 import api from '@/services/api';
 
 
-interface User {
+export interface User {
     id: string;
     name: string;
     username: string;

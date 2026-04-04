@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity, S
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useState, useEffect } from 'react';
-import { useAuth, type ActiveProfile, type Band, type Venue } from '@/context/AuthContext'
+import { useAuth, type ActiveProfile, type User, type Band, type Venue } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ShowCarousel, type Show } from '@/components/show-carousel';
@@ -54,8 +54,7 @@ type Tab = 'shows' | 'tours';
 export default function Profile() {
   const router = useRouter();
 
-  const { user, activeProfile, setActiveProfile, loading } = useAuth();
-  const bio = activeProfile && 'bio' in activeProfile ? activeProfile.bio : '';
+  const { activeProfile, setActiveProfile, loading } = useAuth();
 
   const { width } = useWindowDimensions();
   const sideWidth = (width - AVATAR_SIZE) / 2;
@@ -67,7 +66,6 @@ export default function Profile() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const borderColor = useThemeColor({}, 'text');
   const urlRegex = /(https?:\/\/[^\s]+)/g;
-
 
   // Fetch all bands/venues user belongs to
   useEffect(() => {
@@ -85,13 +83,12 @@ export default function Profile() {
     fetchProfiles();
   }, [loading]);
 
-  const profilePicture = user?.profileImageUrl
-    ? { uri: `${BASE_URL}${user.profileImageUrl}` }
+  const profilePicture = activeProfile?.profileImageUrl
+    ? { uri: `${BASE_URL}${activeProfile.profileImageUrl}` }
     : require("@/assets/images/default/profileImage.png")
   
-
-  const headerImage = user?.headerImageUrl
-    ? { uri: `{BASE_URL}${user.headerImageUrl}` }
+  const headerImage = activeProfile?.headerImageUrl
+    ? { uri: `${BASE_URL}${activeProfile.headerImageUrl}` }
     : require("@/assets/images/default/headerImage.png")
 
   // Meta fields
@@ -108,7 +105,7 @@ export default function Profile() {
     }
 
     if (activeProfile.accountType === 'USER') {
-      const u = activeProfile as typeof user;
+      const u = activeProfile as User;
       return (
         <View style={styles.metaRow}>
           <ThemedText style={[styles.metaText, { width: sideWidth }]}>
@@ -221,13 +218,13 @@ export default function Profile() {
             adjustsFontSizeToFit
             style={[styles.name, { maxWidth: width - 64 }]}
           >
-            {user?.name}
+            {activeProfile?.name}
           </Text>
 
           {/* bio */}
-          {bio ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-              {renderBioWithLinks(bio)}
+          {activeProfile?.bio ? (
+            <View style={styles.bioRow}>
+              {renderBioWithLinks(activeProfile.bio)}
             </View>
           ) : null}
 
@@ -293,16 +290,16 @@ export default function Profile() {
 
           {/* User Account */}
           <TouchableOpacity
-            style={[styles.switcherRow, activeProfile?.id === user?.id && styles.switcherRowActive]}
-            onPress={() => { setActiveProfile(user!); setSwitcherVisible(false); }}
+            style={[styles.switcherRow, activeProfile?.id === activeProfile?.id && styles.switcherRowActive]}
+            onPress={() => { setActiveProfile(activeProfile!); setSwitcherVisible(false); }}
           >
             <Image
-              source={user?.profileImageUrl ? { uri: `${BASE_URL}${user.profileImageUrl}` } : null}
+              source={activeProfile?.profileImageUrl ? { uri: `${BASE_URL}${activeProfile.profileImageUrl}` } : null}
               style={styles.switcherAvatar}
             />
             <View>
-              <ThemedText style={styles.switcherName}>{user?.name}</ThemedText>
-              <ThemedText style={styles.switcherSub}>@{user?.username}</ThemedText>
+              <ThemedText style={styles.switcherName}>{activeProfile?.name}</ThemedText>
+              <ThemedText style={styles.switcherSub}>@{activeProfile?.username}</ThemedText>
             </View>
           </TouchableOpacity>
 
@@ -402,6 +399,13 @@ const styles = StyleSheet.create({
     color: 'white',
     marginTop: -2,
   },
+  bioRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    justifyContent: 'center', 
+    marginTop: -10,
+    marginBottom: -8
+  },
   bioContainer: {
     alignItems: 'center',
     marginTop: -16,
@@ -413,7 +417,8 @@ const styles = StyleSheet.create({
   },
   bioText: {
     fontSize: 12,
-    color: 'grey'
+    color: 'grey',
+    alignContent: 'center'
   },
   metaRow: {
     flexDirection: 'row',

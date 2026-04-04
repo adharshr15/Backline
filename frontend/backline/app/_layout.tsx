@@ -4,7 +4,9 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
-
+import { TouchableOpacity, Button, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
@@ -19,6 +21,14 @@ function RootLayoutNav() {
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        <Stack.Screen name="settings" options={{
+          title: "Settings",  
+          headerStyle: {backgroundColor: 'black'},
+          headerBackVisible: false,
+          headerLeft: () => (
+                <Ionicons onPress={() => router.back()} name="chevron-back-outline" size={30} style={{alignContent: 'center'}}color="white" />
+          )
+        }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
@@ -32,3 +42,18 @@ export default function RootLayout() {
     </AuthProvider>
   );
 }
+
+
+const styles = StyleSheet.create({
+  bubbleButton: {
+    paddingHorizontal: 12, // space around bubble
+  },
+  bubble: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

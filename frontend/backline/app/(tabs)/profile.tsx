@@ -7,7 +7,8 @@ import { useAuth, type ActiveProfile, type User, type Band, type Venue } from '@
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import ViewSwitcher from '@/components/ui/view-switcher';
-import { ShowCarousel, type Show } from '@/components/show-carousel';
+import { ShowCarousel } from '@/components/show-carousel';
+import { Show } from '@/services/show.service';
 import { TabSwitcher } from '@/components/ui/tab-switcher';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -23,22 +24,16 @@ const BORDER_WIDTH = 3;
 const mockShows: Show[] = [
   {
     id: 'asdfsa',
-    poster: require('@/assets/images/example/poster2.png'),
+    posterUrl: '@/assets/images/example/poster2.png',
     venue: 'Notsua',
     city: 'Houston',
     state: 'TX',
+    country: '',
+    status: '',
     date: 'Apr 2, 2025',
     doors: '7:00 PM',
-  },
-  {
-    id: 'fdasdfda',
-    poster: require('@/assets/images/example/poster1.png'),
-    venue: 'CAMP House',
-    city: 'College Station',
-    state: 'TX',
-    date: 'Apr 19, 2025',
-    doors: '8:00 PM',
-  },
+    bands: []
+  }
 ];
 
 const renderBioWithLinks = (text: string, setWebViewUrl: any) => {
@@ -73,7 +68,7 @@ export default function ProfileScreen() {
 
   if (activeProfile?.accountType === 'BAND') return;
   if (activeProfile?.accountType === 'VENUE') return;
-  return <UserProfile/>;
+  return <UserProfile />;
 }
 
 export function UserProfile() {
@@ -83,6 +78,7 @@ export function UserProfile() {
   if (!activeProfile || activeProfile.accountType !== 'USER') return null;
   const user = activeProfile;
 
+
   const { width } = useWindowDimensions();
   const sideWidth = (width - AVATAR_SIZE) / 2;
 
@@ -90,9 +86,10 @@ export function UserProfile() {
   const [activeTab, setActiveTab] = useState<Tab>('shows');
   const [switcherVisible, setSwitcherVisible] = useState(false);
   const [showView, setShowView] = useState<'poster' | 'list'>('poster');
-  const [bands, setBands] = useState<Band[]>([]);
-  const [venues, setVenues] = useState<Venue[]>([]);
   const borderColor = useThemeColor({}, 'text');
+
+  const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
+  const venues = user?.venueReps?.map(v => v.venue).filter(Boolean) || [];
 
   const hasListings = false // user.listings
 
@@ -445,7 +442,7 @@ const styles = StyleSheet.create({
   webView: {
     flex: 1,
   },
-  switcherContainer: { flex: 1 },
+  switcherContainer: { flex: 1, backgroundColor: 'black' },
   switcherHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

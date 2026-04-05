@@ -126,7 +126,7 @@ export const createShow = async (req: AuthRequest, res: Response) => {
     // Check that only one creator exists
     const creatorCount = [ creatorUserId, creatorBandId, creatorVenueId ].filter((v) => v !== undefined && v !== null).length;
     if (creatorCount != 1) {
-      return res.status(402).json({ error: "There can only be on creator of a show"});
+      return res.status(402).json({ error: "There can only be one creator of a show" });
     }
 
     // Check that user is creator user
@@ -248,12 +248,12 @@ export const updateShow = async (req: AuthRequest, res: Response) => {
     const allowed = await canManageShow(id, userId);
     if (!allowed) return res.status(403).json({ error: "Forbidden" });
 
-    const { date, city, state, country, venueId, tourId, addBandId, removeBandId, startTime, endTime, status, notes } = req.body;
+    const { date, city, state, country, venueId, tourId, addBandId, removeBandId, doors, status, notes } = req.body;
 
     const updatedShow = await prisma.$transaction(async (tx) => {
       await tx.show.update({
         where: { id },
-        data: { date: date ? new Date(date) : undefined, city, state, country, venueId, tourId, startTime, endTime, status, notes }
+        data: { date: date ? new Date(date) : undefined, city, state, country, venueId, tourId, doors, status, notes }
       });
 
       // Add band invites

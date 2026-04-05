@@ -20,6 +20,6 @@ export interface Show {
     creatorVenueId?: string
 };
 
-export const createShow = async (data: Show, accountType: AccountType) {
-    const formData
-}
+// export const createShow = async (data: Show, accountType: AccountType) {
+//     const formData
+// }

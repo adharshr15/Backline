@@ -129,8 +129,8 @@ export const getMe = async (req: AuthRequest, res: Response) => {
         profileImageUrl: true,
         headerImageUrl: true,
         createdAt: true,
-        bandMemberships: true,
-        venueReps: true
+        bandMemberships: { include: { band: true } },
+        venueReps: { include: { venue: true } }
       }
     })
 

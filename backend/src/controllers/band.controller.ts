@@ -101,50 +101,69 @@ export const createBand = async (req: AuthRequest, res: Response) => {
 
     const profileImageUrl = files?.profileImage?.[0]
       ? `/uploads/${files.profileImage[0].filename}`
-      : undefined
+      : undefined;
 
     const headerImageUrl = files?.headerImage?.[0]
       ? `/uploads/${files.headerImage[0].filename}`
-      : undefined
+      : undefined;
 
     if (!creatorId) return res.status(401).json({ error: "Unauthorized" });
     if (!name) return res.status(400).json({ error: "Band name is required." });
 
     const accountType = "BAND";
 
-    // Ensure at least the creator is a member
-    const band = await prisma.band.create({
-      data: {
-        name, genre, city, state, country, accountType, bio, profileImageUrl, headerImageUrl,
-        members: {
-          create: [
-            {
-              userId: creatorId
-            }
-          ]
-        }
-      },
-      include: {
-        members: { include: { user: { select: { name: true, id: true } } } },
-        tours: { include: { tour: true } },
-        shows: { include: { show: true } }
-      }
-    });
+    const band = await prisma.$transaction(async (tx) => {
+      // 1. Create band + creator as member (ONLY ONCE)
+      const createdBand = await tx.band.create({
+        data: {
+          name,
+          genre,
+          city,
+          state,
+          country,
+          accountType,
+          bio,
+          profileImageUrl,
+          headerImageUrl,
+          members: {
+            create: [
+              {
+                userId: creatorId,
+                role: "MANAGER"
+              },
+            ],
+          },
+        },
+        include: {
+          members: {
+            include: {
+              user: { select: { name: true, id: true } },
+            },
+          },
+          tours: { include: { tour: true } },
+          shows: { include: { show: true } },
+        },
+      });
 
-    // Send invites to any other users passed in `members`
-    if (members && Array.isArray(members)) {
-      for (const m of members) {
-        if (m.userId && m.userId !== creatorId) {
-          await prisma.bandInvite.create({
-            data: {
-              bandId: band.id,
-              userId: m.userId,
-              status: 'PENDING'
-            }
+      // 2. Create invites (bulk)
+      if (members && Array.isArray(members)) {
+        const invites = members
+          .filter((m: any) => m.userId && m.userId !== creatorId)
+          .map((m: any) => ({
+            bandId: createdBand.id,
+            userId: m.userId,
+            status: InviteStatus.PENDING,
+          }));
+
+        if (invites.length > 0) {
+          await tx.bandInvite.createMany({
+            data: invites,
           });
         }
       }
-    }
+
+      return createdBand;
+    });
 
     res.status(201).json(band);
   } catch (error: any) {

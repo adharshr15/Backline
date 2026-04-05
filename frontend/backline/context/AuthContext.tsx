@@ -19,7 +19,25 @@ export interface User {
     country?: string;
     profileImageUrl?: string;
     headerImageUrl?: string;
+    bandMemberships?: BandMembership[];
+    venueReps?: VenueRep[];
 }
+
+type BandMembership = {
+  id: string;
+  bandId: string;
+  userId: string;
+  role: string;
+  band: Band;
+};
+
+type VenueRep = {
+  id: string;
+  venueId: string;
+  userId: string;
+  role: string;
+  venue: Venue;
+};
 
 export interface Band {
     id: string;

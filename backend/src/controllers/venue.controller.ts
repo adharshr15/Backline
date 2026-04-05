@@ -25,6 +25,7 @@ export const getVenues = async (req: AuthRequest, res: Response) => {
             orderBy: { createdAt: "desc" },
             where: { deletedAt: null },
             select: {
+                id: true,
                 name: true,
                 city: true,
                 state: true,
@@ -102,6 +103,7 @@ export const createVenue = async (req: AuthRequest, res: Response) => {
         const { name, city, state, country, latitude, longitude, capacity, bio, contactEmail, representatives } = req.body;
         const creatorId = req.user?.userId
 
+
         const files = req.files as Record<string, Express.Multer.File[]>;
 
         const profileImageUrl = files?.profileImage?.[0]
@@ -119,38 +121,48 @@ export const createVenue = async (req: AuthRequest, res: Response) => {
 
         const accountType = "VENUE";
 
-        const venue = await prisma.venue.create({
-            data: {
-                name, city, state, country, latitude, longitude, capacity, bio, contactEmail, accountType, profileImageUrl, headerImageUrl,
-                representatives: {
-                    create: [
-                        {
-                            userId: creatorId,
-                            role: "MANAGER"
-                        }
-                    ]
-                }
-            },
-            include: {
-                representatives: { include: { user: { select: { name: true, id: true } } } },
-                shows: true
-            }
-        });
+        const venue = await prisma.$transaction(async (tx) => {
+            // 1. Create venue + creator as representative
+            const createdVenue = await tx.venue.create({
+                data: { name, city, state, country, latitude, longitude, capacity, bio, contactEmail, accountType, profileImageUrl, headerImageUrl, 
+                    representatives: {
+                        create: [
+                            {
+                                userId: creatorId,
+                                role: "MANAGER"
+                            },
+                        ],
+                    },
+                },
+                include: {
+                    representatives: {
+                        include: {
+                            user: { select: { name: true, id: true } },
+                        },
+                    },
+                    shows: true,
+                },
+            });
 
-        // Send invites to any other users passed in `members`
-        if (representatives && Array.isArray(representatives)) {
-            for (const m of representatives) {
-                if (m.userId !== creatorId) {
-                    await prisma.venueInvite.create({
-                        data: {
-                            venueId: venue.id,
-                            userId: m.userId,
-                            status: 'PENDING'
-                        }
+            // 2. Create invites
+            if (representatives && Array.isArray(representatives)) {
+                const invites = representatives
+                    .filter((m: any) => m.userId !== creatorId)
+                    .map((m: any) => ({
+                        venueId: createdVenue.id,
+                        userId: m.userId,
+                        status: InviteStatus.PENDING,
+                    }));
+
+                if (invites.length > 0) {
+                    await tx.venueInvite.createMany({
+                        data: invites,
                     });
                 }
             }
-        }
+
+            return createdVenue;
+        });
 
         res.status(201).json(venue);
     } catch (error: any) {

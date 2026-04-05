@@ -15,7 +15,7 @@ import { getMyProfiles } from '@/services/profile.service';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import api from '@/services/api';
-import ProfileShowsSection from '@/components/profile/shows-section';
+import ProfileShowsSection from '@/components/profile/shows-poster-section';
 
 export const AVATAR_SIZE = 80;
 const BORDER_WIDTH = 3;
@@ -73,7 +73,7 @@ export default function ProfileScreen() {
 
   if (activeProfile?.accountType === 'BAND') return;
   if (activeProfile?.accountType === 'VENUE') return;
-  return <UserProfile />;
+  return <UserProfile/>;
 }
 
 export function UserProfile() {

@@ -48,6 +48,7 @@ export interface Venue {
     accountType: 'VENUE';
 }
 
+export type AccountType = "USER" | "BAND" | "VENUE"
 export type ActiveProfile = User | Band | Venue;
 
 interface AuthContextType {

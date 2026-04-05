@@ -64,6 +64,32 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const getUserByUsername = async (req: AuthRequest, res: Response) => {
+    try {
+      const username = req.params.username as string;
+
+      const user = await prisma.user.findUnique({
+        where: { username }, 
+        include: {
+          bandMemberships: {
+            include: { band: true }
+          },
+          venueReps: {
+            include: { venue: true }
+          }
+        }
+      })
+
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      delete(user as any).password;
+
+      res.json(user);
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to fetch user", e });
+    }
+}
+
 export const getMyProfiles = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId
@@ -271,15 +297,16 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
         if (currentUser?.profileImageUrl) {
           // Deletes old profile image
           const oldPath = path.join(__dirname, "../../", currentUser.profileImageUrl);
-          if (fs.existsSync(oldPath)) { fs.unlinkSync(oldPath); }
+          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
         }
         updateData.profileImageUrl = `/uploads/${files.profileImage[0].filename}`;
       }
+
       if (files?.headerImage?.[0]) {
         if (currentUser?.headerImageUrl) {
           // Deletes old header image
           const oldPath = path.join(__dirname, "../../", currentUser.headerImageUrl);
-          if (fs.existsSync(oldPath)) { fs.unlinkSync(oldPath); }
+          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
         }
         updateData.headerImageUrl = `/uploads/${files.headerImage[0].filename}`;
       }

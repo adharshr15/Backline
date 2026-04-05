@@ -30,7 +30,7 @@ export function EditUserProfileModal({ onClose }: { onClose: () => void }) {
     const usernameInputRef = useRef<TextInput>(null);
     const bioInputRef = useRef<TextInput>(null);
     const locationInputRef = useRef<TextInput>(null);
-    
+
     if (!activeProfile || activeProfile.accountType !== 'USER') return null;
 
     const user = activeProfile;
@@ -70,10 +70,15 @@ export function EditUserProfileModal({ onClose }: { onClose: () => void }) {
             country == user.country &&
             profileImage == user.profileImageUrl &&
             headerImage == user.headerImageUrl
-        ) return user;
+        ) {
+            router.back()
+            return user;
+        }
 
         // Check if new username is available
-        if (!(await checkUsernameUnique(username))) {
+        if (username != user.username && !(await checkUsernameUnique(username))) {
+            console.log(user.username)
+            console.log(username)
             return Alert.alert("Error", "That username has already been taken")
         }
 
@@ -167,121 +172,121 @@ export function EditUserProfileModal({ onClose }: { onClose: () => void }) {
                         scrollEnabled={true}
                     >
 
-                            {/* Header Image*/}
-                            <TouchableOpacity onPress={() => pickImage('header')}>
-                                <Image
-                                    source={headerImage ? { uri: getImageUri(headerImage) } : require('@/assets/images/default/headerImage.png')}
-                                    style={{ width: '100%', height: HEADER_HEIGHT, overflow: 'hidden' }}
-                                />
-                                {!headerImage && (
-                                    <View style={styles.headerPlaceholder}>
-                                        <Text style={styles.imagePickerText}>+ Header Image</Text>
-                                    </View>
-                                )}
-                            </TouchableOpacity>
-
-                            {/* Profile Picture */}
-                            <View style={styles.pfpContainer}>
-                                <TouchableOpacity onPress={() => pickImage('profile')}>
-                                    <View style={[styles.pfpWrapper, { borderColor: '#ccc' }]}>
-                                        <Image
-                                            source={profileImage ? { uri: getImageUri(profileImage) } : require('@/assets/images/default/profileImage.png')}
-                                            style={{ width: '100%', height: '100%' }}
-                                        />
-                                        {!profileImage && (
-                                            <View style={styles.pfpPlaceholder}>
-                                                <Text style={styles.imagePickerText}>+ Profile Photo</Text>
-                                            </View>
-                                        )}
-                                    </View>
-                                </TouchableOpacity>
-                            </View>
-
-                            {/* Input Fields */}
-                            <View style={styles.section}>
-
-                                {/* Name */}
-                                <View style={styles.inputGroup}>
-                                    <ThemedText style={styles.label}>Name</ThemedText>
-                                    <TextInput
-                                        ref={nameInputRef}
-                                        value={name}
-                                        onChangeText={setName}
-                                        style={styles.input}
-                                        placeholder="Your name"
-                                        onFocus={() => scrollToInput(nameInputRef)}
-                                    />
+                        {/* Header Image*/}
+                        <TouchableOpacity onPress={() => pickImage('header')}>
+                            <Image
+                                source={headerImage ? { uri: getImageUri(headerImage) } : require('@/assets/images/default/headerImage.png')}
+                                style={{ width: '100%', height: HEADER_HEIGHT, overflow: 'hidden' }}
+                            />
+                            {!headerImage && (
+                                <View style={styles.headerPlaceholder}>
+                                    <Text style={styles.imagePickerText}>+ Header Image</Text>
                                 </View>
+                            )}
+                        </TouchableOpacity>
 
-                                <View style={styles.inputGroup}>
-                                    <ThemedText style={styles.label}>Username</ThemedText>
-                                    <TextInput
-                                        ref={usernameInputRef}
-                                        value={username}
-                                        onChangeText={setUsername}
-                                        style={styles.input}
-                                        placeholder="Your username"
-                                        onFocus={() => scrollToInput(usernameInputRef)}
+                        {/* Profile Picture */}
+                        <View style={styles.pfpContainer}>
+                            <TouchableOpacity onPress={() => pickImage('profile')}>
+                                <View style={[styles.pfpWrapper, { borderColor: '#ccc' }]}>
+                                    <Image
+                                        source={profileImage ? { uri: getImageUri(profileImage) } : require('@/assets/images/default/profileImage.png')}
+                                        style={{ width: '100%', height: '100%' }}
                                     />
-                                </View>
-
-                                <View style={styles.inputGroup}>
-                                    <ThemedText style={styles.label}>Bio</ThemedText>
-                                    <TextInput
-                                        ref={bioInputRef}
-                                        value={bio}
-                                        onChangeText={setBio}
-                                        style={[styles.input, styles.textArea]}
-                                        placeholder="Tell people about yourself"
-                                        multiline
-                                        maxLength={150}
-                                        onFocus={() => scrollToInput(bioInputRef)}
-                                    />
-                                </View>
-
-                                <View style={styles.inputGroup}>
-                                    <ThemedText style={styles.label}>Location</ThemedText>
-                                    <TextInput
-                                        ref={locationInputRef}
-                                        style={styles.input}
-                                        placeholder="Location"
-                                        value={locationQuery}
-                                        onChangeText={(text) => {
-                                            setLocationQuery(text);
-                                            fetchLocations(text);
-                                        }}
-                                        onFocus={() => scrollToInput(locationInputRef)}
-                                    />
-
-                                    {showSuggestions && suggestions?.length > 0 && (
-                                        <View style={styles.dropdown}>
-                                            {suggestions.map((item, index) => {
-                                                const props = item.properties;
-
-                                                const display =
-                                                    `${props.name || ''}, ${props.state || ''}, ${props.country || ''}`;
-
-                                                return (
-                                                    <TouchableOpacity
-                                                        key={index}
-                                                        style={styles.dropdownItem}
-                                                        onPress={() => {
-                                                            setCity(props.name || '');
-                                                            setState(props.state || '');
-                                                            setCountry(props.country || '');
-
-                                                            setLocationQuery(display);
-                                                            setShowSuggestions(false);
-                                                        }}
-                                                    >
-                                                        <Text style={{ color: 'white' }}>{display}</Text>
-                                                    </TouchableOpacity>
-                                                );
-                                            })}
+                                    {!profileImage && (
+                                        <View style={styles.pfpPlaceholder}>
+                                            <Text style={styles.imagePickerText}>+ Profile Photo</Text>
                                         </View>
                                     )}
                                 </View>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Input Fields */}
+                        <View style={styles.section}>
+
+                            {/* Name */}
+                            <View style={styles.inputGroup}>
+                                <ThemedText style={styles.label}>Name</ThemedText>
+                                <TextInput
+                                    ref={nameInputRef}
+                                    value={name}
+                                    onChangeText={setName}
+                                    style={styles.input}
+                                    placeholder="Your name"
+                                    onFocus={() => scrollToInput(nameInputRef)}
+                                />
                             </View>
+
+                            <View style={styles.inputGroup}>
+                                <ThemedText style={styles.label}>Username</ThemedText>
+                                <TextInput
+                                    ref={usernameInputRef}
+                                    value={username}
+                                    onChangeText={setUsername}
+                                    style={styles.input}
+                                    placeholder="Your username"
+                                    onFocus={() => scrollToInput(usernameInputRef)}
+                                />
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <ThemedText style={styles.label}>Bio</ThemedText>
+                                <TextInput
+                                    ref={bioInputRef}
+                                    value={bio}
+                                    onChangeText={setBio}
+                                    style={[styles.input, styles.textArea]}
+                                    placeholder="Tell people about yourself"
+                                    multiline
+                                    maxLength={150}
+                                    onFocus={() => scrollToInput(bioInputRef)}
+                                />
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <ThemedText style={styles.label}>Location</ThemedText>
+                                <TextInput
+                                    ref={locationInputRef}
+                                    style={styles.input}
+                                    placeholder="Location"
+                                    value={locationQuery}
+                                    onChangeText={(text) => {
+                                        setLocationQuery(text);
+                                        fetchLocations(text);
+                                    }}
+                                    onFocus={() => scrollToInput(locationInputRef)}
+                                />
+
+                                {showSuggestions && suggestions?.length > 0 && (
+                                    <View style={styles.dropdown}>
+                                        {suggestions.map((item, index) => {
+                                            const props = item.properties;
+
+                                            const display =
+                                                `${props.name || ''}, ${props.state || ''}, ${props.country || ''}`;
+
+                                            return (
+                                                <TouchableOpacity
+                                                    key={index}
+                                                    style={styles.dropdownItem}
+                                                    onPress={() => {
+                                                        setCity(props.name || '');
+                                                        setState(props.state || '');
+                                                        setCountry(props.country || '');
+
+                                                        setLocationQuery(display);
+                                                        setShowSuggestions(false);
+                                                    }}
+                                                >
+                                                    <Text style={{ color: 'white' }}>{display}</Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+                            </View>
+                        </View>
 
                     </ScrollView>
                 </KeyboardAvoidingView>

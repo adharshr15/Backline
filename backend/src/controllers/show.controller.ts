@@ -100,7 +100,7 @@ export const getMyShowInvites = async (req: AuthRequest, res: Response) => {
 export const createShow = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId as string;
-    const { date, city, state, country, venueId, tourId, bandIds = [], startTime, endTime, status, notes, creatorBandId }: {
+    const { date, city, state, country, venueId, tourId, bandIds = [], doors, status, notes, ticketsUrl, creatorUserId, creatorBandId, creatorVenueId }: {
       date: string
       city: string
       state: string
@@ -110,19 +110,45 @@ export const createShow = async (req: AuthRequest, res: Response) => {
       venueAddress: string
       tourId?: string
       bandIds?: string[]
-      startTime?: string
-      endTime?: string
+      doors: string
       status: ShowStatus
       notes?: string
-      creatorBandId: string
+      ticketsUrl: string
+      creatorUserId?: string
+      creatorBandId?: string
+      creatorVenueId?: string
     } = req.body;
 
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
-    if (!creatorBandId) return res.status(400).json({ error: "creatorBandId is required" });
+
+    const files = req.files as Record<string, Express.Multer.File[]>;
+
+    // Check that only one creator exists
+    const creatorCount = [ creatorUserId, creatorBandId, creatorVenueId ].filter((v) => v !== undefined && v !== null).length;
+    if (creatorCount != 1) {
+      return res.status(402).json({ error: "There can only be on creator of a show"});
+    }
+
+    // Check that user is creator user
+    if (creatorUserId != userId) {
+      return res.status(403).json({ error: "You must be the creator user"});
+    }
 
     // Check that user is in the creator band
-    const membership = await prisma.bandMember.findFirst({ where: { bandId: creatorBandId, userId } });
-    if (!membership) return res.status(403).json({ error: "You must be a member of the creator band" });
+    if (creatorBandId) {
+      const membership = await prisma.bandMember.findFirst({ where: { bandId: creatorBandId, userId } });
+      if (!membership) return res.status(403).json({ error: "You must be a member of the creator band" });
+    }
+
+    // Check that user is in creator venue
+    if (creatorVenueId) {
+      const representative = await prisma.venueRepresentative.findFirst({where: { venueId: creatorVenueId, userId}});
+      if (!representative) return res.status(403).json({ error: "You must be a representative of the creator venue"});
+    }
+
+    const posterImageUrl = files?.posterImage?.[0]
+      ? `/uploads/${files.posterImage[0].filename}`
+      : undefined
 
     const show = await prisma.$transaction(async (tx) => {
       // Create show with creator band
@@ -133,15 +159,18 @@ export const createShow = async (req: AuthRequest, res: Response) => {
           state,
           country,
           tourId,
-          startTime,
-          endTime,
+          doors,
+          posterUrl: posterImageUrl,
+          ticketsUrl,
           status,
           notes,
-          createdByBandId: creatorBandId
+          createdByBandId: creatorBandId,
+          createdByUserId: creatorUserId,
+          createdByVenueId: creatorVenueId
         }
       });
 
-      if (bandIds.length) {
+      if (creatorBandId && bandIds.length) {
         // Automatically add the creator band to the show
         await tx.showBand.create({
           data: {

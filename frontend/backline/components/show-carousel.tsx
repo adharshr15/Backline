@@ -11,17 +11,9 @@ import { Image } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { Show } from '@/services/show.service';
 
-export type Show = {
-  id: string;
-  poster: any;
-  venue: string;
-  city: string;
-  state: string;
-  date: string;
-  doors: string;
-  ticketUrl?: string;
-};
+
 
 type ShowCardProps = {
   show: Show;
@@ -89,7 +81,7 @@ function ShowCard({ show, cardWidth }: ShowCardProps) {
         ]}
       >
         <Image
-          source={show.poster}
+          source={show.posterUrl}
           style={{ width: '100%', height: '100%', borderRadius: 0 }}
           contentFit="cover"
         />

@@ -1,13 +1,14 @@
 import { View, StyleSheet } from "react-native";
 import ViewSwitcher from "../ui/view-switcher";
 import { ShowCarousel } from "../show-carousel";
+import { Show } from "@/services/show.service";
 
 type ViewMode = "poster" | "list";
 
 interface ProfileShowsSectionProps {
   showView: ViewMode;
   setShowView: (view: ViewMode) => void;
-  shows: any[]; // replace with your Show type
+  shows: Show[]; // replace with your Show type
   isOwner: boolean;
   onSeePastShows: () => void;
   onCreateShow: () => void;
@@ -28,13 +29,24 @@ export default function ProfileShowsSection({
         <ViewSwitcher view={showView} setView={setShowView} />
       </View>
 
-      {/* carousel */}
-      <ShowCarousel
-        isOwner={isOwner}
-        shows={shows}
-        onSeePastShows={onSeePastShows}
-        onCreateShow={onCreateShow}
-      />
+      
+      {showView === 'poster' ? (
+        // Carousel View
+        <ShowCarousel
+          isOwner={isOwner}
+          shows={shows}
+          onSeePastShows={onSeePastShows}
+          onCreateShow={onCreateShow}
+        />
+      ) : (
+        // Card View
+        <ShowCarousel
+          isOwner={isOwner}
+          shows={shows}
+          onSeePastShows={onSeePastShows}
+          onCreateShow={onCreateShow}
+        />
+      )}
     </View>
   );
 }

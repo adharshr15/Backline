@@ -184,6 +184,7 @@ model Venue {
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
   shows             Show[]   
+  showsCreated      Show[]                    @relation("showCreatedByVenue")
   showsReposted     Show[]                    @relation("showRepostedByVenue")
   showInvites       ShowInvite[] 
   blocks            VenueBlock[]   
@@ -264,6 +265,9 @@ model Show {
   state             String
   country           String
   status            ShowStatus                @default(PENDING)
+  doors             DateTime
+  posterUrl         String?     
+  ticketsUrl        String?      
   notes             String?
 
   tour              Tour?                     @relation(fields: [tourId], references: [id])
@@ -282,14 +286,14 @@ model Show {
   repostedByBands   Band[]                    @relation("showRepostedByBand")
   repostedByVenues  Venue[]                   @relation("showRepostedByVenue")
 
-  startTime         DateTime?
-  endTime           DateTime?
-
   createdByBandId   String?
   createdByBand     Band?                     @relation("showCreatedByBand", fields: [createdByBandId], references: [id])
 
   createdByUserId   String?
   createdByUser     User?                     @relation("showCreatedByUser", fields: [createdByUserId], references: [id])
+
+  createdByVenueId  String?
+  createdByVenue    Venue?                    @relation("showCreatedByVenue", fields: [createdByVenueId], references: [id])
 
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt

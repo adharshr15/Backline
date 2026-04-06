@@ -2,17 +2,17 @@ import { View, Text, Alert, TextInput, Image, TouchableOpacity, StyleSheet, Acti
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { createBand } from '@/services/band.service'; // your API service
+import { createVenue } from '@/services/venue.service';
 import { setAuthToken } from '@/services/api';
 
 
-export default function CreateBandScreen() {
+export default function CreateVenueScreen() {
     const router = useRouter();
 
-    const [bandName, setBandName] = useState('');
-    const [genre, setGenre] = useState('');
+    const [venueName, setVenueName] = useState('');
 
-    const [bandImage, setBandImage] = useState<string | null>(null);
+    const [venueImage, setVenueImage] = useState<string | null>(null);
+    const [address, setAddress] = useState('');
     const [locationQuery, setLocationQuery] = useState('');
     const [city, setCity] = useState('');
     const [state, setState] = useState('');
@@ -34,8 +34,8 @@ export default function CreateBandScreen() {
             const data = await res.json();
             setSuggestions(data.features || []);
             setShowSuggestions(true);
-        } catch (error: any) {
-            console.log("Photon Error: ", error);
+        } catch (error) {
+            console.error("Photon Error:", error);
             setSuggestions([]);
         }
     };
@@ -48,13 +48,13 @@ export default function CreateBandScreen() {
         });
 
         if (!result.canceled) {
-            setBandImage(result.assets[0].uri);
+            setVenueImage(result.assets[0].uri);
         }
     };
 
 
     const handleSubmit = async () => {
-        if (!bandName || !genre || !city || !state || !country) {
+        if (!venueName || !address || !city || !state || !country) {
             Alert.alert('Error', 'Please fill in all fields');
             return;
         }
@@ -63,24 +63,24 @@ export default function CreateBandScreen() {
             setLoading(true);
 
             const formData = new FormData();
-            formData.append('name', bandName);
-            formData.append('genre', genre);
+            formData.append('name', venueName);
             formData.append('city', city);
             formData.append('state', state);
             formData.append('country', country);
+            formData.append('address', address);
 
-            if (bandImage) {
-                const fileExtension = bandImage.split('.').pop();
+            if (venueImage) {
+                const fileExtension = venueImage.split('.').pop();
                 formData.append('profileImage', {
-                    uri: bandImage,
-                    name: `band.${fileExtension || 'jpg'}`,
+                    uri: venueImage,
+                    name: `profile.${fileExtension || 'jpg'}`,
                     type: `image/jpeg`,
                 } as any);
             }
 
-            // Call your API to create the band
-            const newBand = await createBand(formData);
-            Alert.alert('Success', `Band "${newBand.name}" created successfully!`);
+            // Call your API to create the venue
+            const newvenue = await createVenue(formData);
+            Alert.alert('Success', `venue "${newvenue.name}" created successfully!`);
             router.replace('/(tabs)/profile'); // navigate back to profile
         } catch (error: any) {
             Alert.alert('Error', error.response?.data?.error || 'Something went wrong');
@@ -97,27 +97,21 @@ export default function CreateBandScreen() {
             <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps='handled'>
                 <View style={styles.container}>
                     <View>
-                        <Text style={styles.title}>Create a Band</Text>
-                        <Text style={styles.subtitle}>Enter band information</Text>
+                        <Text style={styles.title}>Create a Venue</Text>
+                        <Text style={styles.subtitle}>Enter venue information</Text>
 
                         <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-                            {bandImage
-                                ? <Image source={{ uri: bandImage }} style={styles.profilePreview} />
-                                : <Text style={styles.imagePickerText}>+ Band Photo</Text>
+                            {venueImage
+                                ? <Image source={{ uri: venueImage }} style={styles.profilePreview} />
+                                : <Text style={styles.imagePickerText}>+ Venue Photo</Text>
                             }
                         </TouchableOpacity>
 
                         <TextInput
                             style={styles.input}
-                            placeholder="Band Name"
-                            value={bandName}
-                            onChangeText={setBandName}
-                        />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Genre"
-                            value={genre}
-                            onChangeText={setGenre}
+                            placeholder="Venue Name"
+                            value={venueName}
+                            onChangeText={setVenueName}
                         />
 
                         <TextInput
@@ -128,6 +122,13 @@ export default function CreateBandScreen() {
                                 setLocationQuery(text);
                                 fetchLocations(text);
                             }}
+                        />
+
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Address"
+                            value={address}
+                            onChangeText={setAddress}
                         />
 
                         {showSuggestions && suggestions?.length > 0 && (
@@ -155,7 +156,7 @@ export default function CreateBandScreen() {
                         )}
 
                         <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={loading}>
-                            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Band</Text>}
+                            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create venue</Text>}
                         </TouchableOpacity>
 
                         <TouchableOpacity style={styles.button}>

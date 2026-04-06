@@ -1,7 +1,3 @@
-/* 
-    Holds register/login api calls
-*/
-
 import api from './api'
 
 interface loginReq {

@@ -60,6 +60,7 @@ export interface Venue {
     country?: string;
     capacity?: string;
     address?: string;
+    contactEmail?: string;
     profileImageUrl?: string;
     headerImageUrl?: string;
     bio?: string;
@@ -77,6 +78,7 @@ interface AuthContextType {
     setActiveProfile: (profile: ActiveProfile) => void;
     saveAuth: (user: User, token: string) => Promise<void>;
     clearAuth: () => Promise<void>;
+    refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -139,8 +141,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await SecureStore.deleteItemAsync('token')
     }
 
+    const refreshUser = async () => {
+        const response = await api.get('/auth/me');
+        setUser(response.data);
+    }
+
     return (
-        <AuthContext.Provider value={{ user, token, loading, activeProfile, setActiveProfile, saveAuth, clearAuth }}>
+        <AuthContext.Provider value={{ user, token, loading, activeProfile, setActiveProfile, saveAuth, clearAuth, refreshUser }}>
             {children}
         </AuthContext.Provider>
     )

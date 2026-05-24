@@ -2,6 +2,8 @@ import { StyleSheet} from 'react-native';
 import { useAuth} from '@/context/AuthContext'
 import { ThemedText } from '@/components/themed-text';
 import { UserProfile } from '../profile/user-profile';
+import { BandProfile } from '../profile/band-profile';
+import { VenueProfile } from '../profile/venue-profile';
 
 export const AVATAR_SIZE = 80;
 const BORDER_WIDTH = 3;
@@ -36,8 +38,8 @@ type Tab = 'shows' | 'listings';
 export default function ProfileScreen() {
   const { activeProfile } = useAuth();
 
-  if (activeProfile?.accountType === 'BAND') return;
-  if (activeProfile?.accountType === 'VENUE') return;
+  if (activeProfile?.accountType === 'BAND') return <BandProfile />;
+  if (activeProfile?.accountType === 'VENUE') return <VenueProfile />;
   return <UserProfile />;
 }
 

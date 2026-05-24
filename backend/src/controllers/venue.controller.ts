@@ -182,12 +182,14 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
         if (!userRep) return res.status(403).json({ error: "Forbidden: not a representative" });
 
         const {
-            name, city, state, country, latitude, longitude, capacity, contactEmail, inviteRepresentativeId, removeRepresentativeId, updateRole
+            name, bio, city, state, country, address, latitude, longitude, capacity, contactEmail, inviteRepresentativeId, removeRepresentativeId, updateRole
         }: {
             name?: string;
+            bio?: string;
             city?: string;
             state?: string;
             country?: string;
+            address?: string;
             latitude?: number;
             longitude?: number;
             capacity?: number;
@@ -204,12 +206,14 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
         const updatedVenue = await prisma.$transaction(async (tx) => {
             const updateData: any = {};
             if (name) updateData.name = name;
+            if (bio) updateData.bio = bio;
             if (city) updateData.city = city;
             if (state) updateData.state = state;
             if (country) updateData.country = country;
+            if (address) updateData.address = address;
             if (latitude !== undefined) updateData.latitude = latitude;
             if (longitude !== undefined) updateData.longitude = longitude;
-            if (capacity !== undefined) updateData.capacity = capacity;
+            if (capacity !== undefined) updateData.capacity = Number(capacity);
             if (contactEmail) updateData.contactEmail = contactEmail;
 
             if (files?.profileImage?.[0]) {

@@ -252,7 +252,7 @@ export function UserProfile() {
                             onPress={() => { setActiveProfile(band); setSwitcherVisible(false); }}
                         >
                             <Image
-                                source={band.profileImageUrl ? { uri: band.profileImageUrl } : require('@/assets/images/default/profileImage.png')}
+                                source={band.profileImageUrl ? { uri: `${BASE_URL}${band.profileImageUrl}` } : require('@/assets/images/default/profileImage.png')}
                                 style={profileStyles.switcherAvatar}
                             />
                             <View>
@@ -270,7 +270,7 @@ export function UserProfile() {
                             onPress={() => { setActiveProfile(venue); setSwitcherVisible(false); }}
                         >
                             <Image
-                                source={venue.profileImageUrl ? { uri: venue.profileImageUrl } : require('@/assets/images/default/profileImage.png')}
+                                source={venue.profileImageUrl ? { uri: `${BASE_URL}${venue.profileImageUrl}` } : require('@/assets/images/default/profileImage.png')}
                                 style={profileStyles.switcherAvatar}
                             />
                             <View>

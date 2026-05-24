@@ -1,0 +1,241 @@
+import { Image } from 'expo-image';
+import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
+import { useState } from 'react';
+import { useAuth, type Venue } from '@/context/AuthContext'
+import { BASE_URL } from '@/services/api';
+import ParallaxScrollView from '@/components/parallax-scroll-view';
+import { Show } from '@/services/show.service';
+import { ThemedText } from '@/components/themed-text';
+import { useThemeColor } from '@/hooks/use-theme-color';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import ProfileShowsSection from '@/components/profile/shows-poster-section';
+import { renderBioWithLinks, profileStyles } from '../(tabs)/profile';
+
+export const AVATAR_SIZE = 80;
+
+const mockShows: Show[] = [];
+
+export function VenueProfile() {
+    const router = useRouter();
+    const { user, activeProfile, setActiveProfile } = useAuth();
+
+    if (!activeProfile || activeProfile.accountType !== 'VENUE') return null;
+    const venue = activeProfile as Venue;
+
+    const { width } = useWindowDimensions();
+    const sideWidth = (width - AVATAR_SIZE) / 2;
+
+    const [webViewUrl, setWebViewUrl] = useState<string | null>(null);
+    const [switcherVisible, setSwitcherVisible] = useState(false);
+    const [showView, setShowView] = useState<'poster' | 'list'>('poster');
+    const borderColor = useThemeColor({}, 'text');
+
+    const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
+    const venues = user?.venueReps?.map(v => v.venue).filter(Boolean) || [];
+
+    const profilePicture = venue?.profileImageUrl
+        ? { uri: `${BASE_URL}${venue.profileImageUrl}` }
+        : require('@/assets/images/default/profileImage.png');
+
+    const headerImage = venue?.headerImageUrl
+        ? { uri: `${BASE_URL}${venue.headerImageUrl}` }
+        : require('@/assets/images/default/headerImage.png');
+
+    return (
+        <>
+            <ParallaxScrollView
+                headerHeight={160}
+                headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
+                headerImage={
+                    <Image
+                        source={headerImage}
+                        style={{ width: '100%', height: 250 }}
+                    />
+                }
+            >
+                <>
+                    {/* pfp straddles the top of the ThemedView */}
+                    <View style={profileStyles.pfpContainer}>
+                        <TouchableOpacity onPress={() => setSwitcherVisible(true)}>
+                            <View style={[profileStyles.pfpWrapper, { borderColor }]}>
+                                <Image
+                                    source={profilePicture}
+                                    style={{ width: '100%', height: '100%' }}
+                                />
+                            </View>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* meta row */}
+                    <View style={profileStyles.metaRow}>
+                        <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
+                            {venue?.city && venue?.state ? `${venue.city}, ${venue.state}` : ''}
+                        </ThemedText>
+                        <View style={{ width: AVATAR_SIZE }} />
+                        <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
+                            {venue?.address ?? ''}
+                        </ThemedText>
+                    </View>
+
+                    {/* name */}
+                    <Text
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        style={[profileStyles.name, { maxWidth: width - 64 }]}
+                    >
+                        {venue?.name}
+                    </Text>
+
+                    {/* bio */}
+                    {venue?.bio ? (
+                        <View style={profileStyles.bioRow}>
+                            {renderBioWithLinks(venue.bio, setWebViewUrl)}
+                        </View>
+                    ) : null}
+
+                    {/* action buttons */}
+                    <View style={profileStyles.actionRow}>
+                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Calendar')}>
+                            <Ionicons name="calendar-outline" size={22} color="white" />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Share Profile')}>
+                            <Ionicons name="share-outline" size={22} color="white" />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => router.push('/settings')}>
+                            <Ionicons name="settings-outline" size={22} color="white" />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* divider */}
+                    <View
+                        style={{
+                            height: StyleSheet.hairlineWidth,
+                            backgroundColor: '#616161',
+                            marginHorizontal: -32,
+                            marginTop: 4,
+                            marginBottom: 12,
+                        }}
+                    />
+
+                    <ProfileShowsSection
+                        showView={showView}
+                        setShowView={setShowView}
+                        shows={mockShows}
+                        isOwner={true}
+                        onSeePastShows={() => console.log('see past shows')}
+                        onCreateShow={() => console.log('create show')}
+                    />
+                </>
+            </ParallaxScrollView>
+
+            {/* Account Switcher */}
+            <Modal
+                visible={switcherVisible}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={() => setSwitcherVisible(false)}
+            >
+                <SafeAreaView style={profileStyles.switcherContainer}>
+                    <View style={profileStyles.switcherHeader}>
+                        <ThemedText style={profileStyles.switcherTitle}>Switch Account</ThemedText>
+                        <TouchableOpacity onPress={() => setSwitcherVisible(false)}>
+                            <ThemedText style={profileStyles.closeText}>Done</ThemedText>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* User Account */}
+                    {user && (
+                        <TouchableOpacity
+                            style={profileStyles.switcherRow}
+                            onPress={() => { setActiveProfile(user); setSwitcherVisible(false); }}
+                        >
+                            <Image
+                                source={user.profileImageUrl ? { uri: `${BASE_URL}${user.profileImageUrl}` } : require('@/assets/images/default/profileImage.png')}
+                                style={profileStyles.switcherAvatar}
+                            />
+                            <View>
+                                <ThemedText style={profileStyles.switcherName}>{user.name}</ThemedText>
+                                <ThemedText style={profileStyles.switcherSub}>@{user.username}</ThemedText>
+                            </View>
+                        </TouchableOpacity>
+                    )}
+
+                    {/* Band Accounts */}
+                    {bands.map(b => (
+                        <TouchableOpacity
+                            key={b.id}
+                            style={profileStyles.switcherRow}
+                            onPress={() => { setActiveProfile(b); setSwitcherVisible(false); }}
+                        >
+                            <Image
+                                source={b.profileImageUrl ? { uri: `${BASE_URL}${b.profileImageUrl}` } : require('@/assets/images/default/profileImage.png')}
+                                style={profileStyles.switcherAvatar}
+                            />
+                            <View>
+                                <ThemedText style={profileStyles.switcherName}>{b.name}</ThemedText>
+                                <ThemedText style={profileStyles.switcherSub}>Band</ThemedText>
+                            </View>
+                        </TouchableOpacity>
+                    ))}
+
+                    {/* Venue Accounts */}
+                    {venues.map(v => (
+                        <TouchableOpacity
+                            key={v.id}
+                            style={[profileStyles.switcherRow, activeProfile?.id === v.id && profileStyles.switcherRowActive]}
+                            onPress={() => { setActiveProfile(v); setSwitcherVisible(false); }}
+                        >
+                            <Image
+                                source={v.profileImageUrl ? { uri: `${BASE_URL}${v.profileImageUrl}` } : require('@/assets/images/default/profileImage.png')}
+                                style={profileStyles.switcherAvatar}
+                            />
+                            <View>
+                                <ThemedText style={profileStyles.switcherName}>{v.name}</ThemedText>
+                                <ThemedText style={profileStyles.switcherSub}>Venue</ThemedText>
+                            </View>
+                        </TouchableOpacity>
+                    ))}
+
+                    {/* Create New */}
+                    <TouchableOpacity
+                        onPress={() => { setSwitcherVisible(false); router.push('/profile/create-new-band'); }}
+                        style={profileStyles.createRow}
+                    >
+                        <ThemedText style={profileStyles.createText}>+ Create a Band</ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => { setSwitcherVisible(false); router.push('/profile/create-new-venue'); }}
+                        style={profileStyles.createRow}
+                    >
+                        <ThemedText style={profileStyles.createText}>+ Create a Venue</ThemedText>
+                    </TouchableOpacity>
+                </SafeAreaView>
+            </Modal>
+
+            {/* Web View Modal */}
+            <Modal
+                visible={webViewUrl !== null}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={() => setWebViewUrl(null)}
+            >
+                <SafeAreaView style={profileStyles.modalContainer}>
+                    <View style={profileStyles.modalHeader}>
+                        <ThemedText style={profileStyles.modalUrl} numberOfLines={1}>
+                            {webViewUrl?.replace(/^https?:\/\//, '')}
+                        </ThemedText>
+                        <TouchableOpacity onPress={() => setWebViewUrl(null)}>
+                            <ThemedText style={profileStyles.closeText}>Done</ThemedText>
+                        </TouchableOpacity>
+                    </View>
+                    {webViewUrl && (
+                        <WebView source={{ uri: webViewUrl }} style={profileStyles.webView} />
+                    )}
+                </SafeAreaView>
+            </Modal>
+        </>
+    );
+}

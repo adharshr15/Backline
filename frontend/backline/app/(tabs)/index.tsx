@@ -1,98 +1,117 @@
+import { useEffect, useState } from 'react';
+import { View, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { useAuth } from '@/context/AuthContext';
+import { BASE_URL } from '@/services/api';
+import { getFollowing } from '@/services/follow.service';
+import { useThemeColor } from '@/hooks/use-theme-color';
+import { Fonts } from '@/constants/theme';
+
+type FollowedAccount = {
+    id: string;
+    name: string;
+    profileImageUrl: string | null;
+    accountType: 'USER' | 'BAND' | 'VENUE';
+};
+
+const TYPE_LABEL: Record<string, string> = {
+    USER: 'User',
+    BAND: 'Band',
+    VENUE: 'Venue',
+};
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    const { activeProfile } = useAuth();
+    const bgColor = useThemeColor({}, 'background');
+    const borderColor = useThemeColor({}, 'icon');
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+    const [following, setFollowing] = useState<FollowedAccount[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!activeProfile) return;
+        const type =
+            activeProfile.accountType === 'BAND' ? 'band' :
+            activeProfile.accountType === 'VENUE' ? 'venue' : 'user';
+
+        getFollowing(type, activeProfile.id)
+            .then(setFollowing)
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, [activeProfile?.id]);
+
+    return (
+        <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
+            <ThemedText style={styles.title}>Following</ThemedText>
+            <ThemedText style={styles.sub}>
+                as {activeProfile?.name} ({TYPE_LABEL[activeProfile?.accountType ?? 'USER']})
+            </ThemedText>
+
+            {loading && <ActivityIndicator style={{ marginTop: 32 }} />}
+
+            {!loading && following.length === 0 && (
+                <ThemedText style={styles.empty}>Not following anyone yet.</ThemedText>
+            )}
+
+            <FlatList
+                data={following}
+                keyExtractor={item => item.id}
+                contentContainerStyle={{ paddingTop: 8, paddingBottom: 32 }}
+                renderItem={({ item }) => (
+                    <View style={[styles.row, { borderBottomColor: borderColor + '33' }]}>
+                        <Image
+                            source={
+                                item.profileImageUrl
+                                    ? { uri: `${BASE_URL}${item.profileImageUrl}` }
+                                    : require('@/assets/images/default/profileImage.png')
+                            }
+                            style={styles.avatar}
+                        />
+                        <View style={styles.rowText}>
+                            <ThemedText style={styles.name}>{item.name}</ThemedText>
+                            <ThemedText style={styles.type}>{TYPE_LABEL[item.accountType]}</ThemedText>
+                        </View>
+                    </View>
+                )}
+            />
+        </SafeAreaView>
+    );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+    container: { flex: 1, paddingHorizontal: 16 },
+    title: {
+        fontSize: 28,
+        fontFamily: Fonts?.rounded ?? 'normal',
+        fontWeight: '700',
+        marginTop: 8,
+    },
+    sub: {
+        fontSize: 13,
+        opacity: 0.5,
+        marginBottom: 16,
+        marginTop: 2,
+    },
+    empty: {
+        textAlign: 'center',
+        marginTop: 40,
+        opacity: 0.4,
+    },
+    row: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    avatar: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        marginRight: 12,
+    },
+    rowText: { flex: 1 },
+    name: { fontSize: 15, fontWeight: '600' },
+    type: { fontSize: 12, opacity: 0.5, marginTop: 2 },
 });

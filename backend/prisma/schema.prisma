@@ -87,6 +87,8 @@ model User {
   bandMemberships   BandMember[]
   venueReps         VenueRepresentative[]
   isPromoter        Boolean                   @default(false)
+  following         Follow[]                  @relation("UserFollowing")
+  followers         Follow[]                  @relation("UserFollowers")
   conversations     ConversationParticipant[]
   sentMessages      Message[]                 @relation("UserMessages")
   sentConversationInvites                     ConversationInvite[]          @relation("ConversationInviteSenderUser")
@@ -125,6 +127,8 @@ model Band {
   sentMessages      Message[]                 @relation("BandMessages")
   sentConversationInvites                     ConversationInvite[]        @relation("ConversationInviteSenderBand")
   receivedConversationInvites                 ConversationInvite[]        @relation("ConversationInviteRecipientBand")
+  following         Follow[]                  @relation("BandFollowing")
+  followers         Follow[]                  @relation("BandFollowers")
 }
 
 model BandMember {
@@ -193,6 +197,8 @@ model Venue {
   sentMessages      Message[]                 @relation("VenueMessages")
   sentConversationInvites                     ConversationInvite[]          @relation("ConversationInviteSenderVenue")
   receivedConversationInvites                 ConversationInvite[]          @relation("ConversationInviteRecipientVenue")
+  following         Follow[]                  @relation("VenueFollowing")
+  followers         Follow[]                  @relation("VenueFollowers")
 
   @@index([city])
   @@index([capacity]) 
@@ -437,6 +443,36 @@ model Message {
 
   @@index([conversationId])
   @@index([createdAt])
+}
+
+model Follow {
+  id               String      @id @default(cuid())
+
+  followerUserId   String?
+  followerBandId   String?
+  followerVenueId  String?
+  followerType     AccountType
+
+  followeeUserId   String?
+  followeeBandId   String?
+  followeeVenueId  String?
+  followeeType     AccountType
+
+  followerUser     User?   @relation("UserFollowing",  fields: [followerUserId],  references: [id])
+  followerBand     Band?   @relation("BandFollowing",  fields: [followerBandId],  references: [id])
+  followerVenue    Venue?  @relation("VenueFollowing", fields: [followerVenueId], references: [id])
+  followeeUser     User?   @relation("UserFollowers",  fields: [followeeUserId],  references: [id])
+  followeeBand     Band?   @relation("BandFollowers",  fields: [followeeBandId],  references: [id])
+  followeeVenue    Venue?  @relation("VenueFollowers", fields: [followeeVenueId], references: [id])
+
+  createdAt        DateTime @default(now())
+
+  @@index([followerUserId])
+  @@index([followerBandId])
+  @@index([followerVenueId])
+  @@index([followeeUserId])
+  @@index([followeeBandId])
+  @@index([followeeVenueId])
 }
 
 model RentalItem {

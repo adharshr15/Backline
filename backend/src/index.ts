@@ -8,6 +8,8 @@ import showRoutes from './routes/show.routes'
 import conversationRoutes from './routes/conversation.routes'
 import messageRoutes from './routes/message.routes'
 import authRoutes from './routes/auth.routes'
+import followRoutes from './routes/follow.routes'
+import searchRoutes from './routes/search.routes'
 import uploadsRoutes from './routes/uploads.routes'
 import { generalRateLimiter } from './middlewares/rateLimit.middleware';
 import path from 'path'
@@ -27,6 +29,8 @@ app.use('/conversations', conversationRoutes)
 app.use('/messages', messageRoutes)
 app.use("/auth", authRoutes)
 app.use('/uploads', uploadsRoutes);
+app.use('/follows', followRoutes);
+app.use('/search', searchRoutes);
 
 
 app.listen(3000, () =>

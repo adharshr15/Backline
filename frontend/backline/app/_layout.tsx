@@ -4,7 +4,6 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
-import { TouchableOpacity, Button, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
@@ -42,18 +41,3 @@ export default function RootLayout() {
     </AuthProvider>
   );
 }
-
-
-const styles = StyleSheet.create({
-  bubbleButton: {
-    paddingHorizontal: 12, // space around bubble
-  },
-  bubble: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#007AFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

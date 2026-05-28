@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { View, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -30,17 +31,20 @@ export default function HomeScreen() {
     const [following, setFollowing] = useState<FollowedAccount[]>([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        if (!activeProfile) return;
-        const type =
-            activeProfile.accountType === 'BAND' ? 'band' :
-            activeProfile.accountType === 'VENUE' ? 'venue' : 'user';
+    useFocusEffect(
+        useCallback(() => {
+            if (!activeProfile) return;
+            setLoading(true);
+            const type =
+                activeProfile.accountType === 'BAND' ? 'band' :
+                activeProfile.accountType === 'VENUE' ? 'venue' : 'user';
 
-        getFollowing(type, activeProfile.id)
-            .then(setFollowing)
-            .catch(console.error)
-            .finally(() => setLoading(false));
-    }, [activeProfile?.id]);
+            getFollowing(type, activeProfile.id)
+                .then(setFollowing)
+                .catch(console.error)
+                .finally(() => setLoading(false));
+        }, [activeProfile?.id])
+    );
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>

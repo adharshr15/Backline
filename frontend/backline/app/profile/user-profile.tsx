@@ -8,14 +8,14 @@ import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import ViewSwitcher from '@/components/ui/view-switcher';
 import { ShowCarousel } from '@/components/show-carousel';
-import { Show } from '@/services/show.service';
+import { Show, getShowsByProfile } from '@/services/show.service';
 import { TabSwitcher } from '@/components/ui/tab-switcher';
+import CreateShowModal from '@/components/profile/create-show-modal';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getMyProfiles } from '@/services/profile.service';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import api from '@/services/api';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
 import { renderBioWithLinks } from '../(tabs)/profile';
 import { profileStyles } from '../(tabs)/profile';
@@ -26,27 +26,12 @@ const BORDER_WIDTH = 3;
 
 type Tab = 'shows' | 'listings';
 
-const mockShows: Show[] = [
-    {
-        id: 'asdfsa',
-        posterUrl: `${BASE_URL}/assets/images/example/poster2.png`,
-        venue: 'Notsua',
-        city: 'Houston',
-        state: 'TX',
-        country: '',
-        status: '',
-        date: 'Apr 2, 2025',
-        doors: '7:00 PM',
-        bands: []
-    }
-];
-
 export function UserProfile() {
     const router = useRouter();
 
-    const { activeProfile, setActiveProfile, loading } = useAuth();
+    const { activeProfile, setActiveProfile } = useAuth();
     if (!activeProfile || activeProfile.accountType !== 'USER') return null;
-    const user = activeProfile;
+    const user = activeProfile as User;
 
 
     const { width } = useWindowDimensions();
@@ -56,6 +41,11 @@ export function UserProfile() {
     const [activeTab, setActiveTab] = useState<Tab>('shows');
     const [switcherVisible, setSwitcherVisible] = useState(false);
     const [showView, setShowView] = useState<'poster' | 'list'>('poster');
+    const [shows, setShows] = useState<Show[]>([]);
+    const [pastShows, setPastShows] = useState<Show[]>([]);
+    const [showingPast, setShowingPast] = useState(false);
+    const [createShowVisible, setCreateShowVisible] = useState(false);
+    const [editingShow, setEditingShow] = useState<Show | undefined>(undefined);
     const borderColor = useThemeColor({}, 'text');
 
     const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
@@ -63,21 +53,10 @@ export function UserProfile() {
 
     const hasListings = false // user.listings
 
-    // Fetch all bands/venues user belongs to
     useEffect(() => {
-        if (loading) return;
-
-        const fetchProfiles = async () => {
-            try {
-                const response = await api.get('users/me/profiles');
-                return response.data;
-            } catch (error) {
-                console.log('Error fetching bands and venues', error);
-            }
-        };
-
-        fetchProfiles();
-    }, [loading]);
+        getShowsByProfile('user', user.id).then(setShows).catch(() => {});
+        getShowsByProfile('user', user.id, true).then(setPastShows).catch(() => {});
+    }, [user.id]);
 
     const profilePicture = user?.profileImageUrl
         ? { uri: `${BASE_URL}${user.profileImageUrl}` }
@@ -163,10 +142,13 @@ export function UserProfile() {
                                         <ProfileShowsSection
                                             showView={showView}
                                             setShowView={setShowView}
-                                            shows={mockShows}
+                                            shows={shows}
+                                            pastShows={pastShows}
+                                            showingPast={showingPast}
                                             isOwner={true}
-                                            onSeePastShows={() => console.log('see past shows')}
-                                            onCreateShow={() => console.log('create show')}
+                                            onSeePastShows={() => setShowingPast(true)}
+                                            onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
+                                            onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
                                         />
                                     ),
                                 },
@@ -202,10 +184,13 @@ export function UserProfile() {
                             <ProfileShowsSection
                                 showView={showView}
                                 setShowView={setShowView}
-                                shows={mockShows}
+                                shows={shows}
+                                pastShows={pastShows}
+                                showingPast={showingPast}
                                 isOwner={true}
-                                onSeePastShows={() => console.log('see past shows')}
-                                onCreateShow={() => console.log('create show')}
+                                onSeePastShows={() => setShowingPast(true)}
+                                onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
+                                onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
                             />
                         </>
                     )}
@@ -324,6 +309,25 @@ export function UserProfile() {
                     )}
                 </SafeAreaView>
             </Modal>
+
+            <CreateShowModal
+                visible={createShowVisible}
+                onClose={() => setCreateShowVisible(false)}
+                creatorUserId={user.id}
+                defaultCity={user.city ?? ''}
+                defaultState={user.state ?? ''}
+                defaultCountry={user.country ?? ''}
+                editingShow={editingShow}
+                onCreated={async () => {
+                    const [fresh, freshPast] = await Promise.all([
+                        getShowsByProfile('user', user.id),
+                        getShowsByProfile('user', user.id, true),
+                    ]);
+                    setShows(fresh);
+                    setPastShows(freshPast);
+                    setCreateShowVisible(false);
+                }}
+            />
         </>
     );
 }

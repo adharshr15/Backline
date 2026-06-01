@@ -12,15 +12,18 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Show } from '@/services/show.service';
+import { BASE_URL } from '@/services/api';
 
 
 
 type ShowCardProps = {
   show: Show;
   cardWidth: number;
+  isOwner: boolean;
+  onEdit: (show: Show) => void;
 };
 
-function ShowCard({ show, cardWidth }: ShowCardProps) {
+function ShowCard({ show, cardWidth, isOwner, onEdit }: ShowCardProps) {
   const flipAnim = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
   const borderColor = useThemeColor({}, 'text');
@@ -81,7 +84,7 @@ function ShowCard({ show, cardWidth }: ShowCardProps) {
         ]}
       >
         <Image
-          source={show.posterUrl}
+          source={show.posterUrl ? { uri: `${BASE_URL}${show.posterUrl}` } : require('@/assets/images/default/headerImage.png')}
           style={{ width: '100%', height: '100%', borderRadius: 0 }}
           contentFit="cover"
         />
@@ -103,19 +106,29 @@ function ShowCard({ show, cardWidth }: ShowCardProps) {
           },
         ]}
       >
-        <ThemedText style={styles.backVenue}>{show.venue}</ThemedText>
+        <ThemedText style={styles.backVenue}>{show.venue?.name ?? 'TBA'}</ThemedText>
         <ThemedText style={styles.backCity}>{show.city}, {show.state}</ThemedText>
         <View style={styles.divider} />
         <ThemedText style={styles.backLabel}>Date</ThemedText>
-        <ThemedText style={styles.backValue}>{show.date}</ThemedText>
+        <ThemedText style={styles.backValue}>{new Date(show.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</ThemedText>
         <ThemedText style={styles.backLabel}>Doors</ThemedText>
-        <ThemedText style={styles.backValue}>{show.doors}</ThemedText>
-        {show.ticketUrl && (
+        <ThemedText style={styles.backValue}>{show.doors?.includes('T') ? new Date(show.doors).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : show.doors}</ThemedText>
+        {show.ticketsUrl && (
           <TouchableOpacity style={styles.ticketButton}>
             <ThemedText style={styles.ticketText}>Get Tickets</ThemedText>
           </TouchableOpacity>
         )}
-        <ThemedText style={styles.tapHint}>tap to flip back</ThemedText>
+        <View style={styles.backFooter}>
+          <ThemedText style={styles.tapHint}>tap to flip back</ThemedText>
+          {isOwner && (
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={(e) => { e.stopPropagation(); onEdit(show); }}
+            >
+              <ThemedText style={styles.editButtonText}>Edit</ThemedText>
+            </TouchableOpacity>
+          )}
+        </View>
       </Animated.View>
     </TouchableOpacity>
   );
@@ -123,12 +136,15 @@ function ShowCard({ show, cardWidth }: ShowCardProps) {
 
 type Props = {
   shows: Show[];
+  pastShows: Show[];
+  showingPast: boolean;
   onSeePastShows: () => void;
   onCreateShow: () => void;
+  onEditShow: (show: Show) => void;
   isOwner: boolean;
 };
 
-export function ShowCarousel({ shows, onSeePastShows, onCreateShow, isOwner }: Props) {
+export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, onCreateShow, onEditShow, isOwner }: Props) {
   const { width } = useWindowDimensions();
   const CARD_WIDTH = width * 0.85;
   const borderColor = useThemeColor({}, 'text');
@@ -140,35 +156,25 @@ export function ShowCarousel({ shows, onSeePastShows, onCreateShow, isOwner }: P
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.scrollContent}
-      onContentSizeChange={() => {
-        if (isOwner && scrollViewRef.current) {
-          // Start at first show poster, not create show button
-          const createButtonWidth = (CARD_WIDTH * 0.7) / 2;
-          scrollViewRef.current.scrollTo({ x: createButtonWidth, animated: false });
-        }
-      }}
+      onContentSizeChange={() => {}}
     >
-      {isOwner && (
-        <TouchableOpacity
-        onPress={onCreateShow}
-        style={[styles.pastShowsButton, { borderColor, width: (CARD_WIDTH * 0.7) / 2, height: CARD_WIDTH * 0.7 * 1.4 }]}
-      >
-        <ThemedText style={styles.pastShowsText}>Create{'\n'}Show</ThemedText>
-        <ThemedText style={styles.pastShowsArrow}>+</ThemedText>
-      </TouchableOpacity>
-      )}
-
-      {shows.map(show => (
-        <ShowCard key={show.id} show={show} cardWidth={CARD_WIDTH} />
+      {showingPast && pastShows.map(show => (
+        <ShowCard key={`past-${show.id}`} show={show} cardWidth={CARD_WIDTH} isOwner={isOwner} onEdit={onEditShow} />
       ))}
 
-      <TouchableOpacity
-        onPress={onSeePastShows}
-        style={[styles.pastShowsButton, { borderColor, width: CARD_WIDTH * 0.7, height: CARD_WIDTH * 0.7 * 1.4 }]}
-      >
-        <ThemedText style={styles.pastShowsText}>See Past{'\n'}Shows</ThemedText>
-        <ThemedText style={styles.pastShowsArrow}>→</ThemedText>
-      </TouchableOpacity>
+      {shows.map(show => (
+        <ShowCard key={show.id} show={show} cardWidth={CARD_WIDTH} isOwner={isOwner} onEdit={onEditShow} />
+      ))}
+
+      {!showingPast && pastShows.length > 0 && (
+        <TouchableOpacity
+          onPress={onSeePastShows}
+          style={[styles.pastShowsButton, { borderColor, width: CARD_WIDTH * 0.7, height: CARD_WIDTH * 0.7 * 1.4 }]}
+        >
+          <ThemedText style={styles.pastShowsText}>See Past{'\n'}Shows</ThemedText>
+          <ThemedText style={styles.pastShowsArrow}>→</ThemedText>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -226,11 +232,28 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
+  backFooter: {
+    marginTop: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   tapHint: {
     fontSize: 10,
     opacity: 0.3,
-    textAlign: 'center',
-    marginTop: 'auto',
+  },
+  editButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  editButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    opacity: 0.7,
   },
   pastShowsButton: {
     borderWidth: StyleSheet.hairlineWidth,

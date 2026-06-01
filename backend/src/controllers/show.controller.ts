@@ -10,19 +10,26 @@ const canManageShow = async (showId: string, userId: string) => {
     where: { id: showId },
     include: {
       venue: { include: { representatives: true } },
-      createdByBand: { include: { members: true } }
+      createdByBand: { include: { members: true } },
+      createdByVenue: { include: { representatives: true } },
     }
   });
 
   if (!show) return false;
 
-  // Venue representative check
-  const venueRep = show.venue?.representatives.some(r => r.userId === userId);
+  // Created directly by this user
+  if (show.createdByUserId === userId) return true;
 
-  // Check if user is a member of the band that created the show
-  const isCreatorBandMember = show.createdByBand?.members.some(m => m.userId === userId);
+  // Member of the band that created the show
+  if (show.createdByBand?.members.some(m => m.userId === userId)) return true;
 
-  return venueRep || isCreatorBandMember;
+  // Rep of the venue that created the show
+  if (show.createdByVenue?.representatives.some(r => r.userId === userId)) return true;
+
+  // Rep of the venue attached to the show
+  if (show.venue?.representatives.some(r => r.userId === userId)) return true;
+
+  return false;
 };
 
 
@@ -31,13 +38,36 @@ const canManageShow = async (showId: string, userId: string) => {
 
 export const getShows = async (req: Request, res: Response) => {
   try {
+    const { bandId, venueId, userId, past } = req.query as Record<string, string | undefined>;
+    const now = new Date();
+
+    const where: any = {
+      deletedAt: null,
+      date: past === 'true' ? { lt: now } : { gte: now },
+    };
+
+    if (bandId) {
+      where.OR = [
+        { createdByBandId: bandId },
+        { bands: { some: { bandId } } },
+      ];
+    } else if (venueId) {
+      where.OR = [
+        { venueId },
+        { createdByVenueId: venueId },
+      ];
+    } else if (userId) {
+      where.createdByUserId = userId;
+    }
+
     const shows = await prisma.show.findMany({
-      where: { deletedAt: null },
+      where,
       include: {
         venue: true,
         tour: true,
         bands: { include: { band: true } }
-      }
+      },
+      orderBy: { date: past === 'true' ? 'desc' : 'asc' },
     });
 
     res.json(shows);
@@ -129,9 +159,9 @@ export const createShow = async (req: AuthRequest, res: Response) => {
       return res.status(402).json({ error: "There can only be one creator of a show" });
     }
 
-    // Check that user is creator user
-    if (creatorUserId != userId) {
-      return res.status(403).json({ error: "You must be the creator user"});
+    // Check that user is creator user (only when creatorUserId is specified)
+    if (creatorUserId && creatorUserId !== userId) {
+      return res.status(403).json({ error: "You must be the creator user" });
     }
 
     // Check that user is in the creator band
@@ -248,12 +278,19 @@ export const updateShow = async (req: AuthRequest, res: Response) => {
     const allowed = await canManageShow(id, userId);
     if (!allowed) return res.status(403).json({ error: "Forbidden" });
 
-    const { date, city, state, country, venueId, tourId, addBandId, removeBandId, doors, status, notes } = req.body;
+    const { date, city, state, country, venueId, tourId, addBandId, removeBandId, doors, status, notes, ticketsUrl } = req.body;
+
+    const files = req.files as Record<string, Express.Multer.File[]>;
+    const posterUrl = files?.posterImage?.[0] ? `/uploads/${files.posterImage[0].filename}` : undefined;
 
     const updatedShow = await prisma.$transaction(async (tx) => {
       await tx.show.update({
         where: { id },
-        data: { date: date ? new Date(date) : undefined, city, state, country, venueId, tourId, doors, status, notes }
+        data: {
+          date: date ? new Date(date) : undefined,
+          city, state, country, venueId, tourId, doors, status, notes, ticketsUrl,
+          ...(posterUrl && { posterUrl }),
+        }
       });
 
       // Add band invites

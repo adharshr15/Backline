@@ -40,7 +40,14 @@
         }
       ],
       "expo-secure-store",
-      "expo-web-browser"
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Backline uses your location to pre-fill show location details."
+        }
+      ],
+      "expo-web-browser",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

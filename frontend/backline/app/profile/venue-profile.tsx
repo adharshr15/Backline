@@ -2,21 +2,20 @@ import { Image } from 'expo-image';
 import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth, type Venue } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { Show } from '@/services/show.service';
+import { Show, getShowsByProfile } from '@/services/show.service';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
+import CreateShowModal from '@/components/profile/create-show-modal';
 import { renderBioWithLinks, profileStyles } from '../(tabs)/profile';
 
 export const AVATAR_SIZE = 80;
-
-const mockShows: Show[] = [];
 
 export function VenueProfile() {
     const router = useRouter();
@@ -31,10 +30,20 @@ export function VenueProfile() {
     const [webViewUrl, setWebViewUrl] = useState<string | null>(null);
     const [switcherVisible, setSwitcherVisible] = useState(false);
     const [showView, setShowView] = useState<'poster' | 'list'>('poster');
+    const [shows, setShows] = useState<Show[]>([]);
+    const [pastShows, setPastShows] = useState<Show[]>([]);
+    const [showingPast, setShowingPast] = useState(false);
+    const [createShowVisible, setCreateShowVisible] = useState(false);
+    const [editingShow, setEditingShow] = useState<Show | undefined>(undefined);
     const borderColor = useThemeColor({}, 'text');
 
     const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
     const venues = user?.venueReps?.map(v => v.venue).filter(Boolean) || [];
+
+    useEffect(() => {
+        getShowsByProfile('venue', venue.id).then(setShows).catch(() => {});
+        getShowsByProfile('venue', venue.id, true).then(setPastShows).catch(() => {});
+    }, [venue.id]);
 
     const profilePicture = venue?.profileImageUrl
         ? { uri: `${BASE_URL}${venue.profileImageUrl}` }
@@ -57,7 +66,6 @@ export function VenueProfile() {
                 }
             >
                 <>
-                    {/* pfp straddles the top of the ThemedView */}
                     <View style={profileStyles.pfpContainer}>
                         <TouchableOpacity onPress={() => setSwitcherVisible(true)}>
                             <View style={[profileStyles.pfpWrapper, { borderColor }]}>
@@ -69,7 +77,6 @@ export function VenueProfile() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* meta row */}
                     <View style={profileStyles.metaRow}>
                         <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
                             {venue?.city && venue?.state ? `${venue.city}, ${venue.state}` : ''}
@@ -80,7 +87,6 @@ export function VenueProfile() {
                         </ThemedText>
                     </View>
 
-                    {/* name */}
                     <Text
                         numberOfLines={1}
                         adjustsFontSizeToFit
@@ -89,14 +95,12 @@ export function VenueProfile() {
                         {venue?.name}
                     </Text>
 
-                    {/* bio */}
                     {venue?.bio ? (
                         <View style={profileStyles.bioRow}>
                             {renderBioWithLinks(venue.bio, setWebViewUrl)}
                         </View>
                     ) : null}
 
-                    {/* action buttons */}
                     <View style={profileStyles.actionRow}>
                         <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Calendar')}>
                             <Ionicons name="calendar-outline" size={22} color="white" />
@@ -109,7 +113,6 @@ export function VenueProfile() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* divider */}
                     <View
                         style={{
                             height: StyleSheet.hairlineWidth,
@@ -123,10 +126,13 @@ export function VenueProfile() {
                     <ProfileShowsSection
                         showView={showView}
                         setShowView={setShowView}
-                        shows={mockShows}
+                        shows={shows}
+                        pastShows={pastShows}
+                        showingPast={showingPast}
                         isOwner={true}
-                        onSeePastShows={() => console.log('see past shows')}
-                        onCreateShow={() => console.log('create show')}
+                        onSeePastShows={() => setShowingPast(true)}
+                        onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
+                        onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
                     />
                 </>
             </ParallaxScrollView>
@@ -146,7 +152,6 @@ export function VenueProfile() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* User Account */}
                     {user && (
                         <TouchableOpacity
                             style={profileStyles.switcherRow}
@@ -163,7 +168,6 @@ export function VenueProfile() {
                         </TouchableOpacity>
                     )}
 
-                    {/* Band Accounts */}
                     {bands.map(b => (
                         <TouchableOpacity
                             key={b.id}
@@ -181,7 +185,6 @@ export function VenueProfile() {
                         </TouchableOpacity>
                     ))}
 
-                    {/* Venue Accounts */}
                     {venues.map(v => (
                         <TouchableOpacity
                             key={v.id}
@@ -199,7 +202,6 @@ export function VenueProfile() {
                         </TouchableOpacity>
                     ))}
 
-                    {/* Create New */}
                     <TouchableOpacity
                         onPress={() => { setSwitcherVisible(false); router.push('/profile/create-new-band'); }}
                         style={profileStyles.createRow}
@@ -236,6 +238,25 @@ export function VenueProfile() {
                     )}
                 </SafeAreaView>
             </Modal>
+
+            <CreateShowModal
+                visible={createShowVisible}
+                onClose={() => setCreateShowVisible(false)}
+                creatorVenueId={venue.id}
+                defaultCity={venue.city ?? ''}
+                defaultState={venue.state ?? ''}
+                defaultCountry={venue.country ?? ''}
+                editingShow={editingShow}
+                onCreated={async () => {
+                    const [fresh, freshPast] = await Promise.all([
+                        getShowsByProfile('venue', venue.id),
+                        getShowsByProfile('venue', venue.id, true),
+                    ]);
+                    setShows(fresh);
+                    setPastShows(freshPast);
+                    setCreateShowVisible(false);
+                }}
+            />
         </>
     );
 }

@@ -2,21 +2,20 @@ import { Image } from 'expo-image';
 import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth, type Band } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { Show } from '@/services/show.service';
+import { Show, getShowsByProfile } from '@/services/show.service';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
+import CreateShowModal from '@/components/profile/create-show-modal';
 import { renderBioWithLinks, profileStyles } from '../(tabs)/profile';
 
 export const AVATAR_SIZE = 80;
-
-const mockShows: Show[] = [];
 
 export function BandProfile() {
     const router = useRouter();
@@ -31,7 +30,17 @@ export function BandProfile() {
     const [webViewUrl, setWebViewUrl] = useState<string | null>(null);
     const [switcherVisible, setSwitcherVisible] = useState(false);
     const [showView, setShowView] = useState<'poster' | 'list'>('poster');
+    const [shows, setShows] = useState<Show[]>([]);
+    const [pastShows, setPastShows] = useState<Show[]>([]);
+    const [showingPast, setShowingPast] = useState(false);
+    const [createShowVisible, setCreateShowVisible] = useState(false);
+    const [editingShow, setEditingShow] = useState<Show | undefined>(undefined);
     const borderColor = useThemeColor({}, 'text');
+
+    useEffect(() => {
+        getShowsByProfile('band', band.id).then(setShows).catch(() => {});
+        getShowsByProfile('band', band.id, true).then(setPastShows).catch(() => {});
+    }, [band.id]);
 
     const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
     const venues = user?.venueReps?.map(v => v.venue).filter(Boolean) || [];
@@ -123,10 +132,13 @@ export function BandProfile() {
                     <ProfileShowsSection
                         showView={showView}
                         setShowView={setShowView}
-                        shows={mockShows}
+                        shows={shows}
+                        pastShows={pastShows}
+                        showingPast={showingPast}
                         isOwner={true}
-                        onSeePastShows={() => console.log('see past shows')}
-                        onCreateShow={() => console.log('create show')}
+                        onSeePastShows={() => setShowingPast(true)}
+                        onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
+                        onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
                     />
                 </>
             </ParallaxScrollView>
@@ -236,6 +248,25 @@ export function BandProfile() {
                     )}
                 </SafeAreaView>
             </Modal>
+
+            <CreateShowModal
+                visible={createShowVisible}
+                onClose={() => setCreateShowVisible(false)}
+                creatorBandId={band.id}
+                defaultCity={band.city ?? ''}
+                defaultState={band.state ?? ''}
+                defaultCountry={band.country ?? ''}
+                editingShow={editingShow}
+                onCreated={async () => {
+                    const [fresh, freshPast] = await Promise.all([
+                        getShowsByProfile('band', band.id),
+                        getShowsByProfile('band', band.id, true),
+                    ]);
+                    setShows(fresh);
+                    setPastShows(freshPast);
+                    setCreateShowVisible(false);
+                }}
+            />
         </>
     );
 }

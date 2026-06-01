@@ -121,11 +121,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Save authorization info for user
     const saveAuth = async (user: User, token: string) => {
         try {
-            setUser(user);
-            setToken(token);
-            setActiveProfile(user); 
             api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             await SecureStore.setItemAsync('token', token);
+            setToken(token);
+            // Fetch full user (with bandMemberships/venueReps) so account switcher works immediately
+            const response = await api.get('/auth/me');
+            const fullUser: User = response.data;
+            setUser(fullUser);
+            setActiveProfile(fullUser);
         }
         catch (error: any) {
             return error;

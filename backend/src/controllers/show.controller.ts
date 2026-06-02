@@ -74,6 +74,9 @@ export const getShows = async (req: Request, res: Response) => {
         repostedByBands: { select: { id: true } },
         repostedByUsers: { select: { id: true } },
         repostedByVenues: { select: { id: true } },
+        rsvpBands: { select: { id: true } },
+        rsvpUsers: { select: { id: true } },
+        rsvpVenues: { select: { id: true } },
       },
       orderBy: { date: past === 'true' ? 'desc' : 'asc' },
     });
@@ -505,6 +508,9 @@ export const getFeedShows = async (req: Request, res: Response) => {
         repostedByBands: { select: { id: true } },
         repostedByUsers: { select: { id: true } },
         repostedByVenues: { select: { id: true } },
+        rsvpBands: { select: { id: true } },
+        rsvpUsers: { select: { id: true } },
+        rsvpVenues: { select: { id: true } },
       },
       orderBy: { date: 'asc' },
     });
@@ -515,4 +521,110 @@ export const getFeedShows = async (req: Request, res: Response) => {
   }
 };
 
+
+// RSVP
+
+export const rsvpShow = async (req: AuthRequest, res: Response) => {
+  try {
+    const showId = req.params.id as string;
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { rsvpType, rsvpBandId, rsvpVenueId } = req.body as {
+      rsvpType: 'user' | 'band' | 'venue';
+      rsvpBandId?: string;
+      rsvpVenueId?: string;
+    };
+
+    const show = await prisma.show.findFirst({ where: { id: showId, deletedAt: null } });
+    if (!show) return res.status(404).json({ error: "Show not found" });
+
+    if (rsvpType === 'band') {
+      if (!rsvpBandId) return res.status(400).json({ error: "rsvpBandId required" });
+      const membership = await prisma.bandMember.findFirst({ where: { bandId: rsvpBandId, userId } });
+      if (!membership) return res.status(403).json({ error: "Not a member of this band" });
+      const existing = await prisma.show.findFirst({ where: { id: showId, rsvpBands: { some: { id: rsvpBandId } } } });
+      if (existing) return res.status(409).json({ error: "Already RSVP'd" });
+      await prisma.show.update({ where: { id: showId }, data: { rsvpBands: { connect: { id: rsvpBandId } } } });
+    } else if (rsvpType === 'venue') {
+      if (!rsvpVenueId) return res.status(400).json({ error: "rsvpVenueId required" });
+      const rep = await prisma.venueRepresentative.findFirst({ where: { venueId: rsvpVenueId, userId } });
+      if (!rep) return res.status(403).json({ error: "Not a representative of this venue" });
+      const existing = await prisma.show.findFirst({ where: { id: showId, rsvpVenues: { some: { id: rsvpVenueId } } } });
+      if (existing) return res.status(409).json({ error: "Already RSVP'd" });
+      await prisma.show.update({ where: { id: showId }, data: { rsvpVenues: { connect: { id: rsvpVenueId } } } });
+    } else {
+      const existing = await prisma.show.findFirst({ where: { id: showId, rsvpUsers: { some: { id: userId } } } });
+      if (existing) return res.status(409).json({ error: "Already RSVP'd" });
+      await prisma.show.update({ where: { id: showId }, data: { rsvpUsers: { connect: { id: userId } } } });
+    }
+
+    res.json({ message: "RSVP'd" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const unrsvpShow = async (req: AuthRequest, res: Response) => {
+  try {
+    const showId = req.params.id as string;
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { rsvpType, rsvpBandId, rsvpVenueId } = req.body as {
+      rsvpType: 'user' | 'band' | 'venue';
+      rsvpBandId?: string;
+      rsvpVenueId?: string;
+    };
+
+    if (rsvpType === 'band') {
+      if (!rsvpBandId) return res.status(400).json({ error: "rsvpBandId required" });
+      await prisma.show.update({ where: { id: showId }, data: { rsvpBands: { disconnect: { id: rsvpBandId } } } });
+    } else if (rsvpType === 'venue') {
+      if (!rsvpVenueId) return res.status(400).json({ error: "rsvpVenueId required" });
+      await prisma.show.update({ where: { id: showId }, data: { rsvpVenues: { disconnect: { id: rsvpVenueId } } } });
+    } else {
+      await prisma.show.update({ where: { id: showId }, data: { rsvpUsers: { disconnect: { id: userId } } } });
+    }
+
+    res.json({ message: "RSVP removed" });
+  } catch (error: any) {
+    if (error.code === "P2025") return res.status(404).json({ error: "Show not found" });
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getRsvpShows = async (req: AuthRequest, res: Response) => {
+  try {
+    const { profileType, profileId } = req.query as Record<string, string>;
+    if (!profileType || !profileId) {
+      return res.status(400).json({ error: "profileType and profileId are required" });
+    }
+
+    const where: any =
+      profileType === 'band'  ? { rsvpBands:  { some: { id: profileId } }, deletedAt: null } :
+      profileType === 'venue' ? { rsvpVenues: { some: { id: profileId } }, deletedAt: null } :
+                                { rsvpUsers:  { some: { id: profileId } }, deletedAt: null };
+
+    const shows = await prisma.show.findMany({
+      where,
+      include: {
+        venue: true,
+        tour: true,
+        bands: { include: { band: true } },
+        repostedByBands: { select: { id: true } },
+        repostedByUsers: { select: { id: true } },
+        repostedByVenues: { select: { id: true } },
+        rsvpBands: { select: { id: true } },
+        rsvpUsers: { select: { id: true } },
+        rsvpVenues: { select: { id: true } },
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    res.json(shows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
 

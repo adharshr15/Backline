@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Show } from '@/services/show.service';
 import { BASE_URL } from '@/services/api';
@@ -24,13 +23,13 @@ type ShowCardProps = {
   activeProfileId?: string;
   activeProfileType?: 'user' | 'band' | 'venue';
   onRepost?: (show: Show) => void;
+  onRsvp?: (show: Show) => void;
 };
 
-function ShowCard({ show, cardWidth, isOwner, onEdit, activeProfileId, activeProfileType, onRepost }: ShowCardProps) {
+function ShowCard({ show, cardWidth, isOwner, onEdit, activeProfileId, activeProfileType, onRepost, onRsvp }: ShowCardProps) {
   const flipAnim = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
   const borderColor = useThemeColor({}, 'text');
-  const backgroundColor = useThemeColor({}, 'background');
 
   const flip = () => {
     Animated.spring(flipAnim, {
@@ -69,6 +68,14 @@ function ShowCard({ show, cardWidth, isOwner, onEdit, activeProfileId, activePro
 );
 
   const CARD_HEIGHT = cardWidth * 1.35;
+
+  const hasRsvp = activeProfileId
+    ? activeProfileType === 'band'
+      ? show.rsvpBands?.some(b => b.id === activeProfileId)
+      : activeProfileType === 'venue'
+      ? show.rsvpVenues?.some(v => v.id === activeProfileId)
+      : show.rsvpUsers?.some(u => u.id === activeProfileId)
+    : false;
 
   const hasReposted = activeProfileId
     ? activeProfileType === 'band'
@@ -148,6 +155,16 @@ function ShowCard({ show, cardWidth, isOwner, onEdit, activeProfileId, activePro
           <View style={styles.backFooter}>
             <ThemedText style={styles.tapHint}>tap to flip back</ThemedText>
             <View style={styles.backActions}>
+              {onRsvp && (
+                <TouchableOpacity
+                  style={[styles.repostButton, hasRsvp && styles.repostButtonActive]}
+                  onPress={(e) => { e.stopPropagation(); onRsvp(show); }}
+                >
+                  <ThemedText style={[styles.repostButtonText, hasRsvp && styles.repostButtonTextActive]}>
+                    {hasRsvp ? '🎟 Going' : '🎟 RSVP'}
+                  </ThemedText>
+                </TouchableOpacity>
+              )}
               {onRepost && (
                 <TouchableOpacity
                   style={[styles.repostButton, hasReposted && styles.repostButtonActive]}
@@ -159,6 +176,10 @@ function ShowCard({ show, cardWidth, isOwner, onEdit, activeProfileId, activePro
                 </TouchableOpacity>
               )}
               {isOwner && (
+                activeProfileType === 'band'  ? show.createdByBandId === activeProfileId :
+                activeProfileType === 'venue' ? (show.createdByVenueId === activeProfileId || show.venue?.id === activeProfileId) :
+                                                show.createdByUserId === activeProfileId
+              ) && (
                 <TouchableOpacity
                   style={styles.editButton}
                   onPress={(e) => { e.stopPropagation(); onEdit(show); }}
@@ -185,9 +206,10 @@ type Props = {
   activeProfileId?: string;
   activeProfileType?: 'user' | 'band' | 'venue';
   onRepost?: (show: Show) => void;
+  onRsvp?: (show: Show) => void;
 };
 
-export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, onCreateShow, onEditShow, isOwner, activeProfileId, activeProfileType, onRepost }: Props) {
+export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, onCreateShow, onEditShow, isOwner, activeProfileId, activeProfileType, onRepost, onRsvp }: Props) {
   const { width } = useWindowDimensions();
   const CARD_WIDTH = width * 0.85;
   const borderColor = useThemeColor({}, 'text');
@@ -211,6 +233,7 @@ export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, on
           activeProfileId={activeProfileId}
           activeProfileType={activeProfileType}
           onRepost={onRepost}
+          onRsvp={onRsvp}
         />
       ))}
 
@@ -224,6 +247,7 @@ export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, on
           activeProfileId={activeProfileId}
           activeProfileType={activeProfileType}
           onRepost={onRepost}
+          onRsvp={onRsvp}
         />
       ))}
 

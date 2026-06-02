@@ -36,6 +36,9 @@ export interface Show {
     repostedByUsers: { id: string }[];
     repostedByBands: { id: string }[];
     repostedByVenues: { id: string }[];
+    rsvpUsers: { id: string }[];
+    rsvpBands: { id: string }[];
+    rsvpVenues: { id: string }[];
 }
 
 export interface CreateShowData {
@@ -99,6 +102,32 @@ export const getFeedShows = async (
 ): Promise<Show[]> => {
     const response = await api.get('/shows/feed', { params: { followerType, followerId } });
     return response.data;
+};
+
+export const getRsvpShows = async (
+    profileType: 'user' | 'band' | 'venue',
+    profileId: string
+): Promise<Show[]> => {
+    const response = await api.get('/shows/rsvp', { params: { profileType, profileId } });
+    return response.data;
+};
+
+export const rsvpShow = async (
+    showId: string,
+    rsvpType: 'user' | 'band' | 'venue',
+    rsvpBandId?: string,
+    rsvpVenueId?: string
+): Promise<void> => {
+    await api.post(`/shows/${showId}/rsvp`, { rsvpType, rsvpBandId, rsvpVenueId });
+};
+
+export const unrsvpShow = async (
+    showId: string,
+    rsvpType: 'user' | 'band' | 'venue',
+    rsvpBandId?: string,
+    rsvpVenueId?: string
+): Promise<void> => {
+    await api.delete(`/shows/${showId}/rsvp`, { data: { rsvpType, rsvpBandId, rsvpVenueId } });
 };
 
 export const repostShow = async (

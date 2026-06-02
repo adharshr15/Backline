@@ -25,9 +25,10 @@ type ShowListCardProps = {
     activeProfileId?: string;
     activeProfileType?: 'user' | 'band' | 'venue';
     onRepost?: (show: Show) => void;
+    onRsvp?: (show: Show) => void;
 };
 
-function ShowListCard({ show, activeProfileId, activeProfileType, onRepost }: ShowListCardProps) {
+function ShowListCard({ show, activeProfileId, activeProfileType, onRepost, onRsvp }: ShowListCardProps) {
     const borderColor = useThemeColor({}, 'text');
     const { month, day, weekday } = formatDate(show.date);
     const bandNames = show.bands.map(b => b.band.name).join(' · ');
@@ -38,6 +39,14 @@ function ShowListCard({ show, activeProfileId, activeProfileType, onRepost }: Sh
             : activeProfileType === 'venue'
             ? show.repostedByVenues?.some(v => v.id === activeProfileId)
             : show.repostedByUsers?.some(u => u.id === activeProfileId)
+        : false;
+
+    const hasRsvp = activeProfileId
+        ? activeProfileType === 'band'
+            ? show.rsvpBands?.some(b => b.id === activeProfileId)
+            : activeProfileType === 'venue'
+            ? show.rsvpVenues?.some(v => v.id === activeProfileId)
+            : show.rsvpUsers?.some(u => u.id === activeProfileId)
         : false;
 
     const isRepostBadge = activeProfileId
@@ -81,13 +90,22 @@ function ShowListCard({ show, activeProfileId, activeProfileType, onRepost }: Sh
                     ) : null}
                 </View>
 
-                {onRepost && (
-                    <TouchableOpacity style={styles.repostCol} onPress={() => onRepost(show)}>
-                        <ThemedText style={[styles.repostBtn, hasReposted && styles.repostBtnActive]}>
-                            {hasReposted ? '↩ ✓' : '↩'}
-                        </ThemedText>
-                    </TouchableOpacity>
-                )}
+                <View style={styles.actionCol}>
+                    {onRsvp && (
+                        <TouchableOpacity onPress={() => onRsvp(show)}>
+                            <ThemedText style={[styles.rsvpBtn, hasRsvp && styles.rsvpBtnActive]}>
+                                {hasRsvp ? '🎟✓' : '🎟'}
+                            </ThemedText>
+                        </TouchableOpacity>
+                    )}
+                    {onRepost && (
+                        <TouchableOpacity onPress={() => onRepost(show)}>
+                            <ThemedText style={[styles.repostBtn, hasReposted && styles.repostBtnActive]}>
+                                {hasReposted ? '↩ ✓' : '↩'}
+                            </ThemedText>
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
         </View>
     );
@@ -102,9 +120,10 @@ type Props = {
     activeProfileId?: string;
     activeProfileType?: 'user' | 'band' | 'venue';
     onRepost?: (show: Show) => void;
+    onRsvp?: (show: Show) => void;
 };
 
-export function ShowListView({ shows, pastShows, showingPast, isOwner, onSeePastShows, activeProfileId, activeProfileType, onRepost }: Props) {
+export function ShowListView({ shows, pastShows, showingPast, isOwner, onSeePastShows, activeProfileId, activeProfileType, onRepost, onRsvp }: Props) {
     const borderColor = useThemeColor({}, 'text');
 
     return (
@@ -136,6 +155,7 @@ export function ShowListView({ shows, pastShows, showingPast, isOwner, onSeePast
                         activeProfileId={activeProfileId}
                         activeProfileType={activeProfileType}
                         onRepost={onRepost}
+                        onRsvp={onRsvp}
                     />
                 ))
             )}
@@ -253,16 +273,25 @@ const styles = StyleSheet.create({
         marginBottom: 2,
         marginLeft: 2,
     },
-    repostCol: {
+    actionCol: {
         justifyContent: 'center',
-        paddingHorizontal: 10,
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        gap: 6,
     },
     repostBtn: {
-        fontSize: 18,
+        fontSize: 16,
         opacity: 0.4,
     },
     repostBtnActive: {
         opacity: 1,
         color: '#4CAF50',
+    },
+    rsvpBtn: {
+        fontSize: 15,
+        opacity: 0.4,
+    },
+    rsvpBtnActive: {
+        opacity: 1,
     },
 });

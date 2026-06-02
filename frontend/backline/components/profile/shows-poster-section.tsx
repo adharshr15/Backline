@@ -20,6 +20,7 @@ interface ProfileShowsSectionProps {
   activeProfileId?: string;
   activeProfileType?: 'user' | 'band' | 'venue';
   onRepost?: (show: Show) => void;
+  onRsvp?: (show: Show) => void;
 }
 
 export default function ProfileShowsSection({
@@ -35,6 +36,7 @@ export default function ProfileShowsSection({
   activeProfileId,
   activeProfileType,
   onRepost,
+  onRsvp,
 }: ProfileShowsSectionProps) {
   return (
     <View style={styles.container}>
@@ -59,6 +61,7 @@ export default function ProfileShowsSection({
           activeProfileId={activeProfileId}
           activeProfileType={activeProfileType}
           onRepost={onRepost}
+          onRsvp={onRsvp}
         />
       ) : (
         <ShowListView
@@ -70,6 +73,7 @@ export default function ProfileShowsSection({
           activeProfileId={activeProfileId}
           activeProfileType={activeProfileType}
           onRepost={onRepost}
+          onRsvp={onRsvp}
         />
       )}
     </View>

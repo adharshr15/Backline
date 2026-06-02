@@ -13,8 +13,9 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { Ionicons } from '@expo/vector-icons';
 import { renderBioWithLinks, profileStyles } from '@/app/(tabs)/profile/index';
 import * as followService from '@/services/follow.service';
-import { Show, getShowsByProfile, repostShow, unrepostShow } from '@/services/show.service';
+import { Show, getShowsByProfile, repostShow, unrepostShow, getRsvpShows, rsvpShow, unrsvpShow } from '@/services/show.service';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
+import ProfileCalendarModal from '@/components/profile-calendar-modal';
 
 const AVATAR_SIZE = 80;
 
@@ -38,6 +39,8 @@ export default function ViewBandProfile({ id }: Props) {
     const [pastShows, setPastShows] = useState<Show[]>([]);
     const [showingPast, setShowingPast] = useState(false);
     const [showView, setShowView] = useState<'poster' | 'list'>('poster');
+    const [viewerRsvpShows, setViewerRsvpShows] = useState<Show[]>([]);
+    const [calendarVisible, setCalendarVisible] = useState(false);
 
     const followerType = activeProfile?.accountType as 'USER' | 'BAND' | 'VENUE';
     const followerBandId = followerType === 'BAND' ? activeProfile?.id : undefined;
@@ -67,6 +70,7 @@ export default function ViewBandProfile({ id }: Props) {
         if (!id) return;
         getShowsByProfile('band', id).then(setShows).catch(() => {});
         getShowsByProfile('band', id, true).then(setPastShows).catch(() => {});
+        if (activeProfile) getRsvpShows(activeProfileType, activeProfile.id).then(setViewerRsvpShows).catch(() => {});
     }, [id]);
 
     const handleFollowToggle = async () => {
@@ -85,6 +89,25 @@ export default function ViewBandProfile({ id }: Props) {
         } finally {
             setFollowLoading(false);
         }
+    };
+
+    const handleRsvp = async (show: Show) => {
+        if (!activeProfile) return;
+        const hasRsvp =
+            activeProfileType === 'band'  ? show.rsvpBands?.some(b => b.id === activeProfile.id) :
+            activeProfileType === 'venue' ? show.rsvpVenues?.some(v => v.id === activeProfile.id) :
+                                            show.rsvpUsers?.some(u => u.id === activeProfile.id);
+        try {
+            if (hasRsvp) await unrsvpShow(show.id, activeProfileType, followerBandId, followerVenueId);
+            else await rsvpShow(show.id, activeProfileType, followerBandId, followerVenueId);
+            const [fresh, freshPast] = await Promise.all([
+                getShowsByProfile('band', id),
+                getShowsByProfile('band', id, true),
+            ]);
+            setShows(fresh);
+            setPastShows(freshPast);
+            getRsvpShows(activeProfileType, activeProfile.id).then(setViewerRsvpShows).catch(() => {});
+        } catch (e) { console.error('RSVP error:', e); }
     };
 
     const handleRepost = async (show: Show) => {
@@ -178,6 +201,9 @@ export default function ViewBandProfile({ id }: Props) {
                         <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Message')}>
                             <Ionicons name="chatbubble-outline" size={22} color="white" />
                         </TouchableOpacity>
+                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => setCalendarVisible(true)}>
+                            <Ionicons name="calendar-outline" size={22} color="white" />
+                        </TouchableOpacity>
                     </View>
 
                     <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: '#616161', marginHorizontal: -32, marginTop: 4, marginBottom: 12 }} />
@@ -195,9 +221,21 @@ export default function ViewBandProfile({ id }: Props) {
                         activeProfileId={activeProfile?.id}
                         activeProfileType={activeProfileType}
                         onRepost={handleRepost}
+                        onRsvp={handleRsvp}
                     />
                 </>
             </ParallaxScrollView>
+
+            <ProfileCalendarModal
+                visible={calendarVisible}
+                onClose={() => setCalendarVisible(false)}
+                profileShows={[...shows, ...pastShows]}
+                rsvpShows={viewerRsvpShows}
+                isOwnProfile={false}
+                activeProfileId={activeProfile?.id ?? ''}
+                activeProfileType={activeProfileType}
+                onRsvpToggle={handleRsvp}
+            />
 
             <Modal visible={webViewUrl !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setWebViewUrl(null)}>
                 <SafeAreaView style={profileStyles.modalContainer}>

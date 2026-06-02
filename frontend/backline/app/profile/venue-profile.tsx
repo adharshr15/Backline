@@ -7,7 +7,8 @@ import { useFocusEffect } from 'expo-router';
 import { useAuth, type Venue } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { Show, getShowsByProfile } from '@/services/show.service';
+import { Show, getShowsByProfile, getRsvpShows, rsvpShow, unrsvpShow } from '@/services/show.service';
+import ProfileCalendarModal from '@/components/profile-calendar-modal';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,6 +37,8 @@ export function VenueProfile() {
     const [showingPast, setShowingPast] = useState(false);
     const [createShowVisible, setCreateShowVisible] = useState(false);
     const [editingShow, setEditingShow] = useState<Show | undefined>(undefined);
+    const [rsvpShows, setRsvpShows] = useState<Show[]>([]);
+    const [calendarVisible, setCalendarVisible] = useState(false);
     const borderColor = useThemeColor({}, 'text');
 
     const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
@@ -44,7 +47,18 @@ export function VenueProfile() {
     useFocusEffect(useCallback(() => {
         getShowsByProfile('venue', venue.id).then(setShows).catch(() => {});
         getShowsByProfile('venue', venue.id, true).then(setPastShows).catch(() => {});
+        getRsvpShows('venue', venue.id).then(setRsvpShows).catch(() => {});
     }, [venue.id]));
+
+    const handleRsvp = async (show: Show) => {
+        const hasRsvp = show.rsvpVenues?.some(v => v.id === venue.id);
+        try {
+            if (hasRsvp) await unrsvpShow(show.id, 'venue', undefined, venue.id);
+            else await rsvpShow(show.id, 'venue', undefined, venue.id);
+            getRsvpShows('venue', venue.id).then(setRsvpShows).catch(() => {});
+            getShowsByProfile('venue', venue.id).then(setShows).catch(() => {});
+        } catch (e) { console.error(e); }
+    };
 
     const profilePicture = venue?.profileImageUrl
         ? { uri: `${BASE_URL}${venue.profileImageUrl}` }
@@ -103,7 +117,7 @@ export function VenueProfile() {
                     ) : null}
 
                     <View style={profileStyles.actionRow}>
-                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Calendar')}>
+                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => setCalendarVisible(true)}>
                             <Ionicons name="calendar-outline" size={22} color="white" />
                         </TouchableOpacity>
                         <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Share Profile')}>
@@ -136,6 +150,7 @@ export function VenueProfile() {
                         onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
                         activeProfileId={venue.id}
                         activeProfileType="venue"
+                        onRsvp={handleRsvp}
                     />
                 </>
             </ParallaxScrollView>
@@ -241,6 +256,17 @@ export function VenueProfile() {
                     )}
                 </SafeAreaView>
             </Modal>
+
+            <ProfileCalendarModal
+                visible={calendarVisible}
+                onClose={() => setCalendarVisible(false)}
+                profileShows={[...shows, ...pastShows]}
+                rsvpShows={rsvpShows}
+                isOwnProfile={true}
+                activeProfileId={venue.id}
+                activeProfileType="venue"
+                onRsvpToggle={handleRsvp}
+            />
 
             <CreateShowModal
                 visible={createShowVisible}

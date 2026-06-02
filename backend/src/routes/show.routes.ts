@@ -1,11 +1,12 @@
 import { RequestHandler, Router } from 'express'
-import { getShows, getShowById, createShow, updateShow, deleteShow, repostShow, unrepostShow, getFeedShows } from '../controllers/show.controller'
+import { getShows, getShowById, createShow, updateShow, deleteShow, repostShow, unrepostShow, getFeedShows, rsvpShow, unrsvpShow, getRsvpShows } from '../controllers/show.controller'
 import { authenticate } from '../middlewares/auth.middleware'
 import { upload } from '../config/multer'
 
 const router = Router()
 
 router.get('/feed', getFeedShows)
+router.get('/rsvp', authenticate as RequestHandler, getRsvpShows as RequestHandler)
 router.get('/', getShows)
 router.get('/:id', getShowById)
 
@@ -15,5 +16,7 @@ router.put("/:id", upload.fields([{ name: 'posterImage', maxCount: 1 }]), update
 router.delete("/:id", deleteShow as RequestHandler)
 router.post("/:id/repost", repostShow as RequestHandler)
 router.delete("/:id/repost", unrepostShow as RequestHandler)
+router.post("/:id/rsvp", rsvpShow as RequestHandler)
+router.delete("/:id/rsvp", unrsvpShow as RequestHandler)
 
 export default router

@@ -7,7 +7,8 @@ import { useFocusEffect } from 'expo-router';
 import { useAuth, type Band } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { Show, getShowsByProfile } from '@/services/show.service';
+import { Show, getShowsByProfile, getRsvpShows, rsvpShow, unrsvpShow } from '@/services/show.service';
+import ProfileCalendarModal from '@/components/profile-calendar-modal';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,15 +34,28 @@ export function BandProfile() {
     const [showView, setShowView] = useState<'poster' | 'list'>('poster');
     const [shows, setShows] = useState<Show[]>([]);
     const [pastShows, setPastShows] = useState<Show[]>([]);
+    const [rsvpShows, setRsvpShows] = useState<Show[]>([]);
     const [showingPast, setShowingPast] = useState(false);
     const [createShowVisible, setCreateShowVisible] = useState(false);
     const [editingShow, setEditingShow] = useState<Show | undefined>(undefined);
+    const [calendarVisible, setCalendarVisible] = useState(false);
     const borderColor = useThemeColor({}, 'text');
 
     useFocusEffect(useCallback(() => {
         getShowsByProfile('band', band.id).then(setShows).catch(() => {});
         getShowsByProfile('band', band.id, true).then(setPastShows).catch(() => {});
+        getRsvpShows('band', band.id).then(setRsvpShows).catch(() => {});
     }, [band.id]));
+
+    const handleRsvp = async (show: Show) => {
+        const hasRsvp = show.rsvpBands?.some(b => b.id === band.id);
+        try {
+            if (hasRsvp) await unrsvpShow(show.id, 'band', band.id);
+            else await rsvpShow(show.id, 'band', band.id);
+            getRsvpShows('band', band.id).then(setRsvpShows).catch(() => {});
+            getShowsByProfile('band', band.id).then(setShows).catch(() => {});
+        } catch (e) { console.error(e); }
+    };
 
     const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
     const venues = user?.venueReps?.map(v => v.venue).filter(Boolean) || [];
@@ -108,7 +122,7 @@ export function BandProfile() {
 
                     {/* action buttons */}
                     <View style={profileStyles.actionRow}>
-                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Calendar')}>
+                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => setCalendarVisible(true)}>
                             <Ionicons name="calendar-outline" size={22} color="white" />
                         </TouchableOpacity>
                         <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Share Profile')}>
@@ -142,6 +156,7 @@ export function BandProfile() {
                         onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
                         activeProfileId={band.id}
                         activeProfileType="band"
+                        onRsvp={handleRsvp}
                     />
                 </>
             </ParallaxScrollView>
@@ -251,6 +266,17 @@ export function BandProfile() {
                     )}
                 </SafeAreaView>
             </Modal>
+
+            <ProfileCalendarModal
+                visible={calendarVisible}
+                onClose={() => setCalendarVisible(false)}
+                profileShows={[...shows, ...pastShows]}
+                rsvpShows={rsvpShows}
+                isOwnProfile={true}
+                activeProfileId={band.id}
+                activeProfileType="band"
+                onRsvpToggle={handleRsvp}
+            />
 
             <CreateShowModal
                 visible={createShowVisible}

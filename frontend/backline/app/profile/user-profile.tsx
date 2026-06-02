@@ -10,7 +10,8 @@ import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import ViewSwitcher from '@/components/ui/view-switcher';
 import { ShowCarousel } from '@/components/show-carousel';
-import { Show, getShowsByProfile } from '@/services/show.service';
+import { Show, getShowsByProfile, getRsvpShows, rsvpShow, unrsvpShow } from '@/services/show.service';
+import ProfileCalendarModal from '@/components/profile-calendar-modal';
 import { TabSwitcher } from '@/components/ui/tab-switcher';
 import CreateShowModal from '@/components/profile/create-show-modal';
 import { ThemedText } from '@/components/themed-text';
@@ -53,12 +54,25 @@ export function UserProfile() {
     const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
     const venues = user?.venueReps?.map(v => v.venue).filter(Boolean) || [];
 
+    const [rsvpShows, setRsvpShows] = useState<Show[]>([]);
+    const [calendarVisible, setCalendarVisible] = useState(false);
     const hasListings = false // user.listings
 
     useFocusEffect(useCallback(() => {
         getShowsByProfile('user', user.id).then(setShows).catch(() => {});
         getShowsByProfile('user', user.id, true).then(setPastShows).catch(() => {});
+        getRsvpShows('user', user.id).then(setRsvpShows).catch(() => {});
     }, [user.id]));
+
+    const handleRsvp = async (show: Show) => {
+        const hasRsvp = show.rsvpUsers?.some(u => u.id === user.id);
+        try {
+            if (hasRsvp) await unrsvpShow(show.id, 'user');
+            else await rsvpShow(show.id, 'user');
+            getRsvpShows('user', user.id).then(setRsvpShows).catch(() => {});
+            getShowsByProfile('user', user.id).then(setShows).catch(() => {});
+        } catch (e) { console.error(e); }
+    };
 
     const profilePicture = user?.profileImageUrl
         ? { uri: `${BASE_URL}${user.profileImageUrl}` }
@@ -123,7 +137,7 @@ export function UserProfile() {
 
                     {/* action buttons */}
                     <View style={profileStyles.actionRow}>
-                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Calendar')}>
+                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => setCalendarVisible(true)}>
                             <Ionicons name="calendar-outline" size={22} color="white" />
                         </TouchableOpacity>
                         <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Share Profile')}>
@@ -153,6 +167,7 @@ export function UserProfile() {
                                             onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
                                             activeProfileId={user.id}
                                             activeProfileType="user"
+                                            onRsvp={handleRsvp}
                                         />
                                     ),
                                 },
@@ -315,6 +330,17 @@ export function UserProfile() {
                     )}
                 </SafeAreaView>
             </Modal>
+
+            <ProfileCalendarModal
+                visible={calendarVisible}
+                onClose={() => setCalendarVisible(false)}
+                profileShows={[...shows, ...pastShows]}
+                rsvpShows={rsvpShows}
+                isOwnProfile={true}
+                activeProfileId={user.id}
+                activeProfileType="user"
+                onRsvpToggle={handleRsvp}
+            />
 
             <CreateShowModal
                 visible={createShowVisible}

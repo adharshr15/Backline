@@ -97,6 +97,7 @@ model User {
   venueInvites      VenueInvite[]
   showsCreated      Show[]                    @relation("showCreatedByUser")
   showsReposted     Show[]                    @relation("showRepostedByUser")
+  showsRsvp         Show[]                    @relation("showRsvpByUser")
   rentalItems       RentalItem[]
 }
 
@@ -119,7 +120,8 @@ model Band {
   showsCreated      Show[]                    @relation("showCreatedByBand")
   toursCreated      Tour[]                    @relation("tourCreatedByBand")
   showsReposted     Show[]                    @relation("showRepostedByBand")
-  tours             BandTour[]        
+  showsRsvp         Show[]                    @relation("showRsvpByBand")
+  tours             BandTour[]
   invites           BandInvite[]
   showInvites       ShowInvite[]
   tourInvites       TourInvite[]
@@ -190,7 +192,8 @@ model Venue {
   shows             Show[]   
   showsCreated      Show[]                    @relation("showCreatedByVenue")
   showsReposted     Show[]                    @relation("showRepostedByVenue")
-  showInvites       ShowInvite[] 
+  showsRsvp         Show[]                    @relation("showRsvpByVenue")
+  showInvites       ShowInvite[]
   blocks            VenueBlock[]   
   invites           VenueInvite[]
   conversations     ConversationParticipant[]
@@ -291,6 +294,10 @@ model Show {
   repostedByUsers   User[]                    @relation("showRepostedByUser")
   repostedByBands   Band[]                    @relation("showRepostedByBand")
   repostedByVenues  Venue[]                   @relation("showRepostedByVenue")
+
+  rsvpUsers         User[]                    @relation("showRsvpByUser")
+  rsvpBands         Band[]                    @relation("showRsvpByBand")
+  rsvpVenues        Venue[]                   @relation("showRsvpByVenue")
 
   createdByBandId   String?
   createdByBand     Band?                     @relation("showCreatedByBand", fields: [createdByBandId], references: [id])

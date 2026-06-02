@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { renderBioWithLinks, profileStyles } from '@/app/(tabs)/profile/index';
 import * as followService from '@/services/follow.service';
 import { Show, getShowsByProfile, repostShow, unrepostShow } from '@/services/show.service';
+import { toCountryName } from '@/utils/location';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
 
 const AVATAR_SIZE = 80;
@@ -150,7 +151,7 @@ export default function ViewUserProfile({ id }: Props) {
                         </ThemedText>
                         <View style={{ width: AVATAR_SIZE }} />
                         <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
-                            {profile.country ?? ''}
+                            {toCountryName(profile.country ?? '')}
                         </ThemedText>
                     </View>
 

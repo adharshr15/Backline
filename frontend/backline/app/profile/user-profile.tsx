@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
+import { toCountryName } from '@/utils/location';
 import { useAuth, type ActiveProfile, type User, type Band, type Venue } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -100,7 +101,7 @@ export function UserProfile() {
                         </ThemedText>
                         <View style={{ width: AVATAR_SIZE }} />
                         <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
-                            {user?.country ? `${user?.country}` : ''}
+                            {toCountryName(user?.country ?? '')}
                         </ThemedText>
                     </View>
 

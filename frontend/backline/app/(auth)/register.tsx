@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { registerUser, checkEmailUnique, checkUsernameUnique } from '@/services/auth.service'
 import ParallaxScrollView from '@/components/parallax-scroll-view-original';
 import { setAuthToken } from '@/services/api';
+import { toStateCode, toCountryCode } from '@/utils/location';
 
 type Step = 1 | 2;
 
@@ -254,8 +255,10 @@ export default function RegisterScreen() {
                     {suggestions.map((item, index) => {
                       const props = item.properties;
 
+                      const stateCode = toStateCode(props.state || '');
+                      const countryCode = toCountryCode(props.countrycode || '');
                       const display =
-                        `${props.name || ''}, ${props.state || ''}, ${props.country || ''}`;
+                        `${props.name || ''}, ${stateCode}, ${countryCode}`;
 
                       return (
                         <TouchableOpacity
@@ -263,8 +266,8 @@ export default function RegisterScreen() {
                           style={styles.dropdownItem}
                           onPress={() => {
                             setCity(props.name || '');
-                            setState(props.state || '');
-                            setCountry(props.country || '');
+                            setState(stateCode);
+                            setCountry(countryCode);
 
                             setLocationQuery(display);
                             setShowSuggestions(false);

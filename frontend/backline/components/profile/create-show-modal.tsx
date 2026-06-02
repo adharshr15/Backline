@@ -4,6 +4,7 @@ import {
     TextInput,
     TouchableOpacity,
     ScrollView,
+    KeyboardAvoidingView,
     StyleSheet,
     Alert,
     ActivityIndicator,
@@ -11,13 +12,14 @@ import {
     Image as RNImage,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { createShow, updateShow, Show } from '@/services/show.service';
 import { BASE_URL } from '@/services/api';
+import { COUNTRY_LIST, STATES_BY_COUNTRY } from '@/utils/location';
 
 interface Props {
     visible: boolean;
@@ -38,6 +40,23 @@ export default function CreateShowModal({ visible, onClose, onCreated, creatorUs
     const bg = useThemeColor({}, 'background');
     const subtleColor = useThemeColor({ light: '#f0f0f0', dark: '#1e1e1e' }, 'background');
 
+    const scrollRef = useRef<ScrollView>(null);
+    const cityRef = useRef<TextInput>(null);
+    const stateRef = useRef<TextInput>(null);
+    const countryRef = useRef<TextInput>(null);
+    const ticketRef = useRef<TextInput>(null);
+    const notesRef = useRef<TextInput>(null);
+
+    const scrollToInput = (ref: React.RefObject<TextInput | null>) => {
+        setTimeout(() => {
+            ref.current?.measureLayout(
+                scrollRef.current as any,
+                (_x, y) => { scrollRef.current?.scrollTo({ y: y - 80, animated: true }); },
+                () => {}
+            );
+        }, 50);
+    };
+
     const [date, setDate] = useState(new Date());
     const [doors, setDoors] = useState(() => { const d = new Date(); d.setHours(19, 0, 0, 0); return d; });
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -50,6 +69,44 @@ export default function CreateShowModal({ visible, onClose, onCreated, creatorUs
     const [notes, setNotes] = useState('');
     const [posterImage, setPosterImage] = useState<{ uri: string; name: string; type: string } | null>(null);
     const [loading, setLoading] = useState(false);
+
+    type Sel = { start: number; end: number } | undefined;
+    const [stateSel, setStateSel] = useState<Sel>(undefined);
+    const [countrySel, setCountrySel] = useState<Sel>(undefined);
+
+    const handleCountryChange = (text: string) => {
+        const upper = text.toUpperCase().replace(/[^A-Z]/g, '');
+        if (!upper) { setCountry(''); setState(''); setCountrySel(undefined); return; }
+        const codes = COUNTRY_LIST.map(c => c.code);
+        const exact = codes.find(c => c === upper);
+        if (exact) {
+            if (exact !== country) setState('');
+            setCountry(exact);
+            setCountrySel({ start: exact.length, end: exact.length });
+            return;
+        }
+        const prefix = codes.find(c => c.startsWith(upper));
+        if (prefix) {
+            if (prefix !== country) setState('');
+            setCountry(prefix);
+            setCountrySel({ start: upper.length, end: prefix.length });
+            return;
+        }
+        // no match — controlled value holds, keep current selection pos
+        setCountrySel({ start: country.length, end: country.length });
+    };
+
+    const handleStateChange = (text: string) => {
+        const upper = text.toUpperCase().replace(/[^A-Z]/g, '');
+        if (!upper) { setState(''); setStateSel(undefined); return; }
+        const codes = (STATES_BY_COUNTRY[country] ?? []).map(s => s.code);
+        if (!codes.length) { setState(upper.slice(0, 3)); setStateSel(undefined); return; }
+        const exact = codes.find(c => c === upper);
+        if (exact) { setState(exact); setStateSel({ start: exact.length, end: exact.length }); return; }
+        const prefix = codes.find(c => c.startsWith(upper));
+        if (prefix) { setState(prefix); setStateSel({ start: upper.length, end: prefix.length }); return; }
+        setStateSel({ start: state.length, end: state.length });
+    };
 
     useEffect(() => {
         if (visible) {
@@ -141,7 +198,12 @@ export default function CreateShowModal({ visible, onClose, onCreated, creatorUs
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+                <KeyboardAvoidingView
+                    style={{ flex: 1 }}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+                >
+                <ScrollView ref={scrollRef} contentContainerStyle={[styles.body, { paddingBottom: 340 }]} keyboardShouldPersistTaps="handled">
                     {/* Poster picker */}
                     <TouchableOpacity style={[styles.posterPicker, { borderColor }]} onPress={pickImage}>
                         {posterImage
@@ -192,37 +254,72 @@ export default function CreateShowModal({ visible, onClose, onCreated, creatorUs
 
                     <View style={styles.row}>
                         <View style={styles.flex1}>
-                            <TextInput style={[inputStyle, { marginBottom: 0 }]} placeholder="City" placeholderTextColor="#666" value={city} onChangeText={setCity} />
+                            <TextInput
+                                ref={cityRef}
+                                style={[inputStyle, { marginBottom: 0 }]}
+                                placeholder="City"
+                                placeholderTextColor="#666"
+                                value={city}
+                                onChangeText={setCity}
+                                onFocus={() => scrollToInput(cityRef)}
+                            />
                         </View>
                         <View style={styles.stateField}>
-                            <TextInput style={[inputStyle, { marginBottom: 0 }]} placeholder="State" placeholderTextColor="#666" value={state} onChangeText={setState} autoCapitalize="characters" />
+                            <TextInput
+                                ref={stateRef}
+                                style={[inputStyle, { marginBottom: 0 }]}
+                                placeholder="ST"
+                                placeholderTextColor="#666"
+                                value={state}
+                                selection={stateSel}
+                                onChangeText={handleStateChange}
+                                onFocus={() => { setStateSel(state ? { start: 0, end: state.length } : undefined); scrollToInput(stateRef); }}
+                                autoCapitalize="characters"
+                                autoCorrect={false}
+                            />
                         </View>
                         <View style={styles.countryField}>
-                            <TextInput style={[inputStyle, { marginBottom: 0 }]} placeholder="CC" placeholderTextColor="#666" value={country} onChangeText={setCountry} autoCapitalize="characters" maxLength={2} />
+                            <TextInput
+                                ref={countryRef}
+                                style={[inputStyle, { marginBottom: 0 }]}
+                                placeholder="CC"
+                                placeholderTextColor="#666"
+                                value={country}
+                                selection={countrySel}
+                                onChangeText={handleCountryChange}
+                                onFocus={() => { setCountrySel(country ? { start: 0, end: country.length } : undefined); scrollToInput(countryRef); }}
+                                autoCapitalize="characters"
+                                autoCorrect={false}
+                            />
                         </View>
                     </View>
 
                     <ThemedText style={styles.label}>Ticket URL</ThemedText>
                     <TextInput
+                        ref={ticketRef}
                         style={inputStyle}
                         placeholder="https://..."
                         placeholderTextColor="#666"
                         value={ticketsUrl}
                         onChangeText={setTicketsUrl}
+                        onFocus={() => scrollToInput(ticketRef)}
                         autoCapitalize="none"
                         keyboardType="url"
                     />
 
                     <ThemedText style={styles.label}>Notes</ThemedText>
                     <TextInput
+                        ref={notesRef}
                         style={[inputStyle, styles.notesInput]}
                         placeholder="Any extra info..."
                         placeholderTextColor="#666"
                         value={notes}
                         onChangeText={setNotes}
+                        onFocus={() => scrollToInput(notesRef)}
                         multiline
                     />
                 </ScrollView>
+                </KeyboardAvoidingView>
             </SafeAreaView>
         </Modal>
     );

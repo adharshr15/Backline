@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { BASE_URL } from '@/services/api';
+import { toStateCode, toCountryCode } from '@/utils/location';
 import { AVATAR_SIZE } from '../(tabs)/profile';
 import { KeyboardAvoidingView, Platform } from 'react-native';
 
@@ -163,10 +164,12 @@ export function EditUserProfileModal({ onClose }: { onClose: () => void }) {
                                     <View style={styles.dropdown}>
                                         {suggestions.map((item, index) => {
                                             const props = item.properties;
-                                            const display = `${props.name || ''}, ${props.state || ''}, ${props.country || ''}`;
+                                            const stateCode = toStateCode(props.state || '');
+                                            const countryCode = toCountryCode(props.countrycode || '');
+                                            const display = `${props.name || ''}, ${stateCode}, ${countryCode}`;
                                             return (
                                                 <TouchableOpacity key={index} style={styles.dropdownItem} onPress={() => {
-                                                    setCity(props.name || ''); setState(props.state || ''); setCountry(props.country || '');
+                                                    setCity(props.name || ''); setState(stateCode); setCountry(countryCode);
                                                     setLocationQuery(display); setShowSuggestions(false);
                                                 }}>
                                                     <Text style={{ color: 'white' }}>{display}</Text>

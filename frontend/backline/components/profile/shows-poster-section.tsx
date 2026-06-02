@@ -17,6 +17,9 @@ interface ProfileShowsSectionProps {
   onSeePastShows: () => void;
   onCreateShow: () => void;
   onEditShow: (show: Show) => void;
+  activeProfileId?: string;
+  activeProfileType?: 'user' | 'band' | 'venue';
+  onRepost?: (show: Show) => void;
 }
 
 export default function ProfileShowsSection({
@@ -29,10 +32,13 @@ export default function ProfileShowsSection({
   onSeePastShows,
   onCreateShow,
   onEditShow,
+  activeProfileId,
+  activeProfileType,
+  onRepost,
 }: ProfileShowsSectionProps) {
   return (
     <View style={styles.container}>
-      <View style={styles.switcherRow}>
+      <View style={[styles.switcherRow, !isOwner && { justifyContent: 'flex-end' }]}>
         {isOwner && (
           <TouchableOpacity style={styles.newShowBtn} onPress={onCreateShow}>
             <ThemedText style={styles.newShowText}>+ New Show</ThemedText>
@@ -50,6 +56,9 @@ export default function ProfileShowsSection({
           onSeePastShows={onSeePastShows}
           onCreateShow={onCreateShow}
           onEditShow={onEditShow}
+          activeProfileId={activeProfileId}
+          activeProfileType={activeProfileType}
+          onRepost={onRepost}
         />
       ) : (
         <ShowListView
@@ -58,6 +67,9 @@ export default function ProfileShowsSection({
           pastShows={pastShows}
           showingPast={showingPast}
           onSeePastShows={onSeePastShows}
+          activeProfileId={activeProfileId}
+          activeProfileType={activeProfileType}
+          onRepost={onRepost}
         />
       )}
     </View>

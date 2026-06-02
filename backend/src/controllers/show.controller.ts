@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { AuthRequest } from "../middlewares/auth.middleware";
-import { InviteStatus, ShowStatus } from "../../generated/prisma/client";
+import { AccountType, InviteStatus, ShowStatus } from "../../generated/prisma/client";
 
 
 // Helper: Check if user manages show
@@ -50,14 +50,19 @@ export const getShows = async (req: Request, res: Response) => {
       where.OR = [
         { createdByBandId: bandId },
         { bands: { some: { bandId } } },
+        { repostedByBands: { some: { id: bandId } } },
       ];
     } else if (venueId) {
       where.OR = [
         { venueId },
         { createdByVenueId: venueId },
+        { repostedByVenues: { some: { id: venueId } } },
       ];
     } else if (userId) {
-      where.createdByUserId = userId;
+      where.OR = [
+        { createdByUserId: userId },
+        { repostedByUsers: { some: { id: userId } } },
+      ];
     }
 
     const shows = await prisma.show.findMany({
@@ -65,7 +70,10 @@ export const getShows = async (req: Request, res: Response) => {
       include: {
         venue: true,
         tour: true,
-        bands: { include: { band: true } }
+        bands: { include: { band: true } },
+        repostedByBands: { select: { id: true } },
+        repostedByUsers: { select: { id: true } },
+        repostedByVenues: { select: { id: true } },
       },
       orderBy: { date: past === 'true' ? 'desc' : 'asc' },
     });
@@ -370,6 +378,139 @@ export const deleteShow = async (req: AuthRequest, res: Response) => {
     if (error.code === "P2025")
       return res.status(404).json({ error: "Show not found" });
 
+    res.status(500).json({ error: error.message });
+  }
+};
+
+
+// REPOST
+
+export const repostShow = async (req: AuthRequest, res: Response) => {
+  try {
+    const showId = req.params.id as string;
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { reposterType, reposterBandId, reposterVenueId } = req.body as {
+      reposterType: 'user' | 'band' | 'venue';
+      reposterBandId?: string;
+      reposterVenueId?: string;
+    };
+
+    const show = await prisma.show.findFirst({ where: { id: showId, deletedAt: null } });
+    if (!show) return res.status(404).json({ error: "Show not found" });
+
+    if (reposterType === 'band') {
+      if (!reposterBandId) return res.status(400).json({ error: "reposterBandId required" });
+      const membership = await prisma.bandMember.findFirst({ where: { bandId: reposterBandId, userId } });
+      if (!membership) return res.status(403).json({ error: "Not a member of this band" });
+      const existing = await prisma.show.findFirst({ where: { id: showId, repostedByBands: { some: { id: reposterBandId } } } });
+      if (existing) return res.status(409).json({ error: "Already reposted" });
+      await prisma.show.update({ where: { id: showId }, data: { repostedByBands: { connect: { id: reposterBandId } } } });
+    } else if (reposterType === 'venue') {
+      if (!reposterVenueId) return res.status(400).json({ error: "reposterVenueId required" });
+      const rep = await prisma.venueRepresentative.findFirst({ where: { venueId: reposterVenueId, userId } });
+      if (!rep) return res.status(403).json({ error: "Not a representative of this venue" });
+      const existing = await prisma.show.findFirst({ where: { id: showId, repostedByVenues: { some: { id: reposterVenueId } } } });
+      if (existing) return res.status(409).json({ error: "Already reposted" });
+      await prisma.show.update({ where: { id: showId }, data: { repostedByVenues: { connect: { id: reposterVenueId } } } });
+    } else {
+      const existing = await prisma.show.findFirst({ where: { id: showId, repostedByUsers: { some: { id: userId } } } });
+      if (existing) return res.status(409).json({ error: "Already reposted" });
+      await prisma.show.update({ where: { id: showId }, data: { repostedByUsers: { connect: { id: userId } } } });
+    }
+
+    res.json({ message: "Reposted" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const unrepostShow = async (req: AuthRequest, res: Response) => {
+  try {
+    const showId = req.params.id as string;
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { reposterType, reposterBandId, reposterVenueId } = req.body as {
+      reposterType: 'user' | 'band' | 'venue';
+      reposterBandId?: string;
+      reposterVenueId?: string;
+    };
+
+    if (reposterType === 'band') {
+      if (!reposterBandId) return res.status(400).json({ error: "reposterBandId required" });
+      await prisma.show.update({ where: { id: showId }, data: { repostedByBands: { disconnect: { id: reposterBandId } } } });
+    } else if (reposterType === 'venue') {
+      if (!reposterVenueId) return res.status(400).json({ error: "reposterVenueId required" });
+      await prisma.show.update({ where: { id: showId }, data: { repostedByVenues: { disconnect: { id: reposterVenueId } } } });
+    } else {
+      await prisma.show.update({ where: { id: showId }, data: { repostedByUsers: { disconnect: { id: userId } } } });
+    }
+
+    res.json({ message: "Unreposted" });
+  } catch (error: any) {
+    if (error.code === "P2025") return res.status(404).json({ error: "Show not found" });
+    res.status(500).json({ error: error.message });
+  }
+};
+
+
+// FEED
+
+export const getFeedShows = async (req: Request, res: Response) => {
+  try {
+    const { followerType, followerId } = req.query as Record<string, string>;
+    if (!followerType || !followerId) {
+      return res.status(400).json({ error: "followerType and followerId are required" });
+    }
+
+    const typeMap: Record<string, AccountType> = { user: 'USER', band: 'BAND', venue: 'VENUE' };
+    const dbType = typeMap[followerType];
+    if (!dbType) return res.status(400).json({ error: "Invalid followerType" });
+
+    const followerFilter =
+      followerType === 'band'  ? { followerBandId: followerId } :
+      followerType === 'venue' ? { followerVenueId: followerId } :
+                                 { followerUserId: followerId };
+
+    const follows = await prisma.follow.findMany({
+      where: { followerType: dbType, ...followerFilter },
+    });
+
+    if (follows.length === 0) return res.json([]);
+
+    const orConditions: any[] = [];
+    for (const f of follows) {
+      if (f.followeeType === 'BAND' && f.followeeBandId) {
+        orConditions.push({ createdByBandId: f.followeeBandId });
+        orConditions.push({ bands: { some: { bandId: f.followeeBandId } } });
+        orConditions.push({ repostedByBands: { some: { id: f.followeeBandId } } });
+      } else if (f.followeeType === 'VENUE' && f.followeeVenueId) {
+        orConditions.push({ venueId: f.followeeVenueId });
+        orConditions.push({ createdByVenueId: f.followeeVenueId });
+        orConditions.push({ repostedByVenues: { some: { id: f.followeeVenueId } } });
+      } else if (f.followeeType === 'USER' && f.followeeUserId) {
+        orConditions.push({ createdByUserId: f.followeeUserId });
+        orConditions.push({ repostedByUsers: { some: { id: f.followeeUserId } } });
+      }
+    }
+
+    const shows = await prisma.show.findMany({
+      where: { deletedAt: null, date: { gte: new Date() }, OR: orConditions },
+      include: {
+        venue: true,
+        tour: true,
+        bands: { include: { band: true } },
+        repostedByBands: { select: { id: true } },
+        repostedByUsers: { select: { id: true } },
+        repostedByVenues: { select: { id: true } },
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    res.json(shows);
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 };

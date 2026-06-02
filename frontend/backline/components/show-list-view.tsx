@@ -13,7 +13,6 @@ function formatDate(isoString: string) {
 
 function formatDoors(doorsString: string) {
     if (!doorsString) return '';
-    // If it's an ISO string, extract time; otherwise use as-is
     if (doorsString.includes('T')) {
         const d = new Date(doorsString);
         return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -21,38 +20,74 @@ function formatDoors(doorsString: string) {
     return doorsString;
 }
 
-type ShowListCardProps = { show: Show };
+type ShowListCardProps = {
+    show: Show;
+    activeProfileId?: string;
+    activeProfileType?: 'user' | 'band' | 'venue';
+    onRepost?: (show: Show) => void;
+};
 
-function ShowListCard({ show }: ShowListCardProps) {
+function ShowListCard({ show, activeProfileId, activeProfileType, onRepost }: ShowListCardProps) {
     const borderColor = useThemeColor({}, 'text');
     const { month, day, weekday } = formatDate(show.date);
     const bandNames = show.bands.map(b => b.band.name).join(' · ');
 
+    const hasReposted = activeProfileId
+        ? activeProfileType === 'band'
+            ? show.repostedByBands?.some(b => b.id === activeProfileId)
+            : activeProfileType === 'venue'
+            ? show.repostedByVenues?.some(v => v.id === activeProfileId)
+            : show.repostedByUsers?.some(u => u.id === activeProfileId)
+        : false;
+
+    const isRepostBadge = activeProfileId
+        ? activeProfileType === 'band'
+            ? show.repostedByBands?.some(b => b.id === activeProfileId) &&
+              show.createdByBandId !== activeProfileId &&
+              !show.bands?.some(b => b.bandId === activeProfileId)
+            : activeProfileType === 'venue'
+            ? show.repostedByVenues?.some(v => v.id === activeProfileId) &&
+              show.createdByVenueId !== activeProfileId
+            : show.repostedByUsers?.some(u => u.id === activeProfileId) &&
+              show.createdByUserId !== activeProfileId
+        : false;
+
     return (
-        <View style={[styles.card, { borderColor }]}>
-            {/* Date column */}
-            <View style={styles.dateCol}>
-                <ThemedText style={styles.month}>{month}</ThemedText>
-                <ThemedText style={styles.day}>{day}</ThemedText>
-                <ThemedText style={styles.weekday}>{weekday}</ThemedText>
-            </View>
+        <View>
+            {isRepostBadge && (
+                <ThemedText style={styles.repostBadge}>↩ REPOST</ThemedText>
+            )}
+            <View style={[styles.card, { borderColor }]}>
+                <View style={styles.dateCol}>
+                    <ThemedText style={styles.month}>{month}</ThemedText>
+                    <ThemedText style={styles.day}>{day}</ThemedText>
+                    <ThemedText style={styles.weekday}>{weekday}</ThemedText>
+                </View>
 
-            <View style={[styles.divider, { backgroundColor: borderColor }]} />
+                <View style={[styles.divider, { backgroundColor: borderColor }]} />
 
-            {/* Info column */}
-            <View style={styles.infoCol}>
-                <ThemedText style={styles.venueName} numberOfLines={1}>
-                    {show.venue?.name ?? 'TBA'}
-                </ThemedText>
-                <ThemedText style={styles.location} numberOfLines={1}>
-                    {show.city}, {show.state}
-                </ThemedText>
-                {show.doors ? (
-                    <ThemedText style={styles.meta}>Doors {formatDoors(show.doors)}</ThemedText>
-                ) : null}
-                {bandNames ? (
-                    <ThemedText style={styles.bands} numberOfLines={1}>{bandNames}</ThemedText>
-                ) : null}
+                <View style={styles.infoCol}>
+                    <ThemedText style={styles.venueName} numberOfLines={1}>
+                        {show.venue?.name ?? 'TBA'}
+                    </ThemedText>
+                    <ThemedText style={styles.location} numberOfLines={1}>
+                        {show.city}, {show.state}
+                    </ThemedText>
+                    {show.doors ? (
+                        <ThemedText style={styles.meta}>Doors {formatDoors(show.doors)}</ThemedText>
+                    ) : null}
+                    {bandNames ? (
+                        <ThemedText style={styles.bands} numberOfLines={1}>{bandNames}</ThemedText>
+                    ) : null}
+                </View>
+
+                {onRepost && (
+                    <TouchableOpacity style={styles.repostCol} onPress={() => onRepost(show)}>
+                        <ThemedText style={[styles.repostBtn, hasReposted && styles.repostBtnActive]}>
+                            {hasReposted ? '↩ ✓' : '↩'}
+                        </ThemedText>
+                    </TouchableOpacity>
+                )}
             </View>
         </View>
     );
@@ -64,31 +99,47 @@ type Props = {
     showingPast: boolean;
     isOwner: boolean;
     onSeePastShows: () => void;
+    activeProfileId?: string;
+    activeProfileType?: 'user' | 'band' | 'venue';
+    onRepost?: (show: Show) => void;
 };
 
-export function ShowListView({ shows, pastShows, showingPast, isOwner, onSeePastShows }: Props) {
+export function ShowListView({ shows, pastShows, showingPast, isOwner, onSeePastShows, activeProfileId, activeProfileType, onRepost }: Props) {
     const borderColor = useThemeColor({}, 'text');
 
     return (
         <View style={styles.container}>
-            {/* Past shows */}
             {showingPast && pastShows.length > 0 && (
                 <>
                     <ThemedText style={styles.sectionLabel}>Past Shows</ThemedText>
-                    {pastShows.map(show => <ShowListCard key={show.id} show={show} />)}
+                    {pastShows.map(show => (
+                        <ShowListCard
+                            key={show.id}
+                            show={show}
+                            activeProfileId={activeProfileId}
+                            activeProfileType={activeProfileType}
+                            onRepost={onRepost}
+                        />
+                    ))}
                     <View style={[styles.sectionSep, { backgroundColor: borderColor }]} />
                     <ThemedText style={styles.sectionLabel}>Upcoming</ThemedText>
                 </>
             )}
 
-            {/* Upcoming shows */}
             {shows.length === 0 ? (
                 <ThemedText style={styles.empty}>No upcoming shows</ThemedText>
             ) : (
-                shows.map(show => <ShowListCard key={show.id} show={show} />)
+                shows.map(show => (
+                    <ShowListCard
+                        key={show.id}
+                        show={show}
+                        activeProfileId={activeProfileId}
+                        activeProfileType={activeProfileType}
+                        onRepost={onRepost}
+                    />
+                ))
             )}
 
-            {/* See past shows — bottom */}
             {!showingPast && pastShows.length > 0 && (
                 <TouchableOpacity
                     style={[styles.actionBtn, { borderColor, alignSelf: 'center', marginTop: 12 }]}
@@ -193,5 +244,25 @@ const styles = StyleSheet.create({
         fontSize: 13,
         textAlign: 'center',
         paddingVertical: 16,
+    },
+    repostBadge: {
+        fontSize: 9,
+        fontWeight: '700',
+        letterSpacing: 0.8,
+        opacity: 0.5,
+        marginBottom: 2,
+        marginLeft: 2,
+    },
+    repostCol: {
+        justifyContent: 'center',
+        paddingHorizontal: 10,
+    },
+    repostBtn: {
+        fontSize: 18,
+        opacity: 0.4,
+    },
+    repostBtnActive: {
+        opacity: 1,
+        color: '#4CAF50',
     },
 });

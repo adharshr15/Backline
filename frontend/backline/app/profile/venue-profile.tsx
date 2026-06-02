@@ -2,7 +2,8 @@ import { Image } from 'expo-image';
 import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { useAuth, type Venue } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -40,10 +41,10 @@ export function VenueProfile() {
     const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
     const venues = user?.venueReps?.map(v => v.venue).filter(Boolean) || [];
 
-    useEffect(() => {
+    useFocusEffect(useCallback(() => {
         getShowsByProfile('venue', venue.id).then(setShows).catch(() => {});
         getShowsByProfile('venue', venue.id, true).then(setPastShows).catch(() => {});
-    }, [venue.id]);
+    }, [venue.id]));
 
     const profilePicture = venue?.profileImageUrl
         ? { uri: `${BASE_URL}${venue.profileImageUrl}` }
@@ -133,6 +134,8 @@ export function VenueProfile() {
                         onSeePastShows={() => setShowingPast(true)}
                         onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                         onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
+                        activeProfileId={venue.id}
+                        activeProfileType="venue"
                     />
                 </>
             </ParallaxScrollView>

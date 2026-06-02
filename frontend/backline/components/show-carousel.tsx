@@ -21,9 +21,12 @@ type ShowCardProps = {
   cardWidth: number;
   isOwner: boolean;
   onEdit: (show: Show) => void;
+  activeProfileId?: string;
+  activeProfileType?: 'user' | 'band' | 'venue';
+  onRepost?: (show: Show) => void;
 };
 
-function ShowCard({ show, cardWidth, isOwner, onEdit }: ShowCardProps) {
+function ShowCard({ show, cardWidth, isOwner, onEdit, activeProfileId, activeProfileType, onRepost }: ShowCardProps) {
   const flipAnim = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
   const borderColor = useThemeColor({}, 'text');
@@ -67,70 +70,107 @@ function ShowCard({ show, cardWidth, isOwner, onEdit }: ShowCardProps) {
 
   const CARD_HEIGHT = cardWidth * 1.35;
 
-  return (
-    <TouchableOpacity onPress={flip} activeOpacity={1} style={{ width: cardWidth, height: CARD_HEIGHT }}>
-      {/* Front */}
-      <Animated.View
-        style={[
-          styles.card,
-          {
-            width: cardWidth,
-            height: CARD_HEIGHT,
-            transform: [{ perspective: 1000 }, { rotateY: frontRotate }],
-            opacity: frontOpacity,
-            position: 'absolute',
-            borderColor,
-          },
-        ]}
-      >
-        <Image
-          source={show.posterUrl ? { uri: `${BASE_URL}${show.posterUrl}` } : require('@/assets/images/default/headerImage.png')}
-          style={{ width: '100%', height: '100%', borderRadius: 0 }}
-          contentFit="cover"
-        />
-      </Animated.View>
+  const hasReposted = activeProfileId
+    ? activeProfileType === 'band'
+      ? show.repostedByBands?.some(b => b.id === activeProfileId)
+      : activeProfileType === 'venue'
+      ? show.repostedByVenues?.some(v => v.id === activeProfileId)
+      : show.repostedByUsers?.some(u => u.id === activeProfileId)
+    : false;
 
-      {/* Back */}
-      <Animated.View
-        style={[
-          styles.card,
-          styles.cardBack,
-          {
-            width: cardWidth,
-            height: CARD_HEIGHT,
-            transform: [{ perspective: 1000 }, { rotateY: backRotate }],
-            opacity: backOpacity,
-            position: 'absolute',
-            backgroundColor: backBackgroundColor,
-            borderColor,
-          },
-        ]}
-      >
-        <ThemedText style={styles.backVenue}>{show.venue?.name ?? 'TBA'}</ThemedText>
-        <ThemedText style={styles.backCity}>{show.city}, {show.state}</ThemedText>
-        <View style={styles.divider} />
-        <ThemedText style={styles.backLabel}>Date</ThemedText>
-        <ThemedText style={styles.backValue}>{new Date(show.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</ThemedText>
-        <ThemedText style={styles.backLabel}>Doors</ThemedText>
-        <ThemedText style={styles.backValue}>{show.doors?.includes('T') ? new Date(show.doors).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : show.doors}</ThemedText>
-        {show.ticketsUrl && (
-          <TouchableOpacity style={styles.ticketButton}>
-            <ThemedText style={styles.ticketText}>Get Tickets</ThemedText>
-          </TouchableOpacity>
-        )}
-        <View style={styles.backFooter}>
-          <ThemedText style={styles.tapHint}>tap to flip back</ThemedText>
-          {isOwner && (
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={(e) => { e.stopPropagation(); onEdit(show); }}
-            >
-              <ThemedText style={styles.editButtonText}>Edit</ThemedText>
+  const isRepostBadge = activeProfileId
+    ? activeProfileType === 'band'
+      ? show.repostedByBands?.some(b => b.id === activeProfileId) &&
+        show.createdByBandId !== activeProfileId &&
+        !show.bands?.some(b => b.bandId === activeProfileId)
+      : activeProfileType === 'venue'
+      ? show.repostedByVenues?.some(v => v.id === activeProfileId) &&
+        show.createdByVenueId !== activeProfileId
+      : show.repostedByUsers?.some(u => u.id === activeProfileId) &&
+        show.createdByUserId !== activeProfileId
+    : false;
+
+  return (
+    <View>
+      {isRepostBadge && (
+        <ThemedText style={styles.repostBadge}>↩ REPOST</ThemedText>
+      )}
+      <TouchableOpacity onPress={flip} activeOpacity={1} style={{ width: cardWidth, height: CARD_HEIGHT }}>
+        {/* Front */}
+        <Animated.View
+          style={[
+            styles.card,
+            {
+              width: cardWidth,
+              height: CARD_HEIGHT,
+              transform: [{ perspective: 1000 }, { rotateY: frontRotate }],
+              opacity: frontOpacity,
+              position: 'absolute',
+              borderColor,
+            },
+          ]}
+        >
+          <Image
+            source={show.posterUrl ? { uri: `${BASE_URL}${show.posterUrl}` } : require('@/assets/images/default/headerImage.png')}
+            style={{ width: '100%', height: '100%', borderRadius: 0 }}
+            contentFit="cover"
+          />
+        </Animated.View>
+
+        {/* Back */}
+        <Animated.View
+          style={[
+            styles.card,
+            styles.cardBack,
+            {
+              width: cardWidth,
+              height: CARD_HEIGHT,
+              transform: [{ perspective: 1000 }, { rotateY: backRotate }],
+              opacity: backOpacity,
+              position: 'absolute',
+              backgroundColor: backBackgroundColor,
+              borderColor,
+            },
+          ]}
+        >
+          <ThemedText style={styles.backVenue}>{show.venue?.name ?? 'TBA'}</ThemedText>
+          <ThemedText style={styles.backCity}>{show.city}, {show.state}</ThemedText>
+          <View style={styles.divider} />
+          <ThemedText style={styles.backLabel}>Date</ThemedText>
+          <ThemedText style={styles.backValue}>{new Date(show.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</ThemedText>
+          <ThemedText style={styles.backLabel}>Doors</ThemedText>
+          <ThemedText style={styles.backValue}>{show.doors?.includes('T') ? new Date(show.doors).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : show.doors}</ThemedText>
+          {show.ticketsUrl && (
+            <TouchableOpacity style={styles.ticketButton}>
+              <ThemedText style={styles.ticketText}>Get Tickets</ThemedText>
             </TouchableOpacity>
           )}
-        </View>
-      </Animated.View>
-    </TouchableOpacity>
+          <View style={styles.backFooter}>
+            <ThemedText style={styles.tapHint}>tap to flip back</ThemedText>
+            <View style={styles.backActions}>
+              {onRepost && (
+                <TouchableOpacity
+                  style={[styles.repostButton, hasReposted && styles.repostButtonActive]}
+                  onPress={(e) => { e.stopPropagation(); onRepost(show); }}
+                >
+                  <ThemedText style={[styles.repostButtonText, hasReposted && styles.repostButtonTextActive]}>
+                    {hasReposted ? '↩ Reposted' : '↩ Repost'}
+                  </ThemedText>
+                </TouchableOpacity>
+              )}
+              {isOwner && (
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={(e) => { e.stopPropagation(); onEdit(show); }}
+                >
+                  <ThemedText style={styles.editButtonText}>Edit</ThemedText>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </Animated.View>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -142,9 +182,12 @@ type Props = {
   onCreateShow: () => void;
   onEditShow: (show: Show) => void;
   isOwner: boolean;
+  activeProfileId?: string;
+  activeProfileType?: 'user' | 'band' | 'venue';
+  onRepost?: (show: Show) => void;
 };
 
-export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, onCreateShow, onEditShow, isOwner }: Props) {
+export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, onCreateShow, onEditShow, isOwner, activeProfileId, activeProfileType, onRepost }: Props) {
   const { width } = useWindowDimensions();
   const CARD_WIDTH = width * 0.85;
   const borderColor = useThemeColor({}, 'text');
@@ -159,11 +202,29 @@ export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, on
       onContentSizeChange={() => {}}
     >
       {showingPast && pastShows.map(show => (
-        <ShowCard key={`past-${show.id}`} show={show} cardWidth={CARD_WIDTH} isOwner={isOwner} onEdit={onEditShow} />
+        <ShowCard
+          key={`past-${show.id}`}
+          show={show}
+          cardWidth={CARD_WIDTH}
+          isOwner={isOwner}
+          onEdit={onEditShow}
+          activeProfileId={activeProfileId}
+          activeProfileType={activeProfileType}
+          onRepost={onRepost}
+        />
       ))}
 
       {shows.map(show => (
-        <ShowCard key={show.id} show={show} cardWidth={CARD_WIDTH} isOwner={isOwner} onEdit={onEditShow} />
+        <ShowCard
+          key={show.id}
+          show={show}
+          cardWidth={CARD_WIDTH}
+          isOwner={isOwner}
+          onEdit={onEditShow}
+          activeProfileId={activeProfileId}
+          activeProfileType={activeProfileType}
+          onRepost={onRepost}
+        />
       ))}
 
       {!showingPast && pastShows.length > 0 && (
@@ -242,6 +303,32 @@ const styles = StyleSheet.create({
     fontSize: 10,
     opacity: 0.3,
   },
+  backActions: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+  },
+  repostButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  repostButtonActive: {
+    backgroundColor: 'rgba(76,175,80,0.15)',
+    borderColor: '#4CAF50',
+  },
+  repostButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    opacity: 0.7,
+  },
+  repostButtonTextActive: {
+    color: '#4CAF50',
+    opacity: 1,
+  },
   editButton: {
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -271,5 +358,13 @@ const styles = StyleSheet.create({
   },
   pastShowsArrow: {
     fontSize: 20,
+  },
+  repostBadge: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    opacity: 0.5,
+    marginBottom: 2,
+    marginLeft: 2,
   },
 });

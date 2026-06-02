@@ -2,7 +2,8 @@ import { Image } from 'expo-image';
 import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { useAuth, type Band } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -37,10 +38,10 @@ export function BandProfile() {
     const [editingShow, setEditingShow] = useState<Show | undefined>(undefined);
     const borderColor = useThemeColor({}, 'text');
 
-    useEffect(() => {
+    useFocusEffect(useCallback(() => {
         getShowsByProfile('band', band.id).then(setShows).catch(() => {});
         getShowsByProfile('band', band.id, true).then(setPastShows).catch(() => {});
-    }, [band.id]);
+    }, [band.id]));
 
     const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
     const venues = user?.venueReps?.map(v => v.venue).filter(Boolean) || [];
@@ -139,6 +140,8 @@ export function BandProfile() {
                         onSeePastShows={() => setShowingPast(true)}
                         onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                         onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
+                        activeProfileId={band.id}
+                        activeProfileType="band"
                     />
                 </>
             </ParallaxScrollView>

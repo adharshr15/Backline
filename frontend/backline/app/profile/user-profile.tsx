@@ -2,7 +2,8 @@ import { Image } from 'expo-image';
 import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity, SafeAreaViewBase } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { useAuth, type ActiveProfile, type User, type Band, type Venue } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -53,10 +54,10 @@ export function UserProfile() {
 
     const hasListings = false // user.listings
 
-    useEffect(() => {
+    useFocusEffect(useCallback(() => {
         getShowsByProfile('user', user.id).then(setShows).catch(() => {});
         getShowsByProfile('user', user.id, true).then(setPastShows).catch(() => {});
-    }, [user.id]);
+    }, [user.id]));
 
     const profilePicture = user?.profileImageUrl
         ? { uri: `${BASE_URL}${user.profileImageUrl}` }
@@ -149,6 +150,8 @@ export function UserProfile() {
                                             onSeePastShows={() => setShowingPast(true)}
                                             onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                                             onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
+                                            activeProfileId={user.id}
+                                            activeProfileType="user"
                                         />
                                     ),
                                 },
@@ -191,6 +194,8 @@ export function UserProfile() {
                                 onSeePastShows={() => setShowingPast(true)}
                                 onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                                 onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
+                                activeProfileId={user.id}
+                                activeProfileType="user"
                             />
                         </>
                     )}

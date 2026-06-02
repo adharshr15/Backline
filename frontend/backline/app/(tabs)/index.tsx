@@ -2,20 +2,11 @@ import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { View, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
 import { useAuth } from '@/context/AuthContext';
-import { BASE_URL } from '@/services/api';
-import { getFollowing } from '@/services/follow.service';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
-
-type FollowedAccount = {
-    id: string;
-    name: string;
-    profileImageUrl: string | null;
-    accountType: 'USER' | 'BAND' | 'VENUE';
-};
+import { getFeedShows, repostShow, unrepostShow, Show } from '@/services/show.service';
 
 const TYPE_LABEL: Record<string, string> = {
     USER: 'User',
@@ -23,28 +14,127 @@ const TYPE_LABEL: Record<string, string> = {
     VENUE: 'Venue',
 };
 
+function formatDate(isoString: string) {
+    const d = new Date(isoString);
+    const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+    const day = d.getDate();
+    const weekday = d.toLocaleString('en-US', { weekday: 'short' }).toUpperCase();
+    return { month, day, weekday };
+}
+
+function formatDoors(doorsString: string) {
+    if (!doorsString) return '';
+    if (doorsString.includes('T')) {
+        const d = new Date(doorsString);
+        return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    }
+    return doorsString;
+}
+
+type FeedShowCardProps = {
+    show: Show;
+    activeProfileId: string;
+    activeProfileType: 'user' | 'band' | 'venue';
+    activeProfileBandId?: string;
+    activeProfileVenueId?: string;
+    onRepostToggle: (show: Show) => void;
+};
+
+function FeedShowCard({ show, activeProfileId, activeProfileType, onRepostToggle }: FeedShowCardProps) {
+    const borderColor = useThemeColor({}, 'text');
+    const { month, day, weekday } = formatDate(show.date);
+    const bandNames = show.bands.map(b => b.band.name).join(' · ');
+
+    const hasReposted =
+        activeProfileType === 'band'
+            ? show.repostedByBands.some(b => b.id === activeProfileId)
+            : activeProfileType === 'venue'
+            ? show.repostedByVenues.some(v => v.id === activeProfileId)
+            : show.repostedByUsers.some(u => u.id === activeProfileId);
+
+    return (
+        <View style={[styles.card, { borderColor }]}>
+            <View style={styles.dateCol}>
+                <ThemedText style={styles.month}>{month}</ThemedText>
+                <ThemedText style={styles.day}>{day}</ThemedText>
+                <ThemedText style={styles.weekday}>{weekday}</ThemedText>
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: borderColor }]} />
+
+            <View style={styles.infoCol}>
+                <ThemedText style={styles.venueName} numberOfLines={1}>
+                    {show.venue?.name ?? 'TBA'}
+                </ThemedText>
+                <ThemedText style={styles.location} numberOfLines={1}>
+                    {show.city}, {show.state}
+                </ThemedText>
+                {show.doors ? (
+                    <ThemedText style={styles.meta}>Doors {formatDoors(show.doors)}</ThemedText>
+                ) : null}
+                {bandNames ? (
+                    <ThemedText style={styles.bands} numberOfLines={1}>{bandNames}</ThemedText>
+                ) : null}
+            </View>
+
+            <View style={styles.repostCol}>
+                <ThemedText
+                    style={[styles.repostBtn, hasReposted && styles.repostBtnActive]}
+                    onPress={() => onRepostToggle(show)}
+                >
+                    {hasReposted ? '↩ Done' : '↩'}
+                </ThemedText>
+            </View>
+        </View>
+    );
+}
+
 export default function HomeScreen() {
     const { activeProfile } = useAuth();
     const bgColor = useThemeColor({}, 'background');
-    const borderColor = useThemeColor({}, 'icon');
 
-    const [following, setFollowing] = useState<FollowedAccount[]>([]);
+    const [shows, setShows] = useState<Show[]>([]);
     const [loading, setLoading] = useState(true);
 
-    useFocusEffect(
-        useCallback(() => {
-            if (!activeProfile) return;
-            setLoading(true);
-            const type =
-                activeProfile.accountType === 'BAND' ? 'band' :
-                activeProfile.accountType === 'VENUE' ? 'venue' : 'user';
+    const profileType =
+        activeProfile?.accountType === 'BAND' ? 'band' :
+        activeProfile?.accountType === 'VENUE' ? 'venue' : 'user';
 
-            getFollowing(type, activeProfile.id)
-                .then(setFollowing)
-                .catch(console.error)
-                .finally(() => setLoading(false));
-        }, [activeProfile?.id])
-    );
+    const loadFeed = useCallback(() => {
+        if (!activeProfile) return;
+        setLoading(true);
+        getFeedShows(profileType, activeProfile.id)
+            .then(setShows)
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, [activeProfile?.id]);
+
+    useFocusEffect(loadFeed);
+
+    const handleRepostToggle = async (show: Show) => {
+        if (!activeProfile) return;
+        const type = profileType;
+        const bandId = type === 'band' ? activeProfile.id : undefined;
+        const venueId = type === 'venue' ? activeProfile.id : undefined;
+
+        const hasReposted =
+            type === 'band'
+                ? show.repostedByBands.some(b => b.id === activeProfile.id)
+                : type === 'venue'
+                ? show.repostedByVenues.some(v => v.id === activeProfile.id)
+                : show.repostedByUsers.some(u => u.id === activeProfile.id);
+
+        try {
+            if (hasReposted) {
+                await unrepostShow(show.id, type, bandId, venueId);
+            } else {
+                await repostShow(show.id, type, bandId, venueId);
+            }
+            loadFeed();
+        } catch (e) {
+            console.error(e);
+        }
+    };
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
@@ -55,29 +145,21 @@ export default function HomeScreen() {
 
             {loading && <ActivityIndicator style={{ marginTop: 32 }} />}
 
-            {!loading && following.length === 0 && (
-                <ThemedText style={styles.empty}>Not following anyone yet.</ThemedText>
+            {!loading && shows.length === 0 && (
+                <ThemedText style={styles.empty}>No shows from followed accounts yet.</ThemedText>
             )}
 
             <FlatList
-                data={following}
+                data={shows}
                 keyExtractor={item => item.id}
                 contentContainerStyle={{ paddingTop: 8, paddingBottom: 32 }}
                 renderItem={({ item }) => (
-                    <View style={[styles.row, { borderBottomColor: borderColor + '33' }]}>
-                        <Image
-                            source={
-                                item.profileImageUrl
-                                    ? { uri: `${BASE_URL}${item.profileImageUrl}` }
-                                    : require('@/assets/images/default/profileImage.png')
-                            }
-                            style={styles.avatar}
-                        />
-                        <View style={styles.rowText}>
-                            <ThemedText style={styles.name}>{item.name}</ThemedText>
-                            <ThemedText style={styles.type}>{TYPE_LABEL[item.accountType]}</ThemedText>
-                        </View>
-                    </View>
+                    <FeedShowCard
+                        show={item}
+                        activeProfileId={activeProfile?.id ?? ''}
+                        activeProfileType={profileType}
+                        onRepostToggle={handleRepostToggle}
+                    />
                 )}
             />
         </SafeAreaView>
@@ -103,19 +185,75 @@ const styles = StyleSheet.create({
         marginTop: 40,
         opacity: 0.4,
     },
-    row: {
+    card: {
         flexDirection: 'row',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 2,
+        overflow: 'hidden',
+        marginBottom: 10,
+    },
+    dateCol: {
+        width: 56,
         alignItems: 'center',
+        justifyContent: 'center',
         paddingVertical: 12,
-        borderBottomWidth: StyleSheet.hairlineWidth,
+        gap: 2,
     },
-    avatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        marginRight: 12,
+    month: {
+        fontSize: 9,
+        fontWeight: '700',
+        letterSpacing: 0.5,
+        opacity: 0.5,
     },
-    rowText: { flex: 1 },
-    name: { fontSize: 15, fontWeight: '600' },
-    type: { fontSize: 12, opacity: 0.5, marginTop: 2 },
+    day: {
+        fontSize: 22,
+        fontWeight: '700',
+        lineHeight: 26,
+    },
+    weekday: {
+        fontSize: 9,
+        opacity: 0.5,
+        letterSpacing: 0.5,
+    },
+    divider: {
+        width: StyleSheet.hairlineWidth,
+        opacity: 0.3,
+    },
+    infoCol: {
+        flex: 1,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        gap: 2,
+        justifyContent: 'center',
+    },
+    venueName: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    location: {
+        fontSize: 12,
+        opacity: 0.55,
+    },
+    meta: {
+        fontSize: 12,
+        opacity: 0.7,
+        marginTop: 2,
+    },
+    bands: {
+        fontSize: 11,
+        opacity: 0.5,
+        marginTop: 1,
+    },
+    repostCol: {
+        justifyContent: 'center',
+        paddingHorizontal: 10,
+    },
+    repostBtn: {
+        fontSize: 18,
+        opacity: 0.4,
+    },
+    repostBtnActive: {
+        opacity: 1,
+        color: '#4CAF50',
+    },
 });

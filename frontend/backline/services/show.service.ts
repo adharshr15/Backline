@@ -33,6 +33,9 @@ export interface Show {
     createdByUserId?: string;
     createdByBandId?: string;
     createdByVenueId?: string;
+    repostedByUsers: { id: string }[];
+    repostedByBands: { id: string }[];
+    repostedByVenues: { id: string }[];
 }
 
 export interface CreateShowData {
@@ -88,6 +91,32 @@ export const updateShow = async (id: string, data: Omit<CreateShowData, 'creator
         headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
+};
+
+export const getFeedShows = async (
+    followerType: 'user' | 'band' | 'venue',
+    followerId: string
+): Promise<Show[]> => {
+    const response = await api.get('/shows/feed', { params: { followerType, followerId } });
+    return response.data;
+};
+
+export const repostShow = async (
+    showId: string,
+    reposterType: 'user' | 'band' | 'venue',
+    reposterBandId?: string,
+    reposterVenueId?: string
+): Promise<void> => {
+    await api.post(`/shows/${showId}/repost`, { reposterType, reposterBandId, reposterVenueId });
+};
+
+export const unrepostShow = async (
+    showId: string,
+    reposterType: 'user' | 'band' | 'venue',
+    reposterBandId?: string,
+    reposterVenueId?: string
+): Promise<void> => {
+    await api.delete(`/shows/${showId}/repost`, { data: { reposterType, reposterBandId, reposterVenueId } });
 };
 
 export const createShow = async (data: CreateShowData): Promise<Show> => {

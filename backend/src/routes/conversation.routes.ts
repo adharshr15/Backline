@@ -1,5 +1,5 @@
 import { RequestHandler, Router } from 'express'
-import { getMyConversations, createConversation, updateConversation, respondToConversationInvite, leaveConversation, getConversation } from '../controllers/conversation.controller'
+import { getMyConversations, createConversation, updateConversation, respondToConversationInvite, leaveConversation, getConversation, getMyInvites, markConversationRead } from '../controllers/conversation.controller'
 import { authenticate } from '../middlewares/auth.middleware'
 import { getMessages, sendMessage } from '../controllers/message.controller'
 import { messageRateLimiter, conversationRateLimiter } from "../middlewares/rateLimit.middleware"
@@ -14,7 +14,9 @@ router.post("/conversation-invites/:id/respond", conversationRateLimiter, respon
 // conversations
 router.post("/", conversationRateLimiter, createConversation as RequestHandler)
 router.get("/", getMyConversations as RequestHandler)
+router.get("/invites", getMyInvites as RequestHandler)
 router.get("/:id", getConversation as RequestHandler)
+router.post("/:id/read", conversationRateLimiter, markConversationRead as RequestHandler)
 router.delete("/:id", conversationRateLimiter, leaveConversation as RequestHandler)
 router.put("/:id", conversationRateLimiter, updateConversation as RequestHandler)  
 

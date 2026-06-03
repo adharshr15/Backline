@@ -11,7 +11,7 @@ export const getMessages = async (req: AuthRequest, res: Response) => {
 
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { senderType, senderId }: { senderType: ParticipantType; senderId: string } = req.body;
+    const { senderType, senderId } = req.query as { senderType: ParticipantType; senderId: string };
 
     if (!senderType || !senderId) {
       return res.status(400).json({ error: "senderType and senderId are required" });
@@ -57,6 +57,11 @@ export const getMessages = async (req: AuthRequest, res: Response) => {
     const messages = await prisma.message.findMany({
       where: { conversationId },
       orderBy: { createdAt: "asc" },
+      include: {
+        senderUser:  { select: { id: true, name: true, profileImageUrl: true } },
+        senderBand:  { select: { id: true, name: true, profileImageUrl: true } },
+        senderVenue: { select: { id: true, name: true, profileImageUrl: true } },
+      },
     });
 
     return res.status(200).json(messages);

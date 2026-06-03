@@ -1,12 +1,15 @@
 import { useState, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
-import { View, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { View, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { isConvUnread } from '@/utils/lastRead';
 import { ThemedText } from '@/components/themed-text';
 import { useAuth } from '@/context/AuthContext';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
 import { getFeedShows, repostShow, unrepostShow, Show } from '@/services/show.service';
+import { getMyConversations, getMyInvites, ParticipantType } from '@/services/conversation.service';
 
 const TYPE_LABEL: Record<string, string> = {
     USER: 'User',
@@ -90,11 +93,14 @@ function FeedShowCard({ show, activeProfileId, activeProfileType, onRepostToggle
 }
 
 export default function HomeScreen() {
+    const router = useRouter();
     const { activeProfile } = useAuth();
     const bgColor = useThemeColor({}, 'background');
+    const textColor = useThemeColor({}, 'text');
 
     const [shows, setShows] = useState<Show[]>([]);
     const [loading, setLoading] = useState(true);
+    const [hasUnread, setHasUnread] = useState(false);
 
     const profileType =
         activeProfile?.accountType === 'BAND' ? 'band' :
@@ -107,6 +113,20 @@ export default function HomeScreen() {
             .then(setShows)
             .catch(console.error)
             .finally(() => setLoading(false));
+
+        const senderType = (
+            activeProfile.accountType === 'BAND'  ? 'BAND' :
+            activeProfile.accountType === 'VENUE' ? 'VENUE' : 'USER'
+        ) as ParticipantType;
+
+        // check for unread: any pending invites OR any conversation with unread messages
+        Promise.all([
+            getMyInvites(senderType, activeProfile.id).catch(() => []),
+            getMyConversations(senderType, activeProfile.id).catch(() => []),
+        ]).then(([invites, convs]) => {
+            if (invites.length > 0) { setHasUnread(true); return; }
+            setHasUnread(convs.some(conv => isConvUnread(conv, senderType, activeProfile.id)));
+        });
     }, [activeProfile?.id]);
 
     useFocusEffect(loadFeed);
@@ -138,10 +158,18 @@ export default function HomeScreen() {
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
-            <ThemedText style={styles.title}>Following</ThemedText>
-            <ThemedText style={styles.sub}>
-                as {activeProfile?.name} ({TYPE_LABEL[activeProfile?.accountType ?? 'USER']})
-            </ThemedText>
+            <View style={styles.headerRow}>
+                <View>
+                    <ThemedText style={styles.title}>Following</ThemedText>
+                    <ThemedText style={styles.sub}>
+                        as {activeProfile?.name} ({TYPE_LABEL[activeProfile?.accountType ?? 'USER']})
+                    </ThemedText>
+                </View>
+                <TouchableOpacity onPress={() => router.push('/messages')} style={styles.dmBtn}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={26} color={textColor} />
+                    {hasUnread && <View style={styles.unreadDot} />}
+                </TouchableOpacity>
+            </View>
 
             {loading && <ActivityIndicator style={{ marginTop: 32 }} />}
 
@@ -168,6 +196,22 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, paddingHorizontal: 16 },
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        marginBottom: 0,
+    },
+    dmBtn: { paddingTop: 10, paddingLeft: 8 },
+    unreadDot: {
+        position: 'absolute',
+        top: 8,
+        right: -2,
+        width: 9,
+        height: 9,
+        borderRadius: 5,
+        backgroundColor: '#FF3B30',
+    },
     title: {
         fontSize: 28,
         fontFamily: Fonts?.rounded ?? 'normal',

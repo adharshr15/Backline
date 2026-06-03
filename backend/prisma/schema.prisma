@@ -384,6 +384,7 @@ model ConversationParticipant {
   venueId           String?
 
   joinedAt          DateTime                  @default(now())
+  lastReadAt        DateTime                  @default(now())
 
   @@index([conversationId])
   @@index([userId])

@@ -9,10 +9,7 @@ export const getMyConversations = async (req: AuthRequest, res: Response) => {
 
     if (!userId) { return res.status(401).json({ error: "Unauthorized" }); }
 
-    const { senderType, senderId }: {
-      senderType: ParticipantType;
-      senderId: string;
-    } = req.body;
+    const { senderType, senderId } = req.query as { senderType: ParticipantType; senderId: string };
 
     if (!senderType || !senderId) {
       return res.status(400).json({ error: "senderType and senderId are required" });
@@ -75,10 +72,24 @@ export const getMyConversations = async (req: AuthRequest, res: Response) => {
         }
       },
       include: {
-        participants: true,
+        participants: {
+          include: {
+            user:  { select: { id: true, name: true, profileImageUrl: true, accountType: true } },
+            band:  { select: { id: true, name: true, profileImageUrl: true, accountType: true } },
+            venue: { select: { id: true, name: true, profileImageUrl: true, accountType: true } },
+          },
+        },
         messages: {
           take: 1,
           orderBy: { createdAt: "desc" }
+        },
+        invites: {
+          where: { status: "PENDING" },
+          include: {
+            recipientUser:  { select: { id: true, name: true, profileImageUrl: true, accountType: true } },
+            recipientBand:  { select: { id: true, name: true, profileImageUrl: true, accountType: true } },
+            recipientVenue: { select: { id: true, name: true, profileImageUrl: true, accountType: true } },
+          }
         }
       },
       orderBy: {
@@ -102,10 +113,7 @@ export const getConversation = async (req: AuthRequest, res: Response) => {
     const conversationId = req.params.id as string;
     if (!conversationId) return res.status(400).json({ error: "Conversation ID is required" });
 
-    const { senderType, senderId }: {
-      senderType: ParticipantType;
-      senderId: string
-    } = req.body;
+    const { senderType, senderId } = req.query as { senderType: ParticipantType; senderId: string };
 
     if (!senderType || !senderId) {
       return res.status(400).json({ error: "senderType and senderId are required" });
@@ -603,6 +611,74 @@ export const respondToConversationInvite = async (req: AuthRequest, res: Respons
   }
 };
 
+export const getMyInvites = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId as string;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { senderType, senderId } = req.query as { senderType: ParticipantType; senderId: string };
+    if (!senderType || !senderId) return res.status(400).json({ error: "senderType and senderId are required" });
+
+    if (senderType === ParticipantType.USER && senderId !== userId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    if (senderType === ParticipantType.BAND) {
+      const m = await prisma.bandMember.findFirst({ where: { bandId: senderId, userId } });
+      if (!m) return res.status(403).json({ error: "Not a member of this band" });
+    }
+    if (senderType === ParticipantType.VENUE) {
+      const m = await prisma.venueRepresentative.findFirst({ where: { venueId: senderId, userId } });
+      if (!m) return res.status(403).json({ error: "Not a representative of this venue" });
+    }
+
+    const recipientFilter =
+      senderType === ParticipantType.USER  ? { recipientUserId: senderId } :
+      senderType === ParticipantType.BAND  ? { recipientBandId: senderId } :
+                                             { recipientVenueId: senderId };
+
+    const invites = await prisma.conversationInvite.findMany({
+      where: { ...recipientFilter, status: "PENDING" },
+      include: {
+        senderUser:  { select: { id: true, name: true, profileImageUrl: true, accountType: true } },
+        senderBand:  { select: { id: true, name: true, profileImageUrl: true, accountType: true } },
+        senderVenue: { select: { id: true, name: true, profileImageUrl: true, accountType: true } },
+        conversation: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return res.status(200).json(invites);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to get invites" });
+  }
+};
+
+export const markConversationRead = async (req: AuthRequest, res: Response) => {
+  try {
+    const conversationId = req.params.id as string;
+    const userId = req.user?.userId as string;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { senderType, senderId } = req.body as { senderType: ParticipantType; senderId: string };
+
+    let participantFilter: any = { conversationId };
+    if (senderType === ParticipantType.USER)  participantFilter.userId  = senderId;
+    if (senderType === ParticipantType.BAND)  participantFilter.bandId  = senderId;
+    if (senderType === ParticipantType.VENUE) participantFilter.venueId = senderId;
+
+    await prisma.conversationParticipant.updateMany({
+      where: participantFilter,
+      data: { lastReadAt: new Date() },
+    });
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to mark read" });
+  }
+};
+
 export const leaveConversation = async (req: AuthRequest, res: Response) => {
   try {
     const conversationId = req.params.id as string;
@@ -612,10 +688,7 @@ export const leaveConversation = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const { senderType, senderId }: {
-      senderType: ParticipantType;
-      senderId: string;
-    } = req.body;
+    const { senderType, senderId } = { ...req.body, ...req.query } as { senderType: ParticipantType; senderId: string };
 
     // validate type
     if (![ParticipantType.USER, ParticipantType.BAND, ParticipantType.VENUE].includes(senderType)) {

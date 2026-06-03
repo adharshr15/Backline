@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { renderBioWithLinks, profileStyles } from '@/app/(tabs)/profile/index';
 import * as followService from '@/services/follow.service';
 import { Show, getShowsByProfile, repostShow, unrepostShow, getRsvpShows, rsvpShow, unrsvpShow } from '@/services/show.service';
+import { getMyConversations, createConversation, getParticipantProfile, ParticipantType } from '@/services/conversation.service';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
 import ProfileCalendarModal from '@/components/profile-calendar-modal';
 
@@ -89,6 +90,25 @@ export default function ViewBandProfile({ id }: Props) {
         } finally {
             setFollowLoading(false);
         }
+    };
+
+    const handleMessage = async () => {
+        if (!activeProfile || !id) return;
+        const senderType = activeProfileType.toUpperCase() as ParticipantType;
+        try {
+            const convs = await getMyConversations(senderType, activeProfile.id);
+            const existing = convs.find(c =>
+                c.participants.some(p => getParticipantProfile(p)?.id === id)
+            );
+            if (existing) {
+                router.push(`/messages/${existing.id}`);
+            } else {
+                router.push({
+                    pathname: '/messages/new',
+                    params: { recipientType: 'BAND', recipientId: id, recipientName: band?.name ?? '' },
+                });
+            }
+        } catch (e) { console.error(e); }
     };
 
     const handleRsvp = async (show: Show) => {
@@ -198,7 +218,7 @@ export default function ViewBandProfile({ id }: Props) {
                         <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Share')}>
                             <Ionicons name="share-outline" size={22} color="white" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Message')}>
+                        <TouchableOpacity style={profileStyles.actionButton} onPress={handleMessage}>
                             <Ionicons name="chatbubble-outline" size={22} color="white" />
                         </TouchableOpacity>
                         <TouchableOpacity style={profileStyles.actionButton} onPress={() => setCalendarVisible(true)}>

@@ -105,7 +105,7 @@ export default function ViewUserProfile({ id }: Props) {
                 router.push(`/messages/${existing.id}`);
             } else {
                 router.push({
-                    pathname: '/messages/new',
+                    pathname: '/messages/compose',
                     params: { recipientType: 'USER', recipientId: id, recipientName: profile?.name ?? '' },
                 });
             }

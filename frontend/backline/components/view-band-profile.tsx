@@ -104,7 +104,7 @@ export default function ViewBandProfile({ id }: Props) {
                 router.push(`/messages/${existing.id}`);
             } else {
                 router.push({
-                    pathname: '/messages/new',
+                    pathname: '/messages/compose',
                     params: { recipientType: 'BAND', recipientId: id, recipientName: band?.name ?? '' },
                 });
             }

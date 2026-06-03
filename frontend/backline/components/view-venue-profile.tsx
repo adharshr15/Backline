@@ -104,7 +104,7 @@ export default function ViewVenueProfile({ id }: Props) {
                 router.push(`/messages/${existing.id}`);
             } else {
                 router.push({
-                    pathname: '/messages/new',
+                    pathname: '/messages/compose',
                     params: { recipientType: 'VENUE', recipientId: id, recipientName: venue?.name ?? '' },
                 });
             }

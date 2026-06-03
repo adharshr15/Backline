@@ -642,7 +642,27 @@ export const getMyInvites = async (req: AuthRequest, res: Response) => {
         senderUser:  { select: { id: true, name: true, profileImageUrl: true, accountType: true } },
         senderBand:  { select: { id: true, name: true, profileImageUrl: true, accountType: true } },
         senderVenue: { select: { id: true, name: true, profileImageUrl: true, accountType: true } },
-        conversation: { select: { id: true, name: true } },
+        conversation: {
+          select: {
+            id: true,
+            name: true,
+            participants: {
+              include: {
+                user:  { select: { id: true, name: true } },
+                band:  { select: { id: true, name: true } },
+                venue: { select: { id: true, name: true } },
+              }
+            },
+            invites: {
+              where: { status: "PENDING" },
+              include: {
+                recipientUser:  { select: { id: true, name: true } },
+                recipientBand:  { select: { id: true, name: true } },
+                recipientVenue: { select: { id: true, name: true } },
+              }
+            }
+          }
+        },
       },
       orderBy: { createdAt: "desc" },
     });

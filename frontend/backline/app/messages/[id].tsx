@@ -35,6 +35,7 @@ export default function ConversationScreen() {
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [title, setTitle] = useState('');
+    const [isGroup, setIsGroup] = useState(false);
 
     const HEADER_H = 52 + insets.top;
 
@@ -66,6 +67,8 @@ export default function ConversationScreen() {
                         .filter(p => p && p.id !== senderId);
                     setTitle(others.map(p => p!.name).join(', ') || 'Conversation');
                 }
+                // group = more than just me + one other
+                setIsGroup(conv.participants.length > 2);
             }
         }).catch(() => {});
         loadMessages().finally(() => setLoading(false));
@@ -129,28 +132,36 @@ export default function ConversationScreen() {
                         const showAvatar = !mine && prevMine !== false;
 
                         return (
-                            <View style={[styles.bubbleRow, mine ? styles.bubbleRowMine : styles.bubbleRowTheirs]}>
-                                {!mine && (
-                                    <Image
-                                        source={sender?.profileImageUrl
-                                            ? { uri: `${BASE_URL}${sender.profileImageUrl}` }
-                                            : require('@/assets/images/default/profileImage.png')}
-                                        style={[styles.bubbleAvatar, !showAvatar && styles.avatarHidden]}
-                                    />
-                                )}
-                                <View style={[
-                                    styles.bubble,
-                                    mine
-                                        ? [styles.bubbleMine, { backgroundColor: '#4A90D9' }]
-                                        : [styles.bubbleTheirs, { backgroundColor: borderColor + '22' }],
-                                ]}>
-                                    <ThemedText style={[
-                                        styles.bubbleText,
-                                        mine && { color: '#fff' },
-                                        FONT && { fontFamily: FONT },
-                                    ]}>
-                                        {msg.content}
+                            <View style={mine ? styles.bubbleRowMine : styles.bubbleRowTheirs}>
+                                {/* Sender name for group chats */}
+                                {!mine && isGroup && showAvatar && sender?.name && (
+                                    <ThemedText style={[styles.senderName, FONT && { fontFamily: FONT }]}>
+                                        {sender.name}
                                     </ThemedText>
+                                )}
+                                <View style={[styles.bubbleRow, mine ? styles.bubbleRowInner : styles.bubbleRowTheirs]}>
+                                    {!mine && (
+                                        <Image
+                                            source={sender?.profileImageUrl
+                                                ? { uri: `${BASE_URL}${sender.profileImageUrl}` }
+                                                : require('@/assets/images/default/profileImage.png')}
+                                            style={[styles.bubbleAvatar, !showAvatar && styles.avatarHidden]}
+                                        />
+                                    )}
+                                    <View style={[
+                                        styles.bubble,
+                                        mine
+                                            ? [styles.bubbleMine, { backgroundColor: '#4A90D9' }]
+                                            : [styles.bubbleTheirs, { backgroundColor: borderColor + '22' }],
+                                    ]}>
+                                        <ThemedText style={[
+                                            styles.bubbleText,
+                                            mine && { color: '#fff' },
+                                            FONT && { fontFamily: FONT },
+                                        ]}>
+                                            {msg.content}
+                                        </ThemedText>
+                                    </View>
                                 </View>
                             </View>
                         );
@@ -199,8 +210,10 @@ const styles = StyleSheet.create({
     headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700' },
     messageList: { padding: 12, paddingBottom: 4, gap: 4 },
     bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 2 },
-    bubbleRowMine: { justifyContent: 'flex-end' },
-    bubbleRowTheirs: { justifyContent: 'flex-start' },
+    bubbleRowInner: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'flex-end' },
+    bubbleRowMine: { alignItems: 'flex-end', marginBottom: 2 },
+    bubbleRowTheirs: { alignItems: 'flex-start', marginBottom: 2 },
+    senderName: { fontSize: 11, opacity: 0.5, marginLeft: 36, marginBottom: 2 },
     bubbleAvatar: { width: 28, height: 28, borderRadius: 14, marginRight: 6 },
     avatarHidden: { opacity: 0 },
     bubble: { maxWidth: '75%', borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8 },

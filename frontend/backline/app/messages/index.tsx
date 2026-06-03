@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { View, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { isConvUnread } from '@/utils/lastRead';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,7 +29,24 @@ function timeAgo(iso: string) {
     return `${Math.floor(hrs / 24)}d`;
 }
 
-const LAST_READ_KEY = (id: string) => `conv_last_read_${id}`;
+// Stacked avatar: single circle for 1:1, two overlapping for groups
+function ConvAvatar({ sources, bgColor }: { sources: (string | null | undefined)[], bgColor: string }) {
+    const first = sources[0];
+    const second = sources[1];
+    const img1 = first ? { uri: `${BASE_URL}${first}` } : require('@/assets/images/default/profileImage.png');
+    if (!second) {
+        return <Image source={img1} style={styles.avatar} />;
+    }
+    const img2 = { uri: `${BASE_URL}${second}` };
+    return (
+        <View style={styles.avatarStack}>
+            {/* back avatar — bottom-right */}
+            <Image source={img2} style={[styles.avatarSmall, styles.avatarBack, { borderColor: bgColor }]} />
+            {/* front avatar — top-left */}
+            <Image source={img1} style={[styles.avatarSmall, styles.avatarFront, { borderColor: bgColor }]} />
+        </View>
+    );
+}
 
 export default function MessagesScreen() {
     const router = useRouter();
@@ -93,23 +111,29 @@ export default function MessagesScreen() {
         return 'Conversation';
     };
 
-    const getConvAvatar = (conv: Conversation) => {
+    // Returns up to 2 profileImageUrl strings for stacked avatar rendering
+    const getConvAvatarSources = (conv: Conversation): (string | null | undefined)[] => {
         const others = getOtherParticipants(conv);
-        if (others.length > 0 && others[0]?.profileImageUrl) {
-            return { uri: `${BASE_URL}${others[0].profileImageUrl}` };
-        }
+        if (others.length > 0) return others.slice(0, 2).map(p => p!.profileImageUrl);
         const pendingInvite = conv.invites?.[0];
         if (pendingInvite) {
             const recipient = getInviteRecipient(pendingInvite);
-            if (recipient?.profileImageUrl) return { uri: `${BASE_URL}${recipient.profileImageUrl}` };
+            return [recipient?.profileImageUrl];
         }
-        return require('@/assets/images/default/profileImage.png');
+        return [null];
     };
 
     const isUnread = (conv: Conversation) => isConvUnread(conv, senderType, senderId);
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
+            <View style={styles.headerRow}>
+                <ThemedText style={[styles.title, FONT && { fontFamily: FONT }]}>Messages</ThemedText>
+                <TouchableOpacity onPress={() => router.push('/messages/compose')} style={styles.composeBtn}>
+                    <Ionicons name="create-outline" size={26} color={textColor} />
+                </TouchableOpacity>
+            </View>
+
             {loading && <ActivityIndicator style={{ marginTop: 32 }} />}
 
             {!loading && invites.length === 0 && conversations.length === 0 && (
@@ -133,6 +157,23 @@ export default function MessagesScreen() {
                                     </ThemedText>
                                     {invites.map(invite => {
                                         const sender = getInviteSender(invite);
+                                        const conv = invite.conversation;
+                                        const convName = conv?.name;
+
+                                        // Collect all participant names (accepted + pending invitees), excluding me
+                                        const participantNames: string[] = [];
+                                        conv?.participants?.forEach(p => {
+                                            const n = p.user?.name ?? p.band?.name ?? p.venue?.name;
+                                            if (n) participantNames.push(n);
+                                        });
+                                        conv?.invites?.forEach(inv => {
+                                            const n = inv.recipientUser?.name ?? inv.recipientBand?.name ?? inv.recipientVenue?.name;
+                                            if (n && !participantNames.includes(n)) participantNames.push(n);
+                                        });
+                                        const withLine = participantNames.length > 0 ? `with ${participantNames.join(', ')}` : null;
+                                        const isGroup = participantNames.length > 1 || !!convName;
+                                        const displayName = convName ?? sender?.name ?? 'Unknown';
+
                                         return (
                                             <View key={invite.id} style={[styles.inviteCard, { borderColor: borderColor + '44' }]}>
                                                 <Image
@@ -143,8 +184,13 @@ export default function MessagesScreen() {
                                                 />
                                                 <View style={styles.inviteBody}>
                                                     <ThemedText style={[styles.name, FONT && { fontFamily: FONT }]}>
-                                                        {sender?.name ?? 'Unknown'}
+                                                        {displayName}
                                                     </ThemedText>
+                                                    {isGroup && withLine && (
+                                                        <ThemedText style={[styles.preview, FONT && { fontFamily: FONT }]}>
+                                                            {withLine}
+                                                        </ThemedText>
+                                                    )}
                                                     {invite.message ? (
                                                         <ThemedText style={[styles.preview, FONT && { fontFamily: FONT }]} numberOfLines={1}>
                                                             {invite.message}
@@ -196,7 +242,7 @@ export default function MessagesScreen() {
                                             style={[styles.convRow, { borderBottomColor: borderColor + '22', backgroundColor: bgColor }]}
                                             onPress={() => router.push(`/messages/${conv.id}`)}
                                         >
-                                            <Image source={getConvAvatar(conv)} style={styles.avatar} />
+                                            <ConvAvatar sources={getConvAvatarSources(conv)} bgColor={bgColor} />
                                             <View style={styles.convBody}>
                                                 <ThemedText style={[styles.name, unread && styles.nameUnread, FONT && { fontFamily: FONT }]}>
                                                     {getConvName(conv)}
@@ -233,6 +279,9 @@ export default function MessagesScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, paddingHorizontal: 16 },
+    headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, marginBottom: 16 },
+    title: { fontSize: 28, fontWeight: '700' },
+    composeBtn: { padding: 4 },
     empty: { textAlign: 'center', marginTop: 40, opacity: 0.4 },
     sectionLabel: {
         fontSize: 11, fontWeight: '700', opacity: 0.4,
@@ -273,6 +322,10 @@ const styles = StyleSheet.create({
     convBody: { flex: 1 },
     convMeta: { alignItems: 'flex-end', gap: 4 },
     avatar: { width: 44, height: 44, borderRadius: 22 },
+    avatarStack: { width: 44, height: 44, position: 'relative' },
+    avatarSmall: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, position: 'absolute' },
+    avatarFront: { top: 0, left: 0 },
+    avatarBack: { bottom: 0, right: 0 },
     name: { fontSize: 15, fontWeight: '500' },
     nameUnread: { fontWeight: '700' },
     preview: { fontSize: 13, opacity: 0.5, marginTop: 2 },

@@ -57,7 +57,12 @@ export interface ConversationInvite {
     message?: string | null;
     createdAt: string;
     conversationId?: string | null;
-    conversation?: { id: string; name?: string | null } | null;
+    conversation?: {
+        id: string;
+        name?: string | null;
+        participants?: { user?: { id: string; name: string } | null; band?: { id: string; name: string } | null; venue?: { id: string; name: string } | null }[];
+        invites?: { recipientUser?: { id: string; name: string } | null; recipientBand?: { id: string; name: string } | null; recipientVenue?: { id: string; name: string } | null }[];
+    } | null;
     senderUserId?: string | null;
     senderBandId?: string | null;
     senderVenueId?: string | null;
@@ -162,6 +167,25 @@ export const leaveConversation = async (
     await api.delete(`/conversations/${conversationId}`, {
         data: { senderType, senderId },
     });
+};
+
+export interface Recipient {
+    type: ParticipantType;
+    id: string;
+}
+
+export const createGroupConversation = async (
+    senderType: ParticipantType,
+    senderId: string,
+    recipients: Recipient[],
+    content?: string,
+    name?: string,
+): Promise<Conversation> => {
+    const userIds  = recipients.filter(r => r.type === 'USER').map(r => r.id);
+    const bandIds  = recipients.filter(r => r.type === 'BAND').map(r => r.id);
+    const venueIds = recipients.filter(r => r.type === 'VENUE').map(r => r.id);
+    const res = await api.post('/conversations', { senderType, senderId, userIds, bandIds, venueIds, content, name });
+    return res.data;
 };
 
 export const respondToInvite = async (

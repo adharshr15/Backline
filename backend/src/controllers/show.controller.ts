@@ -141,14 +141,15 @@ export const getMyShowInvites = async (req: AuthRequest, res: Response) => {
 export const createShow = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId as string;
-    const { date, city, state, country, venueId, tourId, bandIds = [], doors, status, notes, ticketsUrl, creatorUserId, creatorBandId, creatorVenueId }: {
+    const { date, city, state, country, venueId, venueName, venueAddress, bandLineup, tourId, bandIds = [], doors, status, notes, ticketsUrl, creatorUserId, creatorBandId, creatorVenueId }: {
       date: string
       city: string
       state: string
       country: string
       venueId?: string
       venueName?: string
-      venueAddress: string
+      venueAddress?: string
+      bandLineup?: string
       tourId?: string
       bandIds?: string[]
       doors: string
@@ -205,55 +206,39 @@ export const createShow = async (req: AuthRequest, res: Response) => {
           ticketsUrl,
           status,
           notes,
+          venueName: venueId ? undefined : venueName,
+          venueAddress: venueId ? undefined : venueAddress,
+          bandLineup: bandLineup || undefined,
           createdByBandId: creatorBandId,
           createdByUserId: creatorUserId,
           createdByVenueId: creatorVenueId
         }
       });
 
-      if (creatorBandId && bandIds.length) {
-        // Automatically add the creator band to the show
-        await tx.showBand.create({
-          data: {
-            bandId: creatorBandId,
-            showId: newShow.id
+      if (bandIds.length) {
+        const uniqueBandIds = [...new Set(bandIds as string[])];
+
+        if (creatorBandId) {
+          // Creator band is added directly; others get invites
+          await tx.showBand.create({ data: { bandId: creatorBandId, showId: newShow.id } });
+          const bandsToInvite = uniqueBandIds.filter(id => id !== creatorBandId);
+          if (bandsToInvite.length) {
+            await tx.showInvite.createMany({
+              data: bandsToInvite.map((bandId: string) => ({ bandId, showId: newShow.id, status: "PENDING" }))
+            });
           }
-        });
-
-        // Invite the rest of the specified bands
-        const uniqueBandIds = [...new Set(bandIds)];
-        const bandsToInvite = uniqueBandIds.filter(id => id !== creatorBandId);
-
-        if (bandsToInvite.length) {
+        } else {
+          // User/venue creator — all bands get invites
           await tx.showInvite.createMany({
-            data: bandsToInvite.map((bandId: string) => ({
-              bandId,
-              showId: newShow.id,
-              status: "PENDING"
-            }))
+            data: uniqueBandIds.map((bandId: string) => ({ bandId, showId: newShow.id, status: "PENDING" }))
           });
         }
       }
 
       if (venueId) {
-        // Find which venues the user belongs to 
-        const representatives = await tx.venueRepresentative.findMany({ where: { userId, venueId } })
-        const userVenueIds = representatives.map(m => m.venueId);
-        const userInVenue = userVenueIds.includes(venueId);
-
-        if (userInVenue) {
-          // Add venue to show
-          await tx.show.update({
-            where: { id: newShow.id },
-            data: { venueId }
-          })
-
-        } else {
-          // Send invite to venue
-          await tx.showInvite.create({
-            data: { venueId, showId: newShow.id, status: "PENDING" }
-          })
-        }
+        await tx.showInvite.create({
+          data: { venueId, showId: newShow.id, status: "PENDING" }
+        });
       }
 
       return newShow;
@@ -289,52 +274,68 @@ export const updateShow = async (req: AuthRequest, res: Response) => {
     const allowed = await canManageShow(id, userId);
     if (!allowed) return res.status(403).json({ error: "Forbidden" });
 
-    const { date, city, state, country, venueId, tourId, addBandId, removeBandId, doors, status, notes, ticketsUrl } = req.body;
+    const { date, city, state, country, venueId, venueName, venueAddress, bandLineup, tourId, addBandIds, removeBandIds: removeBandIdsRaw, doors, status, notes, ticketsUrl } = req.body;
 
     const files = req.files as Record<string, Express.Multer.File[]>;
     const posterUrl = files?.posterImage?.[0] ? `/uploads/${files.posterImage[0].filename}` : undefined;
 
     const updatedShow = await prisma.$transaction(async (tx) => {
+      // --- Venue: decide what to update ---
+      let venueUpdate: Record<string, any> = {};
+
+      const currentShow = await tx.show.findUnique({ where: { id }, select: { venueId: true } });
+
+      if (venueId) {
+        if (currentShow?.venueId !== venueId) {
+          if (currentShow?.venueId) {
+            await tx.showInvite.deleteMany({ where: { showId: id, venueId: currentShow.venueId } });
+          }
+          const existingPending = await tx.showInvite.findFirst({ where: { showId: id, venueId, status: "PENDING" } });
+          if (!existingPending) {
+            await tx.showInvite.create({ data: { showId: id, venueId, status: "PENDING" } });
+          }
+        }
+      } else if (venueName !== undefined) {
+        if (currentShow?.venueId) {
+          await tx.showInvite.deleteMany({ where: { showId: id, venueId: currentShow.venueId } });
+        }
+        venueUpdate = { venueName: venueName || null, venueAddress: venueAddress ?? null, venueId: null };
+      }
+
+      // --- Main show update ---
       await tx.show.update({
         where: { id },
         data: {
           date: date ? new Date(date) : undefined,
-          city, state, country, venueId, tourId, doors, status, notes, ticketsUrl,
+          city, state, country, tourId, doors, status, notes, ticketsUrl,
+          ...venueUpdate,
+          ...(bandLineup !== undefined ? { bandLineup: bandLineup || null } : {}),
           ...(posterUrl && { posterUrl }),
         }
       });
 
-      // Add band invites
-      if (addBandId) {
-        const existingInvite = await tx.showInvite.findFirst({
-          where: {
-            showId: id,
-            bandId: addBandId,
-            status: "PENDING"
-          }
-        });
-
-        if (!existingInvite) {
-          await tx.showInvite.create({
-            data: {
-              showId: id,
-              bandId: addBandId,
-              status: "PENDING"
-            }
-          });
+      // --- Band invite additions ---
+      const bandsToAdd: string[] = addBandIds
+        ? (Array.isArray(addBandIds) ? addBandIds : [addBandIds])
+        : [];
+      for (const bid of bandsToAdd) {
+        const [existingInvite, existingMember] = await Promise.all([
+          tx.showInvite.findFirst({ where: { showId: id, bandId: bid, status: "PENDING" } }),
+          tx.showBand.findUnique({ where: { bandId_showId: { bandId: bid, showId: id } } }),
+        ]);
+        if (!existingInvite && !existingMember) {
+          await tx.showInvite.create({ data: { showId: id, bandId: bid, status: "PENDING" } });
         }
       }
 
-      // Remove band from show
-      if (removeBandId) {
-        await tx.showBand.delete({
-          where: {
-            bandId_showId: {
-              bandId: removeBandId,
-              showId: id
-            }
-          }
-        });
+      // --- Band removals (creator removing a band from the show) ---
+      const bandsToRemove: string[] = removeBandIdsRaw
+        ? (Array.isArray(removeBandIdsRaw) ? removeBandIdsRaw : [removeBandIdsRaw])
+        : [];
+      for (const bid of bandsToRemove) {
+        await tx.showBand.deleteMany({ where: { bandId: bid, showId: id } });
+        // Delete ALL invites for this band+show (any status) so re-inviting later is clean
+        await tx.showInvite.deleteMany({ where: { showId: id, bandId: bid } });
       }
 
       return tx.show.findUnique({
@@ -357,6 +358,41 @@ export const updateShow = async (req: AuthRequest, res: Response) => {
   }
 };
 
+
+// LEAVE SHOW (self-removal by a band or venue that didn't create the show)
+
+export const leaveShow = async (req: AuthRequest, res: Response) => {
+  try {
+    const showId = req.params.id as string;
+    const userId = req.user?.userId as string;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { bandId, venueId } = req.body as { bandId?: string; venueId?: string };
+
+    if (bandId) {
+      const membership = await prisma.bandMember.findFirst({ where: { userId, bandId } });
+      if (!membership) return res.status(403).json({ error: "Not a band member" });
+      await prisma.$transaction(async (tx) => {
+        await tx.showBand.deleteMany({ where: { bandId, showId } });
+        await tx.showInvite.deleteMany({ where: { showId, bandId } });
+      });
+    } else if (venueId) {
+      const rep = await prisma.venueRepresentative.findFirst({ where: { userId, venueId } });
+      if (!rep) return res.status(403).json({ error: "Not a venue representative" });
+      await prisma.$transaction(async (tx) => {
+        await tx.showInvite.deleteMany({ where: { showId, venueId } });
+        await tx.show.update({ where: { id: showId }, data: { venueId: null } });
+      });
+    } else {
+      return res.status(400).json({ error: "bandId or venueId required" });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+};
 
 // DELETE
 

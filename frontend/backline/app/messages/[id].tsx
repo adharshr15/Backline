@@ -125,6 +125,17 @@ export default function ConversationScreen() {
                     contentContainerStyle={styles.messageList}
                     onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
                     renderItem={({ item: msg, index }) => {
+                        // System messages render as centered grey text
+                        if (msg.isSystemMessage) {
+                            return (
+                                <View style={styles.systemMsgWrap}>
+                                    <ThemedText style={[styles.systemMsg, FONT && { fontFamily: FONT }]}>
+                                        {msg.content}
+                                    </ThemedText>
+                                </View>
+                            );
+                        }
+
                         const mine = isMine(msg);
                         const sender = getMessageSender(msg);
                         const prevMsg = messages[index - 1];
@@ -246,4 +257,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     sendBtnDisabled: { opacity: 0.4 },
+    systemMsgWrap: { alignItems: 'center', marginVertical: 10 },
+    systemMsg: { fontSize: 13, color: '#888', fontStyle: 'italic' },
 });

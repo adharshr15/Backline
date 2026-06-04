@@ -78,7 +78,7 @@ interface AuthContextType {
     setActiveProfile: (profile: ActiveProfile) => void;
     saveAuth: (user: User, token: string) => Promise<void>;
     clearAuth: () => Promise<void>;
-    refreshUser: () => Promise<void>;
+    refreshUser: () => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -144,9 +144,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await SecureStore.deleteItemAsync('token')
     }
 
-    const refreshUser = async () => {
+    const refreshUser = async (): Promise<User> => {
         const response = await api.get('/auth/me');
-        setUser(response.data);
+        const freshUser: User = response.data;
+        setUser(freshUser);
+        // Keep activeProfile in sync so account switcher reflects new memberships
+        if (!activeProfile || activeProfile.accountType === 'USER') {
+            setActiveProfile(freshUser);
+        } else if (activeProfile.accountType === 'BAND') {
+            const updated = freshUser.bandMemberships?.find(m => m.band.id === activeProfile.id)?.band;
+            if (updated) setActiveProfile({ ...updated, accountType: 'BAND' as const });
+        } else if (activeProfile.accountType === 'VENUE') {
+            const updated = freshUser.venueReps?.find(v => v.venue.id === activeProfile.id)?.venue;
+            if (updated) setActiveProfile({ ...updated, accountType: 'VENUE' as const });
+        }
+        return freshUser;
     }
 
     return (

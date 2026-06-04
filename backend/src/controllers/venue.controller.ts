@@ -18,12 +18,16 @@ export const getVenues = async (req: AuthRequest, res: Response) => {
     try {
         const page = Number(req.query.page) || 1;
         const limit = Number(req.query.limit) || 20;
+        const search = req.query.search as string | undefined;
 
         const venues = await prisma.venue.findMany({
             skip: (page - 1) * limit,
             take: limit,
             orderBy: { createdAt: "desc" },
-            where: { deletedAt: null },
+            where: {
+                deletedAt: null,
+                ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
+            },
             select: {
                 id: true,
                 name: true,
@@ -34,6 +38,7 @@ export const getVenues = async (req: AuthRequest, res: Response) => {
                 longitude: true,
                 capacity: true,
                 contactEmail: true,
+                profileImageUrl: true,
                 createdAt: true
             }
         });
@@ -72,21 +77,25 @@ export const getMyShowInvites = async (req: AuthRequest, res: Response) => {
         const userId = req.user?.userId;
         if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-        // Find all bands the user is a member of
         const userVenues = await prisma.venueRepresentative.findMany({
             where: { userId },
             select: { venueId: true },
         });
 
         const venueIds = userVenues.map((b) => b.venueId);
-        if (!venueIds.length) return res.json([]); // user in no bands
+        if (!venueIds.length) return res.json([]);
 
-        // Fetch show invites for those bands
         const invites = await prisma.showInvite.findMany({
-            where: { bandId: { in: venueIds }, status: InviteStatus.PENDING },
-            include: {
-                band: { select: { id: true, name: true } },
-                show: { include: { venue: true, tour: true, bands: { include: { band: true } } } },
+            where: { venueId: { in: venueIds }, status: InviteStatus.PENDING },
+            select: {
+                id: true,
+                showId: true,
+                bandId: true,
+                venueId: true,
+                status: true,
+                createdAt: true,
+                venue: { select: { id: true, name: true, profileImageUrl: true } },
+                show: { select: { id: true, date: true, city: true, state: true, country: true, posterUrl: true } },
             },
             orderBy: { createdAt: "desc" },
         });

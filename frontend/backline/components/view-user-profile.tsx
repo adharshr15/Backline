@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity, ActivityIndicator, Alert, ActionSheetIOS, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useState, useEffect } from 'react';
@@ -15,6 +15,7 @@ import { renderBioWithLinks, profileStyles } from '@/app/(tabs)/profile/index';
 import * as followService from '@/services/follow.service';
 import { Show, getShowsByProfile, repostShow, unrepostShow, getRsvpShows, rsvpShow, unrsvpShow } from '@/services/show.service';
 import { getMyConversations, getParticipantProfile, ParticipantType } from '@/services/conversation.service';
+import { inviteUserToBand, inviteUserToVenue } from '@/services/membership.service';
 import ProfileCalendarModal from '@/components/profile-calendar-modal';
 import { toCountryName } from '@/utils/location';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
@@ -27,7 +28,7 @@ interface Props {
 
 export default function ViewUserProfile({ id }: Props) {
     const router = useRouter();
-    const { activeProfile } = useAuth();
+    const { activeProfile, user } = useAuth();
     const { width } = useWindowDimensions();
     const sideWidth = (width - AVATAR_SIZE) / 2;
     const borderColor = useThemeColor({}, 'text');
@@ -110,6 +111,42 @@ export default function ViewUserProfile({ id }: Props) {
                 });
             }
         } catch (e) { console.error(e); }
+    };
+
+    const handleInviteMenu = () => {
+        const accountType = activeProfile?.accountType;
+        if (accountType !== 'BAND' && accountType !== 'VENUE') return;
+        const label = accountType === 'BAND'
+            ? `Invite to ${(activeProfile as any).name}`
+            : `Invite to ${(activeProfile as any).name}`;
+
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+                { options: [label, 'Cancel'], cancelButtonIndex: 1 },
+                async (buttonIndex) => {
+                    if (buttonIndex === 0) await sendInvite();
+                }
+            );
+        } else {
+            Alert.alert('Invite', label, [
+                { text: 'Send Invite', onPress: sendInvite },
+                { text: 'Cancel', style: 'cancel' },
+            ]);
+        }
+    };
+
+    const sendInvite = async () => {
+        try {
+            if (activeProfile?.accountType === 'BAND') {
+                await inviteUserToBand(activeProfile.id, id, user!.id);
+            } else if (activeProfile?.accountType === 'VENUE') {
+                await inviteUserToVenue(activeProfile.id, id, user!.id);
+            }
+            Alert.alert('Invite sent!');
+        } catch (e) {
+            console.error(e);
+            Alert.alert('Failed to send invite');
+        }
     };
 
     const handleRsvp = async (show: Show) => {
@@ -275,6 +312,12 @@ export default function ViewUserProfile({ id }: Props) {
             <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                 <Ionicons name="chevron-back" size={28} color="white" />
             </TouchableOpacity>
+
+            {(activeProfile?.accountType === 'BAND' || activeProfile?.accountType === 'VENUE') && (
+                <TouchableOpacity style={styles.menuButton} onPress={handleInviteMenu}>
+                    <Ionicons name="ellipsis-horizontal" size={22} color="white" />
+                </TouchableOpacity>
+            )}
         </View>
     );
 }
@@ -285,6 +328,17 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 52,
         left: 16,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    menuButton: {
+        position: 'absolute',
+        top: 52,
+        right: 16,
         width: 36,
         height: 36,
         borderRadius: 18,

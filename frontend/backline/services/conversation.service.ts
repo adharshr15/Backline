@@ -31,6 +31,7 @@ export interface MessageSender {
 export interface Message {
     id: string;
     content: string;
+    isSystemMessage?: boolean;
     conversationId: string;
     createdAt: string;
     senderUserId?: string | null;

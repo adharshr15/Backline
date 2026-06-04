@@ -31,7 +31,7 @@ type ShowListCardProps = {
 function ShowListCard({ show, activeProfileId, activeProfileType, onRepost, onRsvp }: ShowListCardProps) {
     const borderColor = useThemeColor({}, 'text');
     const { month, day, weekday } = formatDate(show.date);
-    const bandNames = show.bands.map(b => b.band.name).join(' · ');
+    const bandNames = [show.bands.map(b => b.band.name).join(' · '), show.bandLineup].filter(Boolean).join(' · ');
 
     const hasReposted = activeProfileId
         ? activeProfileType === 'band'
@@ -77,7 +77,7 @@ function ShowListCard({ show, activeProfileId, activeProfileType, onRepost, onRs
 
                 <View style={styles.infoCol}>
                     <ThemedText style={styles.venueName} numberOfLines={1}>
-                        {show.venue?.name ?? 'TBA'}
+                        {show.venue?.name ?? show.venueName ?? 'TBA'}
                     </ThemedText>
                     <ThemedText style={styles.location} numberOfLines={1}>
                         {show.city}, {show.state}

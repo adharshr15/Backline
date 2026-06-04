@@ -7,7 +7,7 @@ import { useFocusEffect } from 'expo-router';
 import { useAuth, type Venue } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { Show, getShowsByProfile, getRsvpShows, rsvpShow, unrsvpShow } from '@/services/show.service';
+import { Show, getShowsByProfile, getRsvpShows, rsvpShow, unrsvpShow, leaveShow } from '@/services/show.service';
 import ProfileCalendarModal from '@/components/profile-calendar-modal';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -57,6 +57,18 @@ export function VenueProfile() {
             else await rsvpShow(show.id, 'venue', undefined, venue.id);
             getRsvpShows('venue', venue.id).then(setRsvpShows).catch(() => {});
             getShowsByProfile('venue', venue.id).then(setShows).catch(() => {});
+        } catch (e) { console.error(e); }
+    };
+
+    const handleLeaveShow = async (show: Show) => {
+        try {
+            await leaveShow(show.id, undefined, venue.id);
+            const [fresh, freshPast] = await Promise.all([
+                getShowsByProfile('venue', venue.id),
+                getShowsByProfile('venue', venue.id, true),
+            ]);
+            setShows(fresh);
+            setPastShows(freshPast);
         } catch (e) { console.error(e); }
     };
 
@@ -148,6 +160,7 @@ export function VenueProfile() {
                         onSeePastShows={() => setShowingPast(true)}
                         onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                         onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
+                        onLeaveShow={handleLeaveShow}
                         activeProfileId={venue.id}
                         activeProfileType="venue"
                         onRsvp={handleRsvp}

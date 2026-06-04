@@ -11,6 +11,7 @@ import authRoutes from './routes/auth.routes'
 import followRoutes from './routes/follow.routes'
 import searchRoutes from './routes/search.routes'
 import uploadsRoutes from './routes/uploads.routes'
+import membershipRoutes from './routes/membership.routes'
 import { generalRateLimiter } from './middlewares/rateLimit.middleware';
 import path from 'path'
 
@@ -31,6 +32,7 @@ app.use("/auth", authRoutes)
 app.use('/uploads', uploadsRoutes);
 app.use('/follows', followRoutes);
 app.use('/search', searchRoutes);
+app.use('/membership-invites', membershipRoutes);
 
 
 app.listen(3000, () =>

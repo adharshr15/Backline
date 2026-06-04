@@ -17,10 +17,32 @@ export interface ShowBandEntry {
     band: Band;
 }
 
+export interface ShowInviteEntry {
+    id: string;
+    showId: string;
+    bandId?: string | null;
+    venueId?: string | null;
+    status: string;
+    createdAt: string;
+    show: {
+        id: string;
+        date: string;
+        city: string;
+        state: string;
+        country: string;
+        posterUrl?: string | null;
+    };
+    band?: { id: string; name: string; profileImageUrl?: string | null } | null;
+    venue?: { id: string; name: string; profileImageUrl?: string | null } | null;
+}
+
 export interface Show {
     id: string;
     posterUrl?: string;
     venue: ShowVenue | null;
+    venueName?: string | null;
+    venueAddress?: string | null;
+    bandLineup?: string | null;
     city: string;
     state: string;
     country: string;
@@ -51,7 +73,12 @@ export interface CreateShowData {
     ticketsUrl?: string;
     notes?: string;
     venueId?: string;
-    bandIds?: string[];
+    venueName?: string;
+    venueAddress?: string;
+    bandIds?: string[];       // create: all bands to invite
+    addBandIds?: string[];    // edit: new bands to invite
+    removeBandIds?: string[]; // edit: bands to remove from show
+    bandLineup?: string;
     creatorUserId?: string;
     creatorBandId?: string;
     creatorVenueId?: string;
@@ -74,7 +101,7 @@ export const getShowsByProfile = async (
 
 export const updateShow = async (id: string, data: Omit<CreateShowData, 'creatorUserId' | 'creatorBandId' | 'creatorVenueId'>): Promise<Show> => {
     const formData = new FormData();
-    const { posterImage, bandIds, ...rest } = data;
+    const { posterImage, bandIds, addBandIds, removeBandIds, ...rest } = data;
 
     Object.entries(rest).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
@@ -82,9 +109,8 @@ export const updateShow = async (id: string, data: Omit<CreateShowData, 'creator
         }
     });
 
-    if (bandIds?.length) {
-        bandIds.forEach(id => formData.append('bandIds[]', id));
-    }
+    (addBandIds ?? []).forEach(bid => formData.append('addBandIds[]', bid));
+    (removeBandIds ?? []).forEach(bid => formData.append('removeBandIds[]', bid));
 
     if (posterImage) {
         formData.append('posterImage', posterImage as any);
@@ -146,6 +172,38 @@ export const unrepostShow = async (
     reposterVenueId?: string
 ): Promise<void> => {
     await api.delete(`/shows/${showId}/repost`, { data: { reposterType, reposterBandId, reposterVenueId } });
+};
+
+export const leaveShow = async (showId: string, bandId?: string, venueId?: string): Promise<void> => {
+    await api.delete(`/shows/${showId}/leave`, { data: { bandId, venueId } });
+};
+
+export const getMyBandShowInvites = async (): Promise<ShowInviteEntry[]> => {
+    const response = await api.get('/bands/show-invites');
+    return response.data;
+};
+
+export const getMyVenueShowInvites = async (): Promise<ShowInviteEntry[]> => {
+    const response = await api.get('/venues/show-invites');
+    return response.data;
+};
+
+export const respondToBandShowInvite = async (inviteId: string, action: 'ACCEPT' | 'DECLINE'): Promise<void> => {
+    await api.post(`/bands/show-invites/${inviteId}/respond`, { action });
+};
+
+export const respondToVenueShowInvite = async (inviteId: string, action: 'ACCEPT' | 'DECLINE'): Promise<void> => {
+    await api.post(`/venues/shows/invites/${inviteId}/respond`, { action });
+};
+
+export const searchBands = async (query: string): Promise<{ id: string; name: string; city?: string; profileImageUrl?: string }[]> => {
+    const response = await api.get('/bands', { params: { search: query, limit: 10 } });
+    return response.data;
+};
+
+export const searchVenues = async (query: string): Promise<{ id: string; name: string; city?: string; profileImageUrl?: string }[]> => {
+    const response = await api.get('/venues', { params: { search: query, limit: 10 } });
+    return response.data;
 };
 
 export const createShow = async (data: CreateShowData): Promise<Show> => {

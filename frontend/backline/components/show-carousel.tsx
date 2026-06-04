@@ -6,12 +6,16 @@ import {
   StyleSheet,
   useWindowDimensions,
   Animated,
+  ActionSheetIOS,
+  Alert,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Show } from '@/services/show.service';
 import { BASE_URL } from '@/services/api';
+import { Ionicons } from '@expo/vector-icons';
 
 
 
@@ -20,13 +24,14 @@ type ShowCardProps = {
   cardWidth: number;
   isOwner: boolean;
   onEdit: (show: Show) => void;
+  onLeaveShow?: (show: Show) => void;
   activeProfileId?: string;
   activeProfileType?: 'user' | 'band' | 'venue';
   onRepost?: (show: Show) => void;
   onRsvp?: (show: Show) => void;
 };
 
-function ShowCard({ show, cardWidth, isOwner, onEdit, activeProfileId, activeProfileType, onRepost, onRsvp }: ShowCardProps) {
+function ShowCard({ show, cardWidth, isOwner, onEdit, onLeaveShow, activeProfileId, activeProfileType, onRepost, onRsvp }: ShowCardProps) {
   const flipAnim = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
   const borderColor = useThemeColor({}, 'text');
@@ -68,6 +73,40 @@ function ShowCard({ show, cardWidth, isOwner, onEdit, activeProfileId, activePro
 );
 
   const CARD_HEIGHT = cardWidth * 1.35;
+
+  const isCreator = activeProfileId
+    ? activeProfileType === 'band'  ? show.createdByBandId === activeProfileId
+    : activeProfileType === 'venue' ? show.createdByVenueId === activeProfileId
+    : show.createdByUserId === activeProfileId
+    : false;
+
+  const isOnShow = activeProfileId
+    ? activeProfileType === 'band'  ? show.bands?.some(b => b.bandId === activeProfileId)
+    : activeProfileType === 'venue' ? show.venue?.id === activeProfileId
+    : false
+    : false;
+
+  const handleLeaveMenu = () => {
+    const confirm = () => {
+      Alert.alert('Leave Show', 'Are you sure?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Leave', style: 'destructive', onPress: () => onLeaveShow?.(show) },
+      ]);
+    };
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Leave Show', 'Cancel'], destructiveButtonIndex: 0, cancelButtonIndex: 1 },
+        (i) => { if (i === 0) confirm(); }
+      );
+    } else {
+      confirm();
+    }
+  };
+
+  const lineup = [
+    show.bands.map(b => b.band.name).join(', '),
+    show.bandLineup,
+  ].filter(Boolean).join(', ');
 
   const hasRsvp = activeProfileId
     ? activeProfileType === 'band'
@@ -140,13 +179,29 @@ function ShowCard({ show, cardWidth, isOwner, onEdit, activeProfileId, activePro
             },
           ]}
         >
-          <ThemedText style={styles.backVenue}>{show.venue?.name ?? 'TBA'}</ThemedText>
+          {/* 3-dots leave menu — non-creator members only */}
+          {isOwner && isOnShow && !isCreator && (
+            <TouchableOpacity
+              style={styles.cardMenuBtn}
+              onPress={(e) => { e.stopPropagation(); handleLeaveMenu(); }}
+            >
+              <Ionicons name="ellipsis-horizontal" size={16} color="#aaa" />
+            </TouchableOpacity>
+          )}
+
+          <ThemedText style={styles.backVenue}>{show.venue?.name ?? show.venueName ?? 'TBA'}</ThemedText>
           <ThemedText style={styles.backCity}>{show.city}, {show.state}</ThemedText>
           <View style={styles.divider} />
           <ThemedText style={styles.backLabel}>Date</ThemedText>
           <ThemedText style={styles.backValue}>{new Date(show.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</ThemedText>
           <ThemedText style={styles.backLabel}>Doors</ThemedText>
           <ThemedText style={styles.backValue}>{show.doors?.includes('T') ? new Date(show.doors).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : show.doors}</ThemedText>
+          {lineup ? (
+            <>
+              <ThemedText style={styles.backLabel}>Lineup</ThemedText>
+              <ThemedText style={styles.backValue} numberOfLines={3}>{lineup}</ThemedText>
+            </>
+          ) : null}
           {show.ticketsUrl && (
             <TouchableOpacity style={styles.ticketButton}>
               <ThemedText style={styles.ticketText}>Get Tickets</ThemedText>
@@ -175,11 +230,7 @@ function ShowCard({ show, cardWidth, isOwner, onEdit, activeProfileId, activePro
                   </ThemedText>
                 </TouchableOpacity>
               )}
-              {isOwner && (
-                activeProfileType === 'band'  ? show.createdByBandId === activeProfileId :
-                activeProfileType === 'venue' ? (show.createdByVenueId === activeProfileId || show.venue?.id === activeProfileId) :
-                                                show.createdByUserId === activeProfileId
-              ) && (
+              {isOwner && isCreator && (
                 <TouchableOpacity
                   style={styles.editButton}
                   onPress={(e) => { e.stopPropagation(); onEdit(show); }}
@@ -202,6 +253,7 @@ type Props = {
   onSeePastShows: () => void;
   onCreateShow: () => void;
   onEditShow: (show: Show) => void;
+  onLeaveShow?: (show: Show) => void;
   isOwner: boolean;
   activeProfileId?: string;
   activeProfileType?: 'user' | 'band' | 'venue';
@@ -209,7 +261,7 @@ type Props = {
   onRsvp?: (show: Show) => void;
 };
 
-export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, onCreateShow, onEditShow, isOwner, activeProfileId, activeProfileType, onRepost, onRsvp }: Props) {
+export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, onCreateShow, onEditShow, onLeaveShow, isOwner, activeProfileId, activeProfileType, onRepost, onRsvp }: Props) {
   const { width } = useWindowDimensions();
   const CARD_WIDTH = width * 0.85;
   const borderColor = useThemeColor({}, 'text');
@@ -230,6 +282,7 @@ export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, on
           cardWidth={CARD_WIDTH}
           isOwner={isOwner}
           onEdit={onEditShow}
+          onLeaveShow={onLeaveShow}
           activeProfileId={activeProfileId}
           activeProfileType={activeProfileType}
           onRepost={onRepost}
@@ -244,6 +297,7 @@ export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, on
           cardWidth={CARD_WIDTH}
           isOwner={isOwner}
           onEdit={onEditShow}
+          onLeaveShow={onLeaveShow}
           activeProfileId={activeProfileId}
           activeProfileType={activeProfileType}
           onRepost={onRepost}
@@ -382,6 +436,13 @@ const styles = StyleSheet.create({
   },
   pastShowsArrow: {
     fontSize: 20,
+  },
+  cardMenuBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    padding: 4,
+    zIndex: 1,
   },
   repostBadge: {
     fontSize: 9,

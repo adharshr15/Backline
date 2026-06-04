@@ -287,6 +287,7 @@ model Show {
 
   venueName         String?
   venueAddress      String?
+  bandLineup        String?
 
   bands             ShowBand[]
   showInvites       ShowInvite[]
@@ -434,6 +435,7 @@ model ConversationInvite {
 model Message {
   id              String                      @id @default(cuid())
   content         String
+  isSystemMessage Boolean                     @default(false)
   createdAt       DateTime                    @default(now())
   deletedAt       DateTime?
 

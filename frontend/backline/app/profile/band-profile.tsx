@@ -7,7 +7,7 @@ import { useFocusEffect } from 'expo-router';
 import { useAuth, type Band } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { Show, getShowsByProfile, getRsvpShows, rsvpShow, unrsvpShow } from '@/services/show.service';
+import { Show, getShowsByProfile, getRsvpShows, rsvpShow, unrsvpShow, leaveShow } from '@/services/show.service';
 import ProfileCalendarModal from '@/components/profile-calendar-modal';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -54,6 +54,18 @@ export function BandProfile() {
             else await rsvpShow(show.id, 'band', band.id);
             getRsvpShows('band', band.id).then(setRsvpShows).catch(() => {});
             getShowsByProfile('band', band.id).then(setShows).catch(() => {});
+        } catch (e) { console.error(e); }
+    };
+
+    const handleLeaveShow = async (show: Show) => {
+        try {
+            await leaveShow(show.id, band.id);
+            const [fresh, freshPast] = await Promise.all([
+                getShowsByProfile('band', band.id),
+                getShowsByProfile('band', band.id, true),
+            ]);
+            setShows(fresh);
+            setPastShows(freshPast);
         } catch (e) { console.error(e); }
     };
 
@@ -154,6 +166,7 @@ export function BandProfile() {
                         onSeePastShows={() => setShowingPast(true)}
                         onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                         onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
+                        onLeaveShow={handleLeaveShow}
                         activeProfileId={band.id}
                         activeProfileType="band"
                         onRsvp={handleRsvp}

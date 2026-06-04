@@ -16,6 +16,14 @@ import {
     getParticipantProfile, getInviteSender, getInviteRecipient,
     ParticipantType,
 } from '@/services/conversation.service';
+import {
+    getMembershipInvites, respondToBandInvite, respondToVenueInvite,
+    BandInvite, VenueInvite,
+} from '@/services/membership.service';
+import {
+    getMyBandShowInvites, getMyVenueShowInvites, respondToBandShowInvite, respondToVenueShowInvite,
+    ShowInviteEntry,
+} from '@/services/show.service';
 
 const FONT = Fonts?.rounded ?? undefined;
 
@@ -50,13 +58,17 @@ function ConvAvatar({ sources, bgColor }: { sources: (string | null | undefined)
 
 export default function MessagesScreen() {
     const router = useRouter();
-    const { activeProfile } = useAuth();
+    const { activeProfile, user, refreshUser } = useAuth();
     const bgColor = useThemeColor({}, 'background');
     const textColor = useThemeColor({}, 'text');
     const borderColor = useThemeColor({}, 'icon');
 
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [invites, setInvites] = useState<ConversationInvite[]>([]);
+    const [bandInvites, setBandInvites] = useState<BandInvite[]>([]);
+    const [venueInvites, setVenueInvites] = useState<VenueInvite[]>([]);
+    const [bandShowInvites, setBandShowInvites] = useState<ShowInviteEntry[]>([]);
+    const [venueShowInvites, setVenueShowInvites] = useState<ShowInviteEntry[]>([]);
     const [loading, setLoading] = useState(true);
 
     const senderType = (
@@ -68,14 +80,22 @@ export default function MessagesScreen() {
     const load = useCallback(() => {
         if (!activeProfile) return;
         setLoading(true);
+        const userId = user?.id ?? '';
         Promise.all([
             getMyConversations(senderType, senderId).catch(() => [] as Conversation[]),
             getMyInvites(senderType, senderId).catch(() => [] as ConversationInvite[]),
-        ]).then(([convs, invs]) => {
+            userId ? getMembershipInvites(userId).catch(() => ({ bandInvites: [], venueInvites: [] })) : Promise.resolve({ bandInvites: [], venueInvites: [] }),
+            getMyBandShowInvites().catch(() => [] as ShowInviteEntry[]),
+            getMyVenueShowInvites().catch(() => [] as ShowInviteEntry[]),
+        ]).then(([convs, invs, membership, bsi, vsi]) => {
             setConversations(convs);
             setInvites(invs);
+            setBandInvites(membership.bandInvites);
+            setVenueInvites(membership.venueInvites);
+            setBandShowInvites(bsi);
+            setVenueShowInvites(vsi);
         }).finally(() => setLoading(false));
-    }, [activeProfile?.id]);
+    }, [activeProfile?.id, user?.id]);
 
     useFocusEffect(load);
 
@@ -85,6 +105,34 @@ export default function MessagesScreen() {
         if (action === 'ACCEPT' && invite.conversationId) {
             router.push(`/messages/${invite.conversationId}`);
         }
+    };
+
+    const handleBandInvite = async (invite: BandInvite, action: 'ACCEPT' | 'DECLINE') => {
+        const result = await respondToBandInvite(invite.id, user!.id, action).catch(console.error);
+        if (action === 'ACCEPT') await refreshUser().catch(console.error);
+        load();
+        if (action === 'ACCEPT' && result && (result as any).conversationId) {
+            router.push(`/messages/${(result as any).conversationId}`);
+        }
+    };
+
+    const handleVenueInvite = async (invite: VenueInvite, action: 'ACCEPT' | 'DECLINE') => {
+        const result = await respondToVenueInvite(invite.id, user!.id, action).catch(console.error);
+        if (action === 'ACCEPT') await refreshUser().catch(console.error);
+        load();
+        if (action === 'ACCEPT' && result && (result as any).conversationId) {
+            router.push(`/messages/${(result as any).conversationId}`);
+        }
+    };
+
+    const handleBandShowInvite = async (invite: ShowInviteEntry, action: 'ACCEPT' | 'DECLINE') => {
+        await respondToBandShowInvite(invite.id, action).catch(console.error);
+        load();
+    };
+
+    const handleVenueShowInvite = async (invite: ShowInviteEntry, action: 'ACCEPT' | 'DECLINE') => {
+        await respondToVenueShowInvite(invite.id, action).catch(console.error);
+        load();
     };
 
     const handleDelete = async (convId: string) => {
@@ -136,7 +184,7 @@ export default function MessagesScreen() {
 
             {loading && <ActivityIndicator style={{ marginTop: 32 }} />}
 
-            {!loading && invites.length === 0 && conversations.length === 0 && (
+            {!loading && invites.length === 0 && bandInvites.length === 0 && venueInvites.length === 0 && bandShowInvites.length === 0 && venueShowInvites.length === 0 && conversations.length === 0 && (
                 <ThemedText style={[styles.empty, FONT && { fontFamily: FONT }]}>
                     No messages yet.
                 </ThemedText>
@@ -150,11 +198,121 @@ export default function MessagesScreen() {
                     ListHeaderComponent={
                         <>
                             {/* Pending invites */}
-                            {invites.length > 0 && (
+                            {(invites.length > 0 || bandInvites.length > 0 || venueInvites.length > 0 || bandShowInvites.length > 0 || venueShowInvites.length > 0) && (
                                 <>
                                     <ThemedText style={[styles.sectionLabel, FONT && { fontFamily: FONT }]}>
                                         REQUESTS
                                     </ThemedText>
+                                    {bandInvites.map(invite => (
+                                        <View key={invite.id} style={[styles.inviteCard, { borderColor: borderColor + '44' }]}>
+                                            <Image
+                                                source={invite.band.profileImageUrl
+                                                    ? { uri: `${BASE_URL}${invite.band.profileImageUrl}` }
+                                                    : require('@/assets/images/default/profileImage.png')}
+                                                style={styles.avatar}
+                                            />
+                                            <View style={styles.inviteBody}>
+                                                <ThemedText style={[styles.name, FONT && { fontFamily: FONT }]}>
+                                                    {invite.band.name}
+                                                </ThemedText>
+                                                <ThemedText style={[styles.preview, FONT && { fontFamily: FONT }]}>
+                                                    invited you to join their band
+                                                </ThemedText>
+                                                <View style={styles.inviteActions}>
+                                                    <TouchableOpacity style={styles.acceptBtn} onPress={() => handleBandInvite(invite, 'ACCEPT')}>
+                                                        <ThemedText style={[styles.acceptText, FONT && { fontFamily: FONT }]}>Accept</ThemedText>
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity style={[styles.declineBtn, { borderColor: borderColor + '66' }]} onPress={() => handleBandInvite(invite, 'DECLINE')}>
+                                                        <ThemedText style={[styles.declineText, FONT && { fontFamily: FONT }]}>Decline</ThemedText>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    ))}
+                                    {venueInvites.map(invite => (
+                                        <View key={invite.id} style={[styles.inviteCard, { borderColor: borderColor + '44' }]}>
+                                            <Image
+                                                source={invite.venue.profileImageUrl
+                                                    ? { uri: `${BASE_URL}${invite.venue.profileImageUrl}` }
+                                                    : require('@/assets/images/default/profileImage.png')}
+                                                style={styles.avatar}
+                                            />
+                                            <View style={styles.inviteBody}>
+                                                <ThemedText style={[styles.name, FONT && { fontFamily: FONT }]}>
+                                                    {invite.venue.name}
+                                                </ThemedText>
+                                                <ThemedText style={[styles.preview, FONT && { fontFamily: FONT }]}>
+                                                    invited you to join their venue
+                                                </ThemedText>
+                                                <View style={styles.inviteActions}>
+                                                    <TouchableOpacity style={styles.acceptBtn} onPress={() => handleVenueInvite(invite, 'ACCEPT')}>
+                                                        <ThemedText style={[styles.acceptText, FONT && { fontFamily: FONT }]}>Accept</ThemedText>
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity style={[styles.declineBtn, { borderColor: borderColor + '66' }]} onPress={() => handleVenueInvite(invite, 'DECLINE')}>
+                                                        <ThemedText style={[styles.declineText, FONT && { fontFamily: FONT }]}>Decline</ThemedText>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    ))}
+                                    {bandShowInvites.map(invite => {
+                                        const showDate = new Date(invite.show.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                                        return (
+                                            <View key={invite.id} style={[styles.inviteCard, { borderColor: borderColor + '44' }]}>
+                                                <Image
+                                                    source={invite.band?.profileImageUrl
+                                                        ? { uri: `${BASE_URL}${invite.band.profileImageUrl}` }
+                                                        : require('@/assets/images/default/profileImage.png')}
+                                                    style={styles.avatar}
+                                                />
+                                                <View style={styles.inviteBody}>
+                                                    <ThemedText style={[styles.name, FONT && { fontFamily: FONT }]}>
+                                                        {invite.band?.name ?? 'Your band'}
+                                                    </ThemedText>
+                                                    <ThemedText style={[styles.preview, FONT && { fontFamily: FONT }]}>
+                                                        Invited to perform · {invite.show.city}, {invite.show.state} · {showDate}
+                                                    </ThemedText>
+                                                    <View style={styles.inviteActions}>
+                                                        <TouchableOpacity style={styles.acceptBtn} onPress={() => handleBandShowInvite(invite, 'ACCEPT')}>
+                                                            <ThemedText style={[styles.acceptText, FONT && { fontFamily: FONT }]}>Accept</ThemedText>
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity style={[styles.declineBtn, { borderColor: borderColor + '66' }]} onPress={() => handleBandShowInvite(invite, 'DECLINE')}>
+                                                            <ThemedText style={[styles.declineText, FONT && { fontFamily: FONT }]}>Decline</ThemedText>
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                </View>
+                                            </View>
+                                        );
+                                    })}
+                                    {venueShowInvites.map(invite => {
+                                        const showDate = new Date(invite.show.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                                        return (
+                                            <View key={invite.id} style={[styles.inviteCard, { borderColor: borderColor + '44' }]}>
+                                                <Image
+                                                    source={invite.venue?.profileImageUrl
+                                                        ? { uri: `${BASE_URL}${invite.venue.profileImageUrl}` }
+                                                        : require('@/assets/images/default/profileImage.png')}
+                                                    style={styles.avatar}
+                                                />
+                                                <View style={styles.inviteBody}>
+                                                    <ThemedText style={[styles.name, FONT && { fontFamily: FONT }]}>
+                                                        {invite.venue?.name ?? 'Your venue'}
+                                                    </ThemedText>
+                                                    <ThemedText style={[styles.preview, FONT && { fontFamily: FONT }]}>
+                                                        Requested to host · {invite.show.city}, {invite.show.state} · {showDate}
+                                                    </ThemedText>
+                                                    <View style={styles.inviteActions}>
+                                                        <TouchableOpacity style={styles.acceptBtn} onPress={() => handleVenueShowInvite(invite, 'ACCEPT')}>
+                                                            <ThemedText style={[styles.acceptText, FONT && { fontFamily: FONT }]}>Accept</ThemedText>
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity style={[styles.declineBtn, { borderColor: borderColor + '66' }]} onPress={() => handleVenueShowInvite(invite, 'DECLINE')}>
+                                                            <ThemedText style={[styles.declineText, FONT && { fontFamily: FONT }]}>Decline</ThemedText>
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                </View>
+                                            </View>
+                                        );
+                                    })}
                                     {invites.map(invite => {
                                         const sender = getInviteSender(invite);
                                         const conv = invite.conversation;
@@ -218,7 +376,7 @@ export default function MessagesScreen() {
                             )}
 
                             {/* Conversations */}
-                            {conversations.length > 0 && invites.length > 0 && (
+                            {conversations.length > 0 && (invites.length > 0 || bandInvites.length > 0 || venueInvites.length > 0 || bandShowInvites.length > 0 || venueShowInvites.length > 0) && (
                                 <ThemedText style={[styles.sectionLabel, FONT && { fontFamily: FONT }]}>
                                     MESSAGES
                                 </ThemedText>

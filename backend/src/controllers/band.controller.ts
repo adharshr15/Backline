@@ -11,10 +11,12 @@ export const getBands = async (req: AuthRequest, res: Response) => {
   try {
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 20;
+    const search = req.query.search as string | undefined;
 
     const bands = await prisma.band.findMany({
       where: {
-        deletedAt: null
+        deletedAt: null,
+        ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
       },
       skip: (page - 1) * limit,
       take: limit,
@@ -26,6 +28,7 @@ export const getBands = async (req: AuthRequest, res: Response) => {
         city: true,
         state: true,
         country: true,
+        profileImageUrl: true,
         createdAt: true
       }
     });
@@ -78,9 +81,15 @@ export const getMyShowInvites = async (req: AuthRequest, res: Response) => {
     // Fetch show invites for those bands
     const invites = await prisma.showInvite.findMany({
       where: { bandId: { in: bandIds }, status: InviteStatus.PENDING },
-      include: {
-        band: { select: { id: true, name: true } },
-        show: { include: { venue: true, tour: true, bands: { include: { band: true } } } },
+      select: {
+        id: true,
+        showId: true,
+        bandId: true,
+        venueId: true,
+        status: true,
+        createdAt: true,
+        band: { select: { id: true, name: true, profileImageUrl: true } },
+        show: { select: { id: true, date: true, city: true, state: true, country: true, posterUrl: true } },
       },
       orderBy: { createdAt: "desc" },
     });

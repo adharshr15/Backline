@@ -219,16 +219,21 @@ export default function ViewUserProfile({ id }: Props) {
                 headerImage={<Image source={headerImage} style={{ width: '100%', height: 250 }} />}
             >
                 <>
-                    <View style={profileStyles.pfpContainer}>
+                    <View style={profileStyles.pfpContainer} pointerEvents="box-none">
                         <View style={[profileStyles.pfpWrapper, { borderColor }]}>
                             <Image source={profilePicture} style={{ width: '100%', height: '100%' }} />
                         </View>
                     </View>
 
                     <View style={profileStyles.metaRow}>
-                        <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
-                            {profile.city && profile.state ? `${profile.city}, ${profile.state}` : ''}
-                        </ThemedText>
+                        <TouchableOpacity
+                            onPress={() => profile.city && profile.state && router.push({ pathname: '/profile/scene', params: { city: profile.city, state: profile.state } } as any)}
+                            disabled={!profile.city || !profile.state}
+                        >
+                            <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
+                                {profile.city && profile.state ? `${profile.city}, ${profile.state}` : ''}
+                            </ThemedText>
+                        </TouchableOpacity>
                         <View style={{ width: AVATAR_SIZE }} />
                         <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
                             {toCountryName(profile.country ?? '')}

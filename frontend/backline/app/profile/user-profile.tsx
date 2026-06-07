@@ -1,31 +1,26 @@
 import { Image } from 'expo-image';
-import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity, SafeAreaViewBase } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { toCountryName } from '@/utils/location';
-import { useAuth, type ActiveProfile, type User, type Band, type Venue } from '@/context/AuthContext'
+import { useAuth, type User } from '@/context/AuthContext'
 import { BASE_URL } from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import ViewSwitcher from '@/components/ui/view-switcher';
-import { ShowCarousel } from '@/components/show-carousel';
 import { Show, getShowsByProfile, getRsvpShows, rsvpShow, unrsvpShow } from '@/services/show.service';
 import ProfileCalendarModal from '@/components/profile-calendar-modal';
 import { TabSwitcher } from '@/components/ui/tab-switcher';
 import CreateShowModal from '@/components/profile/create-show-modal';
+import ShowDetailModal from '@/components/show-detail-modal';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { getMyProfiles } from '@/services/profile.service';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
 import { renderBioWithLinks } from '../(tabs)/profile';
 import { profileStyles } from '../(tabs)/profile';
-import CreateBandScreen from './create-new-band';
-
 export const AVATAR_SIZE = 80;
-const BORDER_WIDTH = 3;
 
 type Tab = 'shows' | 'listings';
 
@@ -49,6 +44,7 @@ export function UserProfile() {
     const [showingPast, setShowingPast] = useState(false);
     const [createShowVisible, setCreateShowVisible] = useState(false);
     const [editingShow, setEditingShow] = useState<Show | undefined>(undefined);
+    const [detailShow, setDetailShow] = useState<Show | null>(null);
     const borderColor = useThemeColor({}, 'text');
 
     const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
@@ -97,7 +93,7 @@ export function UserProfile() {
 
                 <>
                     {/* pfp straddles the top of the ThemedView */}
-                    <View style={profileStyles.pfpContainer}>
+                    <View style={profileStyles.pfpContainer} pointerEvents="box-none">
                         <TouchableOpacity onPress={() => setSwitcherVisible(true)}>
                             <View style={[profileStyles.pfpWrapper, { borderColor }]}>
                                 <Image
@@ -110,9 +106,14 @@ export function UserProfile() {
 
                     {/* meta row*/}
                     <View style={profileStyles.metaRow}>
-                        <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
-                            {user?.city && user?.state ? `${user?.city}, ${user?.state}` : ''}
-                        </ThemedText>
+                        <TouchableOpacity
+                            onPress={() => user?.city && user?.state && router.push({ pathname: '/profile/scene', params: { city: user.city, state: user.state } } as any)}
+                            disabled={!user?.city || !user?.state}
+                        >
+                            <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
+                                {user?.city && user?.state ? `${user?.city}, ${user?.state}` : ''}
+                            </ThemedText>
+                        </TouchableOpacity>
                         <View style={{ width: AVATAR_SIZE }} />
                         <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
                             {toCountryName(user?.country ?? '')}
@@ -165,6 +166,7 @@ export function UserProfile() {
                                             onSeePastShows={() => setShowingPast(true)}
                                             onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                                             onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
+                                            onShowPress={setDetailShow}
                                             activeProfileId={user.id}
                                             activeProfileType="user"
                                             onRsvp={handleRsvp}
@@ -210,6 +212,7 @@ export function UserProfile() {
                                 onSeePastShows={() => setShowingPast(true)}
                                 onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                                 onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
+                                onShowPress={setDetailShow}
                                 activeProfileId={user.id}
                                 activeProfileType="user"
                             />
@@ -359,6 +362,15 @@ export function UserProfile() {
                     setPastShows(freshPast);
                     setCreateShowVisible(false);
                 }}
+            />
+
+            <ShowDetailModal
+                show={detailShow}
+                visible={detailShow !== null}
+                onClose={() => setDetailShow(null)}
+                onRsvp={handleRsvp}
+                activeProfileId={user.id}
+                activeProfileType="user"
             />
         </>
     );

@@ -181,16 +181,21 @@ export default function ViewBandProfile({ id }: Props) {
                 headerImage={<Image source={headerImage} style={{ width: '100%', height: 250 }} />}
             >
                 <>
-                    <View style={profileStyles.pfpContainer}>
+                    <View style={profileStyles.pfpContainer} pointerEvents="box-none">
                         <View style={[profileStyles.pfpWrapper, { borderColor }]}>
                             <Image source={profilePicture} style={{ width: '100%', height: '100%' }} />
                         </View>
                     </View>
 
                     <View style={profileStyles.metaRow}>
-                        <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
-                            {band.city && band.state ? `${band.city}, ${band.state}` : ''}
-                        </ThemedText>
+                        <TouchableOpacity
+                            onPress={() => band.city && band.state && router.push({ pathname: '/profile/scene', params: { city: band.city, state: band.state } } as any)}
+                            disabled={!band.city || !band.state}
+                        >
+                            <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
+                                {band.city && band.state ? `${band.city}, ${band.state}` : ''}
+                            </ThemedText>
+                        </TouchableOpacity>
                         <View style={{ width: AVATAR_SIZE }} />
                         <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
                             {band.genre ?? ''}

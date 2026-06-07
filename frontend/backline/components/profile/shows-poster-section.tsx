@@ -18,6 +18,7 @@ interface ProfileShowsSectionProps {
   onCreateShow: () => void;
   onEditShow: (show: Show) => void;
   onLeaveShow?: (show: Show) => void;
+  onShowPress?: (show: Show) => void;
   activeProfileId?: string;
   activeProfileType?: 'user' | 'band' | 'venue';
   onRepost?: (show: Show) => void;
@@ -35,6 +36,7 @@ export default function ProfileShowsSection({
   onCreateShow,
   onEditShow,
   onLeaveShow,
+  onShowPress,
   activeProfileId,
   activeProfileType,
   onRepost,
@@ -61,6 +63,7 @@ export default function ProfileShowsSection({
           onCreateShow={onCreateShow}
           onEditShow={onEditShow}
           onLeaveShow={onLeaveShow}
+          onShowPress={onShowPress}
           activeProfileId={activeProfileId}
           activeProfileType={activeProfileType}
           onRepost={onRepost}
@@ -73,6 +76,7 @@ export default function ProfileShowsSection({
           pastShows={pastShows}
           showingPast={showingPast}
           onSeePastShows={onSeePastShows}
+          onShowPress={onShowPress}
           activeProfileId={activeProfileId}
           activeProfileType={activeProfileType}
           onRepost={onRepost}

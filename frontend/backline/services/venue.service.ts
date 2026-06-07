@@ -1,6 +1,27 @@
 import { Alert } from "react-native";
 import api from "./api";
 
+export interface VenueSummary {
+    id: string;
+    name: string;
+    city?: string | null;
+    state?: string | null;
+    capacity?: number | null;
+    profileImageUrl?: string | null;
+}
+
+export const getVenuesByFilter = async (opts: {
+    city?: string;
+    state?: string;
+    limit?: number;
+}): Promise<VenueSummary[]> => {
+    const params: Record<string, string | number> = { limit: opts.limit ?? 10 };
+    if (opts.city)  params.city  = opts.city;
+    if (opts.state) params.state = opts.state;
+    const response = await api.get('/venues', { params });
+    return response.data;
+};
+
 export const createVenue = async (formData: FormData) => {
     try {
         const response = await api.post('/venues', formData);

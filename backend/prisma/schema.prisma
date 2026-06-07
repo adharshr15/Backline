@@ -485,6 +485,20 @@ model Follow {
   @@index([followeeVenueId])
 }
 
+model SceneFollow {
+  id           String   @id @default(cuid())
+  city         String
+  state        String
+  country      String?
+  followerId   String
+  followerType String
+  createdAt    DateTime @default(now())
+
+  @@unique([followerId, followerType, city, state])
+  @@index([city, state])
+  @@index([followerId, followerType])
+}
+
 model RentalItem {
   id                String                    @id @default(cuid())
   title             String 

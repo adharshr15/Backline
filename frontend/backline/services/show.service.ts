@@ -7,6 +7,8 @@ export interface ShowVenue {
     city?: string;
     state?: string;
     address?: string;
+    latitude?: number | null;
+    longitude?: number | null;
 }
 
 export interface ShowBandEntry {
@@ -174,6 +176,10 @@ export const unrepostShow = async (
     await api.delete(`/shows/${showId}/repost`, { data: { reposterType, reposterBandId, reposterVenueId } });
 };
 
+export const deleteShow = async (showId: string): Promise<void> => {
+    await api.delete(`/shows/${showId}`);
+};
+
 export const leaveShow = async (showId: string, bandId?: string, venueId?: string): Promise<void> => {
     await api.delete(`/shows/${showId}/leave`, { data: { bandId, venueId } });
 };
@@ -203,6 +209,13 @@ export const searchBands = async (query: string): Promise<{ id: string; name: st
 
 export const searchVenues = async (query: string): Promise<{ id: string; name: string; city?: string; profileImageUrl?: string }[]> => {
     const response = await api.get('/venues', { params: { search: query, limit: 10 } });
+    return response.data;
+};
+
+export const getShowsByLocation = async (city: string, state: string, dateRange?: string): Promise<Show[]> => {
+    const params: Record<string, string> = { city, state };
+    if (dateRange) params.dateRange = dateRange;
+    const response = await api.get('/shows', { params });
     return response.data;
 };
 

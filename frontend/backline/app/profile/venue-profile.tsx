@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
 import CreateShowModal from '@/components/profile/create-show-modal';
+import ShowDetailModal from '@/components/show-detail-modal';
 import { renderBioWithLinks, profileStyles } from '../(tabs)/profile';
 
 export const AVATAR_SIZE = 80;
@@ -37,6 +38,7 @@ export function VenueProfile() {
     const [showingPast, setShowingPast] = useState(false);
     const [createShowVisible, setCreateShowVisible] = useState(false);
     const [editingShow, setEditingShow] = useState<Show | undefined>(undefined);
+    const [detailShow, setDetailShow] = useState<Show | null>(null);
     const [rsvpShows, setRsvpShows] = useState<Show[]>([]);
     const [calendarVisible, setCalendarVisible] = useState(false);
     const borderColor = useThemeColor({}, 'text');
@@ -93,7 +95,7 @@ export function VenueProfile() {
                 }
             >
                 <>
-                    <View style={profileStyles.pfpContainer}>
+                    <View style={profileStyles.pfpContainer} pointerEvents="box-none">
                         <TouchableOpacity onPress={() => setSwitcherVisible(true)}>
                             <View style={[profileStyles.pfpWrapper, { borderColor }]}>
                                 <Image
@@ -105,9 +107,14 @@ export function VenueProfile() {
                     </View>
 
                     <View style={profileStyles.metaRow}>
-                        <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
-                            {venue?.city && venue?.state ? `${venue.city}, ${venue.state}` : ''}
-                        </ThemedText>
+                        <TouchableOpacity
+                            onPress={() => venue?.city && venue?.state && router.push({ pathname: '/profile/scene', params: { city: venue.city, state: venue.state } } as any)}
+                            disabled={!venue?.city || !venue?.state}
+                        >
+                            <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
+                                {venue?.city && venue?.state ? `${venue.city}, ${venue.state}` : ''}
+                            </ThemedText>
+                        </TouchableOpacity>
                         <View style={{ width: AVATAR_SIZE }} />
                         <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
                             {venue?.address ?? ''}
@@ -161,6 +168,7 @@ export function VenueProfile() {
                         onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                         onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
                         onLeaveShow={handleLeaveShow}
+                        onShowPress={setDetailShow}
                         activeProfileId={venue.id}
                         activeProfileType="venue"
                         onRsvp={handleRsvp}
@@ -298,6 +306,15 @@ export function VenueProfile() {
                     setPastShows(freshPast);
                     setCreateShowVisible(false);
                 }}
+            />
+
+            <ShowDetailModal
+                show={detailShow}
+                visible={detailShow !== null}
+                onClose={() => setDetailShow(null)}
+                onRsvp={handleRsvp}
+                activeProfileId={venue.id}
+                activeProfileType="venue"
             />
         </>
     );

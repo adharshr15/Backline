@@ -10,6 +10,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
 import { getFeedShows, repostShow, unrepostShow, Show } from '@/services/show.service';
 import { getMyConversations, getMyInvites, ParticipantType } from '@/services/conversation.service';
+import { getFollowedScenes, SceneFollow } from '@/services/scene.service';
 
 const TYPE_LABEL: Record<string, string> = {
     USER: 'User',
@@ -41,9 +42,18 @@ type FeedShowCardProps = {
     activeProfileBandId?: string;
     activeProfileVenueId?: string;
     onRepostToggle: (show: Show) => void;
+    sceneTag?: string | null;
 };
 
-function FeedShowCard({ show, activeProfileId, activeProfileType, onRepostToggle }: FeedShowCardProps) {
+function getSceneTag(show: Show, scenes: SceneFollow[]): string | null {
+    const match = scenes.find(s =>
+        s.city.toLowerCase() === show.city.toLowerCase() &&
+        s.state.toLowerCase() === show.state.toLowerCase()
+    );
+    return match ? `${match.city} scene` : null;
+}
+
+function FeedShowCard({ show, activeProfileId, activeProfileType, onRepostToggle, sceneTag }: FeedShowCardProps) {
     const borderColor = useThemeColor({}, 'text');
     const { month, day, weekday } = formatDate(show.date);
     const bandNames = show.bands.map(b => b.band.name).join(' · ');
@@ -78,6 +88,9 @@ function FeedShowCard({ show, activeProfileId, activeProfileType, onRepostToggle
                 {bandNames ? (
                     <ThemedText style={styles.bands} numberOfLines={1}>{bandNames}</ThemedText>
                 ) : null}
+                {sceneTag ? (
+                    <ThemedText style={styles.sceneTag}>{sceneTag}</ThemedText>
+                ) : null}
             </View>
 
             <View style={styles.repostCol}>
@@ -101,6 +114,7 @@ export default function HomeScreen() {
     const [shows, setShows] = useState<Show[]>([]);
     const [loading, setLoading] = useState(true);
     const [hasUnread, setHasUnread] = useState(false);
+    const [followedScenes, setFollowedScenes] = useState<SceneFollow[]>([]);
 
     const profileType =
         activeProfile?.accountType === 'BAND' ? 'band' :
@@ -113,6 +127,8 @@ export default function HomeScreen() {
             .then(setShows)
             .catch(console.error)
             .finally(() => setLoading(false));
+
+        getFollowedScenes(activeProfile.id, profileType).then(setFollowedScenes).catch(() => {});
 
         const senderType = (
             activeProfile.accountType === 'BAND'  ? 'BAND' :
@@ -163,6 +179,7 @@ export default function HomeScreen() {
                     <ThemedText style={styles.title}>Following</ThemedText>
                     <ThemedText style={styles.sub}>
                         as {activeProfile?.name} ({TYPE_LABEL[activeProfile?.accountType ?? 'USER']})
+                        {followedScenes.length > 0 ? ` · ${followedScenes.length} scene${followedScenes.length !== 1 ? 's' : ''}` : ''}
                     </ThemedText>
                 </View>
                 <TouchableOpacity onPress={() => router.push('/messages')} style={styles.dmBtn}>
@@ -187,6 +204,7 @@ export default function HomeScreen() {
                         activeProfileId={activeProfile?.id ?? ''}
                         activeProfileType={profileType}
                         onRepostToggle={handleRepostToggle}
+                        sceneTag={getSceneTag(item, followedScenes)}
                     />
                 )}
             />
@@ -299,5 +317,13 @@ const styles = StyleSheet.create({
     repostBtnActive: {
         opacity: 1,
         color: '#4CAF50',
+    },
+    sceneTag: {
+        fontSize: 10,
+        fontWeight: '600',
+        opacity: 0.45,
+        marginTop: 3,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
 });

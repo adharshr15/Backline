@@ -1,6 +1,31 @@
 import { Alert } from "react-native";
 import api from "./api";
 
+export interface BandSummary {
+    id: string;
+    name: string;
+    genre?: string | null;
+    city?: string | null;
+    state?: string | null;
+    profileImageUrl?: string | null;
+}
+
+export const getBandsByFilter = async (opts: {
+    genre?: string;
+    city?: string;
+    state?: string;
+    limit?: number;
+    excludeId?: string;
+}): Promise<BandSummary[]> => {
+    const params: Record<string, string | number> = { limit: opts.limit ?? 10 };
+    if (opts.genre) params.genre = opts.genre;
+    if (opts.city)  params.city  = opts.city;
+    if (opts.state) params.state = opts.state;
+    const response = await api.get('/bands', { params });
+    const data: BandSummary[] = response.data;
+    return opts.excludeId ? data.filter(b => b.id !== opts.excludeId) : data;
+};
+
 export const createBand = async (formData: FormData) => {
     try {
         const response = await api.post('/bands', formData);

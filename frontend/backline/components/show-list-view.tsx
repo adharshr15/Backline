@@ -26,9 +26,10 @@ type ShowListCardProps = {
     activeProfileType?: 'user' | 'band' | 'venue';
     onRepost?: (show: Show) => void;
     onRsvp?: (show: Show) => void;
+    onShowPress?: (show: Show) => void;
 };
 
-function ShowListCard({ show, activeProfileId, activeProfileType, onRepost, onRsvp }: ShowListCardProps) {
+function ShowListCard({ show, activeProfileId, activeProfileType, onRepost, onRsvp, onShowPress }: ShowListCardProps) {
     const borderColor = useThemeColor({}, 'text');
     const { month, day, weekday } = formatDate(show.date);
     const bandNames = [show.bands.map(b => b.band.name).join(' · '), show.bandLineup].filter(Boolean).join(' · ');
@@ -67,6 +68,11 @@ function ShowListCard({ show, activeProfileId, activeProfileType, onRepost, onRs
                 <ThemedText style={styles.repostBadge}>↩ REPOST</ThemedText>
             )}
             <View style={[styles.card, { borderColor }]}>
+                <TouchableOpacity
+                    style={styles.cardMain}
+                    onPress={() => onShowPress?.(show)}
+                    activeOpacity={onShowPress ? 0.6 : 1}
+                >
                 <View style={styles.dateCol}>
                     <ThemedText style={styles.month}>{month}</ThemedText>
                     <ThemedText style={styles.day}>{day}</ThemedText>
@@ -89,6 +95,7 @@ function ShowListCard({ show, activeProfileId, activeProfileType, onRepost, onRs
                         <ThemedText style={styles.bands} numberOfLines={1}>{bandNames}</ThemedText>
                     ) : null}
                 </View>
+                </TouchableOpacity>
 
                 <View style={styles.actionCol}>
                     {onRsvp && (
@@ -121,9 +128,10 @@ type Props = {
     activeProfileType?: 'user' | 'band' | 'venue';
     onRepost?: (show: Show) => void;
     onRsvp?: (show: Show) => void;
+    onShowPress?: (show: Show) => void;
 };
 
-export function ShowListView({ shows, pastShows, showingPast, isOwner, onSeePastShows, activeProfileId, activeProfileType, onRepost, onRsvp }: Props) {
+export function ShowListView({ shows, pastShows, showingPast, isOwner, onSeePastShows, activeProfileId, activeProfileType, onRepost, onRsvp, onShowPress }: Props) {
     const borderColor = useThemeColor({}, 'text');
 
     return (
@@ -138,6 +146,7 @@ export function ShowListView({ shows, pastShows, showingPast, isOwner, onSeePast
                             activeProfileId={activeProfileId}
                             activeProfileType={activeProfileType}
                             onRepost={onRepost}
+                            onShowPress={onShowPress}
                         />
                     ))}
                     <View style={[styles.sectionSep, { backgroundColor: borderColor }]} />
@@ -156,6 +165,7 @@ export function ShowListView({ shows, pastShows, showingPast, isOwner, onSeePast
                         activeProfileType={activeProfileType}
                         onRepost={onRepost}
                         onRsvp={onRsvp}
+                        onShowPress={onShowPress}
                     />
                 ))
             )}
@@ -193,6 +203,10 @@ const styles = StyleSheet.create({
         borderWidth: StyleSheet.hairlineWidth,
         borderRadius: 2,
         overflow: 'hidden',
+    },
+    cardMain: {
+        flexDirection: 'row',
+        flex: 1,
     },
     dateCol: {
         width: 56,

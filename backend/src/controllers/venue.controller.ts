@@ -19,15 +19,19 @@ export const getVenues = async (req: AuthRequest, res: Response) => {
         const page = Number(req.query.page) || 1;
         const limit = Number(req.query.limit) || 20;
         const search = req.query.search as string | undefined;
+        const city   = req.query.city  as string | undefined;
+        const state  = req.query.state as string | undefined;
+
+        const where: any = { deletedAt: null };
+        if (search) where.name  = { contains: search, mode: 'insensitive' };
+        if (city)   where.city  = { equals:   city,   mode: 'insensitive' };
+        if (state)  where.state = { equals:   state,  mode: 'insensitive' };
 
         const venues = await prisma.venue.findMany({
             skip: (page - 1) * limit,
             take: limit,
             orderBy: { createdAt: "desc" },
-            where: {
-                deletedAt: null,
-                ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
-            },
+            where,
             select: {
                 id: true,
                 name: true,

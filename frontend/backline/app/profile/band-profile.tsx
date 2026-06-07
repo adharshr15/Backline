@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
 import CreateShowModal from '@/components/profile/create-show-modal';
+import ShowDetailModal from '@/components/show-detail-modal';
 import { renderBioWithLinks, profileStyles } from '../(tabs)/profile';
 
 export const AVATAR_SIZE = 80;
@@ -38,6 +39,7 @@ export function BandProfile() {
     const [showingPast, setShowingPast] = useState(false);
     const [createShowVisible, setCreateShowVisible] = useState(false);
     const [editingShow, setEditingShow] = useState<Show | undefined>(undefined);
+    const [detailShow, setDetailShow] = useState<Show | null>(null);
     const [calendarVisible, setCalendarVisible] = useState(false);
     const borderColor = useThemeColor({}, 'text');
 
@@ -94,7 +96,7 @@ export function BandProfile() {
             >
                 <>
                     {/* pfp straddles the top of the ThemedView */}
-                    <View style={profileStyles.pfpContainer}>
+                    <View style={profileStyles.pfpContainer} pointerEvents="box-none">
                         <TouchableOpacity onPress={() => setSwitcherVisible(true)}>
                             <View style={[profileStyles.pfpWrapper, { borderColor }]}>
                                 <Image
@@ -107,9 +109,14 @@ export function BandProfile() {
 
                     {/* meta row */}
                     <View style={profileStyles.metaRow}>
-                        <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
-                            {band?.city && band?.state ? `${band.city}, ${band.state}` : ''}
-                        </ThemedText>
+                        <TouchableOpacity
+                            onPress={() => band?.city && band?.state && router.push({ pathname: '/profile/scene', params: { city: band.city, state: band.state } } as any)}
+                            disabled={!band?.city || !band?.state}
+                        >
+                            <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
+                                {band?.city && band?.state ? `${band.city}, ${band.state}` : ''}
+                            </ThemedText>
+                        </TouchableOpacity>
                         <View style={{ width: AVATAR_SIZE }} />
                         <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
                             {band?.genre ? `${band.genre}` : ''}
@@ -167,6 +174,7 @@ export function BandProfile() {
                         onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                         onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
                         onLeaveShow={handleLeaveShow}
+                        onShowPress={setDetailShow}
                         activeProfileId={band.id}
                         activeProfileType="band"
                         onRsvp={handleRsvp}
@@ -308,6 +316,15 @@ export function BandProfile() {
                     setPastShows(freshPast);
                     setCreateShowVisible(false);
                 }}
+            />
+
+            <ShowDetailModal
+                show={detailShow}
+                visible={detailShow !== null}
+                onClose={() => setDetailShow(null)}
+                onRsvp={handleRsvp}
+                activeProfileId={band.id}
+                activeProfileType="band"
             />
         </>
     );

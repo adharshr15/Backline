@@ -38,13 +38,23 @@ const canManageShow = async (showId: string, userId: string) => {
 
 export const getShows = async (req: Request, res: Response) => {
   try {
-    const { bandId, venueId, userId, past } = req.query as Record<string, string | undefined>;
+    const { bandId, venueId, userId, past, city, state, dateRange } = req.query as Record<string, string | undefined>;
     const now = new Date();
 
     const where: any = {
       deletedAt: null,
       date: past === 'true' ? { lt: now } : { gte: now },
     };
+
+    if (city)  where.city  = { equals: city,  mode: 'insensitive' };
+    if (state) where.state = { equals: state, mode: 'insensitive' };
+
+    if (dateRange && dateRange !== 'all' && past !== 'true') {
+      const end = dateRange === 'today' ? new Date(new Date().setHours(23, 59, 59, 999))
+                : dateRange === 'week'  ? new Date(Date.now() + 7 * 86400000)
+                :                         new Date(Date.now() + 30 * 86400000);
+      where.date = { gte: now, lte: end };
+    }
 
     if (bandId) {
       where.OR = [
@@ -517,9 +527,22 @@ export const getFeedShows = async (req: Request, res: Response) => {
       where: { followerType: dbType, ...followerFilter },
     });
 
-    if (follows.length === 0) return res.json([]);
+    const sceneFollows = await prisma.sceneFollow.findMany({
+      where: { followerId, followerType },
+      select: { city: true, state: true },
+    });
+
+    if (follows.length === 0 && sceneFollows.length === 0) return res.json([]);
 
     const orConditions: any[] = [];
+
+    for (const sf of sceneFollows) {
+      orConditions.push({
+        city:  { equals: sf.city,  mode: 'insensitive' },
+        state: { equals: sf.state, mode: 'insensitive' },
+      });
+    }
+
     for (const f of follows) {
       if (f.followeeType === 'BAND' && f.followeeBandId) {
         orConditions.push({ createdByBandId: f.followeeBandId });

@@ -181,16 +181,21 @@ export default function ViewVenueProfile({ id }: Props) {
                 headerImage={<Image source={headerImage} style={{ width: '100%', height: 250 }} />}
             >
                 <>
-                    <View style={profileStyles.pfpContainer}>
+                    <View style={profileStyles.pfpContainer} pointerEvents="box-none">
                         <View style={[profileStyles.pfpWrapper, { borderColor }]}>
                             <Image source={profilePicture} style={{ width: '100%', height: '100%' }} />
                         </View>
                     </View>
 
                     <View style={profileStyles.metaRow}>
-                        <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
-                            {venue.city && venue.state ? `${venue.city}, ${venue.state}` : ''}
-                        </ThemedText>
+                        <TouchableOpacity
+                            onPress={() => venue.city && venue.state && router.push({ pathname: '/profile/scene', params: { city: venue.city, state: venue.state } } as any)}
+                            disabled={!venue.city || !venue.state}
+                        >
+                            <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
+                                {venue.city && venue.state ? `${venue.city}, ${venue.state}` : ''}
+                            </ThemedText>
+                        </TouchableOpacity>
                         <View style={{ width: AVATAR_SIZE }} />
                         <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
                             {venue.address ?? ''}

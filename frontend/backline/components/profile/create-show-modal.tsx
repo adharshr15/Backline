@@ -18,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { createShow, updateShow, Show, searchBands, searchVenues } from '@/services/show.service';
+import { createShow, updateShow, deleteShow, Show, searchBands, searchVenues } from '@/services/show.service';
 import { BASE_URL } from '@/services/api';
 import { COUNTRY_LIST, STATES_BY_COUNTRY } from '@/utils/location';
 import { Ionicons } from '@expo/vector-icons';
@@ -285,6 +285,24 @@ export default function CreateShowModal({ visible, onClose, onCreated, creatorUs
         }
     };
 
+    const handleDelete = () => {
+        Alert.alert('Delete Show', 'This will permanently delete the show. Are you sure?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Delete', style: 'destructive', onPress: async () => {
+                    try {
+                        await deleteShow(editingShow!.id);
+                        reset();
+                        onCreated();
+                        onClose();
+                    } catch (err: any) {
+                        Alert.alert('Error', err.response?.data?.error || 'Failed to delete show');
+                    }
+                }
+            },
+        ]);
+    };
+
     const inputStyle = [styles.input, { borderColor, color: borderColor }];
     const pillStyle = [styles.pill, { borderColor, backgroundColor: subtleColor }];
 
@@ -528,6 +546,12 @@ export default function CreateShowModal({ visible, onClose, onCreated, creatorUs
                         onFocus={() => scrollToInput(notesRef)}
                         multiline
                     />
+
+                    {isEditing && (
+                        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
+                            <ThemedText style={styles.deleteBtnText}>Delete Show</ThemedText>
+                        </TouchableOpacity>
+                    )}
                 </ScrollView>
                 </KeyboardAvoidingView>
             </SafeAreaView>
@@ -617,4 +641,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     addBtnText: { fontSize: 14, fontWeight: '600' },
+    deleteBtn: {
+        marginTop: 32,
+        alignItems: 'center',
+        paddingVertical: 12,
+    },
+    deleteBtnText: { fontSize: 15, fontWeight: '600', color: '#ff3b30' },
 });

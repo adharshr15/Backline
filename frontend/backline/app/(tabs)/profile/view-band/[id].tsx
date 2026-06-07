@@ -98,7 +98,7 @@ export default function ViewBandScreen() {
                 }
             >
                 <>
-                    <View style={profileStyles.pfpContainer}>
+                    <View style={profileStyles.pfpContainer} pointerEvents="box-none">
                         <View style={[profileStyles.pfpWrapper, { borderColor }]}>
                             <Image source={profilePicture} style={{ width: '100%', height: '100%' }} />
                         </View>

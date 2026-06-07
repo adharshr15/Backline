@@ -25,13 +25,14 @@ type ShowCardProps = {
   isOwner: boolean;
   onEdit: (show: Show) => void;
   onLeaveShow?: (show: Show) => void;
+  onShowPress?: (show: Show) => void;
   activeProfileId?: string;
   activeProfileType?: 'user' | 'band' | 'venue';
   onRepost?: (show: Show) => void;
   onRsvp?: (show: Show) => void;
 };
 
-function ShowCard({ show, cardWidth, isOwner, onEdit, onLeaveShow, activeProfileId, activeProfileType, onRepost, onRsvp }: ShowCardProps) {
+function ShowCard({ show, cardWidth, isOwner, onEdit, onLeaveShow, onShowPress, activeProfileId, activeProfileType, onRepost, onRsvp }: ShowCardProps) {
   const flipAnim = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
   const borderColor = useThemeColor({}, 'text');
@@ -230,6 +231,14 @@ function ShowCard({ show, cardWidth, isOwner, onEdit, onLeaveShow, activeProfile
                   </ThemedText>
                 </TouchableOpacity>
               )}
+              {onShowPress && (
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={(e) => { e.stopPropagation(); onShowPress(show); }}
+                >
+                  <ThemedText style={styles.editButtonText}>More</ThemedText>
+                </TouchableOpacity>
+              )}
               {isOwner && isCreator && (
                 <TouchableOpacity
                   style={styles.editButton}
@@ -254,6 +263,7 @@ type Props = {
   onCreateShow: () => void;
   onEditShow: (show: Show) => void;
   onLeaveShow?: (show: Show) => void;
+  onShowPress?: (show: Show) => void;
   isOwner: boolean;
   activeProfileId?: string;
   activeProfileType?: 'user' | 'band' | 'venue';
@@ -261,7 +271,7 @@ type Props = {
   onRsvp?: (show: Show) => void;
 };
 
-export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, onCreateShow, onEditShow, onLeaveShow, isOwner, activeProfileId, activeProfileType, onRepost, onRsvp }: Props) {
+export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, onCreateShow, onEditShow, onLeaveShow, onShowPress, isOwner, activeProfileId, activeProfileType, onRepost, onRsvp }: Props) {
   const { width } = useWindowDimensions();
   const CARD_WIDTH = width * 0.85;
   const borderColor = useThemeColor({}, 'text');
@@ -283,6 +293,7 @@ export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, on
           isOwner={isOwner}
           onEdit={onEditShow}
           onLeaveShow={onLeaveShow}
+          onShowPress={onShowPress}
           activeProfileId={activeProfileId}
           activeProfileType={activeProfileType}
           onRepost={onRepost}
@@ -298,6 +309,7 @@ export function ShowCarousel({ shows, pastShows, showingPast, onSeePastShows, on
           isOwner={isOwner}
           onEdit={onEditShow}
           onLeaveShow={onLeaveShow}
+          onShowPress={onShowPress}
           activeProfileId={activeProfileId}
           activeProfileType={activeProfileType}
           onRepost={onRepost}

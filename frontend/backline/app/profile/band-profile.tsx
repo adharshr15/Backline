@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { View, Text, StyleSheet, useWindowDimensions, Modal, TouchableOpacity } from 'react-native';
+import { View, Text, useWindowDimensions, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useState, useCallback } from 'react';
@@ -15,8 +15,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
 import CreateShowModal from '@/components/profile/create-show-modal';
-import ShowDetailModal from '@/components/show-detail-modal';
+import CreateListingModal from '@/components/profile/create-listing-modal';
+import ProfileListingsSection from '@/components/profile/listings-section';
+import { TabSwitcher } from '@/components/ui/tab-switcher';
+import { Listing, getListingsByProfile } from '@/services/listing.service';
 import { renderBioWithLinks, profileStyles } from '../(tabs)/profile';
+
+type Tab = 'shows' | 'listings';
 
 export const AVATAR_SIZE = 80;
 
@@ -39,14 +44,23 @@ export function BandProfile() {
     const [showingPast, setShowingPast] = useState(false);
     const [createShowVisible, setCreateShowVisible] = useState(false);
     const [editingShow, setEditingShow] = useState<Show | undefined>(undefined);
-    const [detailShow, setDetailShow] = useState<Show | null>(null);
     const [calendarVisible, setCalendarVisible] = useState(false);
+    const [activeTab, setActiveTab] = useState<Tab>('shows');
+    const [listings, setListings] = useState<Listing[]>([]);
+    const [listingView, setListingView] = useState<'poster' | 'list'>('poster');
+    const [createListingVisible, setCreateListingVisible] = useState(false);
+    const [editingListing, setEditingListing] = useState<Listing | undefined>(undefined);
     const borderColor = useThemeColor({}, 'text');
+
+    const loadListings = useCallback(() => {
+        getListingsByProfile('band', band.id, true).then(setListings).catch(() => {});
+    }, [band.id]);
 
     useFocusEffect(useCallback(() => {
         getShowsByProfile('band', band.id).then(setShows).catch(() => {});
         getShowsByProfile('band', band.id, true).then(setPastShows).catch(() => {});
         getRsvpShows('band', band.id).then(setRsvpShows).catch(() => {});
+        loadListings();
     }, [band.id]));
 
     const handleRsvp = async (show: Show) => {
@@ -152,32 +166,46 @@ export function BandProfile() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* divider */}
-                    <View
-                        style={{
-                            height: StyleSheet.hairlineWidth,
-                            backgroundColor: '#616161',
-                            marginHorizontal: -32,
-                            marginTop: 4,
-                            marginBottom: 12,
-                        }}
-                    />
-
-                    <ProfileShowsSection
-                        showView={showView}
-                        setShowView={setShowView}
-                        shows={shows}
-                        pastShows={pastShows}
-                        showingPast={showingPast}
-                        isOwner={true}
-                        onSeePastShows={() => setShowingPast(true)}
-                        onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
-                        onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
-                        onLeaveShow={handleLeaveShow}
-                        onShowPress={setDetailShow}
-                        activeProfileId={band.id}
-                        activeProfileType="band"
-                        onRsvp={handleRsvp}
+                    <TabSwitcher
+                        tabs={[
+                            {
+                                key: 'shows',
+                                content: (
+                                    <ProfileShowsSection
+                                        showView={showView}
+                                        setShowView={setShowView}
+                                        shows={shows}
+                                        pastShows={pastShows}
+                                        showingPast={showingPast}
+                                        isOwner={true}
+                                        onSeePastShows={() => setShowingPast(true)}
+                                        onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
+                                        onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
+                                        onLeaveShow={handleLeaveShow}
+                                        onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
+                                        activeProfileId={band.id}
+                                        activeProfileType="band"
+                                        onRsvp={handleRsvp}
+                                    />
+                                ),
+                            },
+                            {
+                                key: 'listings',
+                                content: (
+                                    <ProfileListingsSection
+                                        listings={listings}
+                                        view={listingView}
+                                        setView={setListingView}
+                                        isOwner={true}
+                                        onCreateListing={() => { setEditingListing(undefined); setCreateListingVisible(true); }}
+                                        onListingPress={(listing) => router.push({ pathname: '/listing', params: { id: listing.id } })}
+                                    />
+                                ),
+                            },
+                        ]}
+                        activeTab={activeTab}
+                        onTabChange={setActiveTab}
+                        marginHorizontal={32}
                     />
                 </>
             </ParallaxScrollView>
@@ -318,14 +346,20 @@ export function BandProfile() {
                 }}
             />
 
-            <ShowDetailModal
-                show={detailShow}
-                visible={detailShow !== null}
-                onClose={() => setDetailShow(null)}
-                onRsvp={handleRsvp}
-                activeProfileId={band.id}
-                activeProfileType="band"
+            <CreateListingModal
+                visible={createListingVisible}
+                onClose={() => setCreateListingVisible(false)}
+                creatorBandId={band.id}
+                defaultCity={band.city ?? ''}
+                defaultState={band.state ?? ''}
+                defaultCountry={band.country ?? ''}
+                editingListing={editingListing}
+                onSaved={() => {
+                    loadListings();
+                    setCreateListingVisible(false);
+                }}
             />
+
         </>
     );
 }

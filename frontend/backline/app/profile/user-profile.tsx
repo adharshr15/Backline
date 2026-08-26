@@ -12,7 +12,9 @@ import { Show, getShowsByProfile, getRsvpShows, rsvpShow, unrsvpShow } from '@/s
 import ProfileCalendarModal from '@/components/profile-calendar-modal';
 import { TabSwitcher } from '@/components/ui/tab-switcher';
 import CreateShowModal from '@/components/profile/create-show-modal';
-import ShowDetailModal from '@/components/show-detail-modal';
+import CreateListingModal from '@/components/profile/create-listing-modal';
+import { Listing, getListingsByProfile } from '@/services/listing.service';
+import ProfileListingsSection from '@/components/profile/listings-section';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Ionicons } from '@expo/vector-icons';
@@ -44,7 +46,10 @@ export function UserProfile() {
     const [showingPast, setShowingPast] = useState(false);
     const [createShowVisible, setCreateShowVisible] = useState(false);
     const [editingShow, setEditingShow] = useState<Show | undefined>(undefined);
-    const [detailShow, setDetailShow] = useState<Show | null>(null);
+    const [listings, setListings] = useState<Listing[]>([]);
+    const [listingView, setListingView] = useState<'poster' | 'list'>('poster');
+    const [createListingVisible, setCreateListingVisible] = useState(false);
+    const [editingListing, setEditingListing] = useState<Listing | undefined>(undefined);
     const borderColor = useThemeColor({}, 'text');
 
     const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
@@ -52,12 +57,17 @@ export function UserProfile() {
 
     const [rsvpShows, setRsvpShows] = useState<Show[]>([]);
     const [calendarVisible, setCalendarVisible] = useState(false);
-    const hasListings = false // user.listings
+    const hasListings = true; // owner: always show tabs so listings can be created
+
+    const loadListings = useCallback(() => {
+        getListingsByProfile('user', user.id, true).then(setListings).catch(() => {});
+    }, [user.id]);
 
     useFocusEffect(useCallback(() => {
         getShowsByProfile('user', user.id).then(setShows).catch(() => {});
         getShowsByProfile('user', user.id, true).then(setPastShows).catch(() => {});
         getRsvpShows('user', user.id).then(setRsvpShows).catch(() => {});
+        loadListings();
     }, [user.id]));
 
     const handleRsvp = async (show: Show) => {
@@ -166,7 +176,7 @@ export function UserProfile() {
                                             onSeePastShows={() => setShowingPast(true)}
                                             onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                                             onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
-                                            onShowPress={setDetailShow}
+                                            onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
                                             activeProfileId={user.id}
                                             activeProfileType="user"
                                             onRsvp={handleRsvp}
@@ -176,11 +186,14 @@ export function UserProfile() {
                                 {
                                     key: 'listings',
                                     content: (
-                                        <View style={{ alignItems: 'center' }}>
-                                            <ThemedText style={{ opacity: 0.4, fontSize: 13 }}>
-                                                No Listings yet.
-                                            </ThemedText>
-                                        </View>
+                                        <ProfileListingsSection
+                                            listings={listings}
+                                            view={listingView}
+                                            setView={setListingView}
+                                            isOwner={true}
+                                            onCreateListing={() => { setEditingListing(undefined); setCreateListingVisible(true); }}
+                                            onListingPress={(listing) => router.push({ pathname: '/listing', params: { id: listing.id } })}
+                                        />
                                     ),
                                 },
                             ]}
@@ -212,7 +225,7 @@ export function UserProfile() {
                                 onSeePastShows={() => setShowingPast(true)}
                                 onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                                 onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
-                                onShowPress={setDetailShow}
+                                onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
                                 activeProfileId={user.id}
                                 activeProfileType="user"
                             />
@@ -364,14 +377,20 @@ export function UserProfile() {
                 }}
             />
 
-            <ShowDetailModal
-                show={detailShow}
-                visible={detailShow !== null}
-                onClose={() => setDetailShow(null)}
-                onRsvp={handleRsvp}
-                activeProfileId={user.id}
-                activeProfileType="user"
+            <CreateListingModal
+                visible={createListingVisible}
+                onClose={() => setCreateListingVisible(false)}
+                creatorUserId={user.id}
+                defaultCity={user.city ?? ''}
+                defaultState={user.state ?? ''}
+                defaultCountry={user.country ?? ''}
+                editingListing={editingListing}
+                onSaved={() => {
+                    loadListings();
+                    setCreateListingVisible(false);
+                }}
             />
+
         </>
     );
 }

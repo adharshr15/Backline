@@ -16,6 +16,11 @@ import * as followService from '@/services/follow.service';
 import { Show, getShowsByProfile, repostShow, unrepostShow, getRsvpShows, rsvpShow, unrsvpShow } from '@/services/show.service';
 import { getMyConversations, createConversation, getParticipantProfile, ParticipantType } from '@/services/conversation.service';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
+import ProfileListingsSection from '@/components/profile/listings-section';
+import { TabSwitcher } from '@/components/ui/tab-switcher';
+import { Listing, getListingsByProfile } from '@/services/listing.service';
+
+type Tab = 'shows' | 'listings';
 import ProfileCalendarModal from '@/components/profile-calendar-modal';
 
 const AVATAR_SIZE = 80;
@@ -42,6 +47,9 @@ export default function ViewVenueProfile({ id }: Props) {
     const [showView, setShowView] = useState<'poster' | 'list'>('poster');
     const [viewerRsvpShows, setViewerRsvpShows] = useState<Show[]>([]);
     const [calendarVisible, setCalendarVisible] = useState(false);
+    const [listings, setListings] = useState<Listing[]>([]);
+    const [listingView, setListingView] = useState<'poster' | 'list'>('poster');
+    const [activeTab, setActiveTab] = useState<Tab>('shows');
 
     const followerType = activeProfile?.accountType as 'USER' | 'BAND' | 'VENUE';
     const followerBandId = followerType === 'BAND' ? activeProfile?.id : undefined;
@@ -71,6 +79,7 @@ export default function ViewVenueProfile({ id }: Props) {
         if (!id) return;
         getShowsByProfile('venue', id).then(setShows).catch(() => {});
         getShowsByProfile('venue', id, true).then(setPastShows).catch(() => {});
+        getListingsByProfile('venue', id).then(setListings).catch(() => {});
         if (activeProfile) getRsvpShows(activeProfileType, activeProfile.id).then(setViewerRsvpShows).catch(() => {});
     }, [id]);
 
@@ -231,23 +240,59 @@ export default function ViewVenueProfile({ id }: Props) {
                         </TouchableOpacity>
                     </View>
 
-                    <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: '#616161', marginHorizontal: -32, marginTop: 4, marginBottom: 12 }} />
+                    {(() => {
+                        const showsSection = (
+                            <ProfileShowsSection
+                                showView={showView}
+                                setShowView={setShowView}
+                                shows={shows}
+                                pastShows={pastShows}
+                                showingPast={showingPast}
+                                isOwner={false}
+                                onSeePastShows={() => setShowingPast(true)}
+                                onCreateShow={() => {}}
+                                onEditShow={() => {}}
+                                onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
+                                activeProfileId={activeProfile?.id}
+                                activeProfileType={activeProfileType}
+                                onRepost={handleRepost}
+                                onRsvp={handleRsvp}
+                            />
+                        );
 
-                    <ProfileShowsSection
-                        showView={showView}
-                        setShowView={setShowView}
-                        shows={shows}
-                        pastShows={pastShows}
-                        showingPast={showingPast}
-                        isOwner={false}
-                        onSeePastShows={() => setShowingPast(true)}
-                        onCreateShow={() => {}}
-                        onEditShow={() => {}}
-                        activeProfileId={activeProfile?.id}
-                        activeProfileType={activeProfileType}
-                        onRepost={handleRepost}
-                        onRsvp={handleRsvp}
-                    />
+                        if (listings.length === 0) {
+                            return (
+                                <>
+                                    <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: '#616161', marginHorizontal: -32, marginTop: 4, marginBottom: 12 }} />
+                                    {showsSection}
+                                </>
+                            );
+                        }
+
+                        return (
+                            <TabSwitcher
+                                tabs={[
+                                    { key: 'shows', content: showsSection },
+                                    {
+                                        key: 'listings',
+                                        content: (
+                                            <ProfileListingsSection
+                                                listings={listings}
+                                                view={listingView}
+                                                setView={setListingView}
+                                                isOwner={false}
+                                                onCreateListing={() => {}}
+                                                onListingPress={(listing) => router.push({ pathname: '/listing', params: { id: listing.id } })}
+                                            />
+                                        ),
+                                    },
+                                ]}
+                                activeTab={activeTab}
+                                onTabChange={setActiveTab}
+                                marginHorizontal={32}
+                            />
+                        );
+                    })()}
                 </>
             </ParallaxScrollView>
 

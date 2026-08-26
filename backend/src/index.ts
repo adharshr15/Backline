@@ -13,6 +13,7 @@ import searchRoutes from './routes/search.routes'
 import uploadsRoutes from './routes/uploads.routes'
 import membershipRoutes from './routes/membership.routes'
 import sceneRoutes from './routes/scene.routes'
+import listingRoutes from './routes/listing.routes'
 import { generalRateLimiter } from './middlewares/rateLimit.middleware';
 import path from 'path'
 
@@ -35,10 +36,19 @@ app.use('/follows', followRoutes);
 app.use('/search', searchRoutes);
 app.use('/membership-invites', membershipRoutes);
 app.use('/scenes', sceneRoutes);
+app.use('/listings', listingRoutes);
 
 
-app.listen(3000, () =>
+const server = app.listen(3000, () =>
   console.log('REST API server ready at: http://localhost:3000'),
 )
+
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error('Port 3000 is already in use — another server instance is running. Free it (netstat -ano | findstr :3000, then taskkill /PID <pid> /F) and retry.')
+    process.exit(1)
+  }
+  throw err
+})
 
 export { app }

@@ -98,7 +98,7 @@ model User {
   showsCreated      Show[]                    @relation("showCreatedByUser")
   showsReposted     Show[]                    @relation("showRepostedByUser")
   showsRsvp         Show[]                    @relation("showRsvpByUser")
-  rentalItems       RentalItem[]
+  listings          Listing[]                 @relation("UserListings")
 }
 
 model Band {
@@ -131,6 +131,7 @@ model Band {
   receivedConversationInvites                 ConversationInvite[]        @relation("ConversationInviteRecipientBand")
   following         Follow[]                  @relation("BandFollowing")
   followers         Follow[]                  @relation("BandFollowers")
+  listings          Listing[]                 @relation("BandListings")
 }
 
 model BandMember {
@@ -202,6 +203,7 @@ model Venue {
   receivedConversationInvites                 ConversationInvite[]          @relation("ConversationInviteRecipientVenue")
   following         Follow[]                  @relation("VenueFollowing")
   followers         Follow[]                  @relation("VenueFollowers")
+  listings          Listing[]                 @relation("VenueListings")
 
   @@index([city])
   @@index([capacity]) 
@@ -291,6 +293,7 @@ model Show {
 
   bands             ShowBand[]
   showInvites       ShowInvite[]
+  media             ShowMedia[]
 
   repostedByUsers   User[]                    @relation("showRepostedByUser")
   repostedByBands   Band[]                    @relation("showRepostedByBand")
@@ -328,6 +331,26 @@ model VenueBlock {
   startTime DateTime
   endTime   DateTime
   reason    String?
+}
+
+enum MediaType {
+  PHOTO
+  VIDEO
+}
+
+model ShowMedia {
+  id              String    @id @default(cuid())
+  show            Show      @relation(fields: [showId], references: [id])
+  showId          String
+  url             String
+  type            MediaType @default(PHOTO)
+  uploaderUserId  String
+  contributorType String
+  contributorId   String
+  createdAt       DateTime  @default(now())
+  deletedAt       DateTime?
+
+  @@index([showId])
 }
 
 model ShowBand {
@@ -499,22 +522,63 @@ model SceneFollow {
   @@index([followerId, followerType])
 }
 
-model RentalItem {
+enum ListingKind {
+  RENT
+  SALE
+}
+
+enum ListingStatus {
+  ACTIVE
+  CLAIMED
+  CLOSED
+}
+
+model Listing {
   id                String                    @id @default(cuid())
-  title             String 
+  title             String
+  description       String
+  category          String?
+  kind              ListingKind               @default(RENT)
+  price             Float?
+  openToTrades      Boolean                   @default(false)
+  status            ListingStatus             @default(ACTIVE)
+  coverUrl          String?
+
+  city              String
+  state             String?
+  country           String?
+  latitude          Float?
+  longitude         Float?
+
+  createdByUserId   String?
+  createdByUser     User?                     @relation("UserListings", fields: [createdByUserId], references: [id])
+  createdByBandId   String?
+  createdByBand     Band?                     @relation("BandListings", fields: [createdByBandId], references: [id])
+  createdByVenueId  String?
+  createdByVenue    Venue?                    @relation("VenueListings", fields: [createdByVenueId], references: [id])
+
+  media             ListingMedia[]
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
-  description       String 
-  pricePerDay       Float 
-  city              String 
-  latitude          Float?
-  longitude         Float?
-  owner             User                      @relation(fields: [ownerId], references: [id])
-  ownerId           String
 
-  @@index([city])
-  @@index([ownerId])
-  @@index([pricePerDay])
+  @@index([city, state])
+  @@index([createdByUserId])
+  @@index([createdByBandId])
+  @@index([createdByVenueId])
   @@index([latitude, longitude])
+}
+
+model ListingMedia {
+  id                String                    @id @default(cuid())
+  listing           Listing                   @relation(fields: [listingId], references: [id])
+  listingId         String
+  url               String
+  type              MediaType                 @default(PHOTO)
+  position          Int                       @default(0)
+  uploaderUserId    String
+  createdAt         DateTime                  @default(now())
+  deletedAt         DateTime?
+
+  @@index([listingId])
 }

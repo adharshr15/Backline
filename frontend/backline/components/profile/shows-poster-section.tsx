@@ -18,7 +18,7 @@ interface ProfileShowsSectionProps {
   onCreateShow: () => void;
   onEditShow: (show: Show) => void;
   onLeaveShow?: (show: Show) => void;
-  onShowPress?: (show: Show) => void;
+  onShowPress: (show: Show) => void;
   activeProfileId?: string;
   activeProfileType?: 'user' | 'band' | 'venue';
   onRepost?: (show: Show) => void;
@@ -75,6 +75,7 @@ export default function ProfileShowsSection({
           shows={shows}
           pastShows={pastShows}
           showingPast={showingPast}
+          onEditShow={onEditShow}
           onSeePastShows={onSeePastShows}
           onShowPress={onShowPress}
           activeProfileId={activeProfileId}

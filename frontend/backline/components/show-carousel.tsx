@@ -25,7 +25,7 @@ type ShowCardProps = {
   isOwner: boolean;
   onEdit: (show: Show) => void;
   onLeaveShow?: (show: Show) => void;
-  onShowPress?: (show: Show) => void;
+  onShowPress: (show: Show) => void;
   activeProfileId?: string;
   activeProfileType?: 'user' | 'band' | 'venue';
   onRepost?: (show: Show) => void;
@@ -231,14 +231,12 @@ function ShowCard({ show, cardWidth, isOwner, onEdit, onLeaveShow, onShowPress, 
                   </ThemedText>
                 </TouchableOpacity>
               )}
-              {onShowPress && (
-                <TouchableOpacity
-                  style={styles.editButton}
-                  onPress={(e) => { e.stopPropagation(); onShowPress(show); }}
-                >
-                  <ThemedText style={styles.editButtonText}>More</ThemedText>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={(e) => { e.stopPropagation(); onShowPress(show); }}
+              >
+                <ThemedText style={styles.editButtonText}>More</ThemedText>
+              </TouchableOpacity>
               {isOwner && isCreator && (
                 <TouchableOpacity
                   style={styles.editButton}
@@ -263,7 +261,7 @@ type Props = {
   onCreateShow: () => void;
   onEditShow: (show: Show) => void;
   onLeaveShow?: (show: Show) => void;
-  onShowPress?: (show: Show) => void;
+  onShowPress: (show: Show) => void;
   isOwner: boolean;
   activeProfileId?: string;
   activeProfileType?: 'user' | 'band' | 'venue';

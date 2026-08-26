@@ -212,6 +212,11 @@ export const searchVenues = async (query: string): Promise<{ id: string; name: s
     return response.data;
 };
 
+export const getShowById = async (id: string): Promise<Show> => {
+    const response = await api.get(`/shows/${id}`);
+    return response.data;
+};
+
 export const getShowsByLocation = async (city: string, state: string, dateRange?: string): Promise<Show[]> => {
     const params: Record<string, string> = { city, state };
     if (dateRange) params.dateRange = dateRange;

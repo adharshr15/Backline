@@ -22,17 +22,25 @@ function formatDoors(doorsString: string) {
 
 type ShowListCardProps = {
     show: Show;
+    isOwner: boolean;
+    onEditShow: (show: Show) => void;
     activeProfileId?: string;
     activeProfileType?: 'user' | 'band' | 'venue';
     onRepost?: (show: Show) => void;
     onRsvp?: (show: Show) => void;
-    onShowPress?: (show: Show) => void;
+    onShowPress: (show: Show) => void;
 };
 
-function ShowListCard({ show, activeProfileId, activeProfileType, onRepost, onRsvp, onShowPress }: ShowListCardProps) {
+function ShowListCard({ show, isOwner, onEditShow, activeProfileId, activeProfileType, onRepost, onRsvp, onShowPress }: ShowListCardProps) {
     const borderColor = useThemeColor({}, 'text');
     const { month, day, weekday } = formatDate(show.date);
     const bandNames = [show.bands.map(b => b.band.name).join(' · '), show.bandLineup].filter(Boolean).join(' · ');
+
+    const isCreator = activeProfileId
+        ? activeProfileType === 'band'  ? show.createdByBandId === activeProfileId
+        : activeProfileType === 'venue' ? show.createdByVenueId === activeProfileId
+        : show.createdByUserId === activeProfileId
+        : false;
 
     const hasReposted = activeProfileId
         ? activeProfileType === 'band'
@@ -70,8 +78,8 @@ function ShowListCard({ show, activeProfileId, activeProfileType, onRepost, onRs
             <View style={[styles.card, { borderColor }]}>
                 <TouchableOpacity
                     style={styles.cardMain}
-                    onPress={() => onShowPress?.(show)}
-                    activeOpacity={onShowPress ? 0.6 : 1}
+                    onPress={() => onShowPress(show)}
+                    activeOpacity={0.6}
                 >
                 <View style={styles.dateCol}>
                     <ThemedText style={styles.month}>{month}</ThemedText>
@@ -112,6 +120,11 @@ function ShowListCard({ show, activeProfileId, activeProfileType, onRepost, onRs
                             </ThemedText>
                         </TouchableOpacity>
                     )}
+                    {isOwner && isCreator && (
+                        <TouchableOpacity onPress={() => onEditShow(show)}>
+                            <ThemedText style={styles.editBtn}>Edit</ThemedText>
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
         </View>
@@ -123,15 +136,16 @@ type Props = {
     pastShows: Show[];
     showingPast: boolean;
     isOwner: boolean;
+    onEditShow: (show: Show) => void;
     onSeePastShows: () => void;
     activeProfileId?: string;
     activeProfileType?: 'user' | 'band' | 'venue';
     onRepost?: (show: Show) => void;
     onRsvp?: (show: Show) => void;
-    onShowPress?: (show: Show) => void;
+    onShowPress: (show: Show) => void;
 };
 
-export function ShowListView({ shows, pastShows, showingPast, isOwner, onSeePastShows, activeProfileId, activeProfileType, onRepost, onRsvp, onShowPress }: Props) {
+export function ShowListView({ shows, pastShows, showingPast, isOwner, onEditShow, onSeePastShows, activeProfileId, activeProfileType, onRepost, onRsvp, onShowPress }: Props) {
     const borderColor = useThemeColor({}, 'text');
 
     return (
@@ -143,9 +157,12 @@ export function ShowListView({ shows, pastShows, showingPast, isOwner, onSeePast
                         <ShowListCard
                             key={show.id}
                             show={show}
+                            isOwner={isOwner}
+                            onEditShow={onEditShow}
                             activeProfileId={activeProfileId}
                             activeProfileType={activeProfileType}
                             onRepost={onRepost}
+                            onRsvp={onRsvp}
                             onShowPress={onShowPress}
                         />
                     ))}
@@ -161,6 +178,8 @@ export function ShowListView({ shows, pastShows, showingPast, isOwner, onSeePast
                     <ShowListCard
                         key={show.id}
                         show={show}
+                        isOwner={isOwner}
+                        onEditShow={onEditShow}
                         activeProfileId={activeProfileId}
                         activeProfileType={activeProfileType}
                         onRepost={onRepost}
@@ -307,5 +326,10 @@ const styles = StyleSheet.create({
     },
     rsvpBtnActive: {
         opacity: 1,
+    },
+    editBtn: {
+        fontSize: 11,
+        fontWeight: '600',
+        opacity: 0.6,
     },
 });

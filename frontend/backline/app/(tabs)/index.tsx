@@ -8,7 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useAuth } from '@/context/AuthContext';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
-import { getFeedShows, repostShow, unrepostShow, Show } from '@/services/show.service';
+import { getFeedShows, Show } from '@/services/show.service';
 import { getMyConversations, getMyInvites, ParticipantType } from '@/services/conversation.service';
 import { getFollowedScenes, SceneFollow } from '@/services/scene.service';
 
@@ -37,11 +37,7 @@ function formatDoors(doorsString: string) {
 
 type FeedShowCardProps = {
     show: Show;
-    activeProfileId: string;
-    activeProfileType: 'user' | 'band' | 'venue';
-    activeProfileBandId?: string;
-    activeProfileVenueId?: string;
-    onRepostToggle: (show: Show) => void;
+    onPress: (show: Show) => void;
     sceneTag?: string | null;
 };
 
@@ -53,20 +49,13 @@ function getSceneTag(show: Show, scenes: SceneFollow[]): string | null {
     return match ? `${match.city} scene` : null;
 }
 
-function FeedShowCard({ show, activeProfileId, activeProfileType, onRepostToggle, sceneTag }: FeedShowCardProps) {
+function FeedShowCard({ show, onPress, sceneTag }: FeedShowCardProps) {
     const borderColor = useThemeColor({}, 'text');
     const { month, day, weekday } = formatDate(show.date);
     const bandNames = show.bands.map(b => b.band.name).join(' · ');
 
-    const hasReposted =
-        activeProfileType === 'band'
-            ? show.repostedByBands.some(b => b.id === activeProfileId)
-            : activeProfileType === 'venue'
-            ? show.repostedByVenues.some(v => v.id === activeProfileId)
-            : show.repostedByUsers.some(u => u.id === activeProfileId);
-
     return (
-        <View style={[styles.card, { borderColor }]}>
+        <TouchableOpacity style={[styles.card, { borderColor }]} onPress={() => onPress(show)} activeOpacity={0.7}>
             <View style={styles.dateCol}>
                 <ThemedText style={styles.month}>{month}</ThemedText>
                 <ThemedText style={styles.day}>{day}</ThemedText>
@@ -92,16 +81,7 @@ function FeedShowCard({ show, activeProfileId, activeProfileType, onRepostToggle
                     <ThemedText style={styles.sceneTag}>{sceneTag}</ThemedText>
                 ) : null}
             </View>
-
-            <View style={styles.repostCol}>
-                <ThemedText
-                    style={[styles.repostBtn, hasReposted && styles.repostBtnActive]}
-                    onPress={() => onRepostToggle(show)}
-                >
-                    {hasReposted ? '↩ Done' : '↩'}
-                </ThemedText>
-            </View>
-        </View>
+        </TouchableOpacity>
     );
 }
 
@@ -147,31 +127,6 @@ export default function HomeScreen() {
 
     useFocusEffect(loadFeed);
 
-    const handleRepostToggle = async (show: Show) => {
-        if (!activeProfile) return;
-        const type = profileType;
-        const bandId = type === 'band' ? activeProfile.id : undefined;
-        const venueId = type === 'venue' ? activeProfile.id : undefined;
-
-        const hasReposted =
-            type === 'band'
-                ? show.repostedByBands.some(b => b.id === activeProfile.id)
-                : type === 'venue'
-                ? show.repostedByVenues.some(v => v.id === activeProfile.id)
-                : show.repostedByUsers.some(u => u.id === activeProfile.id);
-
-        try {
-            if (hasReposted) {
-                await unrepostShow(show.id, type, bandId, venueId);
-            } else {
-                await repostShow(show.id, type, bandId, venueId);
-            }
-            loadFeed();
-        } catch (e) {
-            console.error(e);
-        }
-    };
-
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
             <View style={styles.headerRow}>
@@ -201,9 +156,7 @@ export default function HomeScreen() {
                 renderItem={({ item }) => (
                     <FeedShowCard
                         show={item}
-                        activeProfileId={activeProfile?.id ?? ''}
-                        activeProfileType={profileType}
-                        onRepostToggle={handleRepostToggle}
+                        onPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
                         sceneTag={getSceneTag(item, followedScenes)}
                     />
                 )}
@@ -305,18 +258,6 @@ const styles = StyleSheet.create({
         fontSize: 11,
         opacity: 0.5,
         marginTop: 1,
-    },
-    repostCol: {
-        justifyContent: 'center',
-        paddingHorizontal: 10,
-    },
-    repostBtn: {
-        fontSize: 18,
-        opacity: 0.4,
-    },
-    repostBtnActive: {
-        opacity: 1,
-        color: '#4CAF50',
     },
     sceneTag: {
         fontSize: 10,

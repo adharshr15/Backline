@@ -12,11 +12,17 @@ router.get('/:filename', (req, res) => {
   const { filename } = req.params;
   const filePath = path.join(uploadsPath, filename);
 
-  res.sendFile(filePath, (err) => {
-    if (err) {
-      console.error('Error sending file:', err);
-      res.status(404).json({ error: 'File not found' });
+  res.sendFile(filePath, (err: NodeJS.ErrnoException | undefined) => {
+    if (!err) return;
+
+    // Client aborted mid-stream (common with video seeking / player teardown) —
+    // headers are already sent, so don't try to respond again.
+    if (res.headersSent || req.aborted || (err as any).code === 'ECONNABORTED') {
+      return;
     }
+
+    console.error('Error sending file:', err.message);
+    res.status(404).json({ error: 'File not found' });
   });
 });
 

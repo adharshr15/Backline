@@ -12,8 +12,6 @@ import { TabSwitcher } from '@/components/ui/tab-switcher';
 import DiscoverSection, { DiscoverItem } from '@/components/explore/DiscoverSection';
 import NearbyShowsSection from '@/components/explore/NearbyShowsSection';
 import GenreFilterChips from '@/components/explore/GenreFilterChips';
-import ShowDetailModal from '@/components/show-detail-modal';
-import { Show } from '@/services/show.service';
 import { getBandsByFilter, BandSummary } from '@/services/band.service';
 import { getVenuesByFilter, VenueSummary } from '@/services/venue.service';
 import { followScene, unfollowScene, getFollowedScenes } from '@/services/scene.service';
@@ -30,7 +28,6 @@ export default function ScenePage() {
     const [activeTab, setActiveTab] = useState<SceneTab>('shows');
     const [isFollowing, setIsFollowing] = useState(false);
     const [followLoading, setFollowLoading] = useState(false);
-    const [detailShow, setDetailShow] = useState<Show | null>(null);
 
     const [bands, setBands] = useState<BandSummary[]>([]);
     const [venues, setVenues] = useState<VenueSummary[]>([]);
@@ -142,7 +139,7 @@ export default function ScenePage() {
                         key: 'shows',
                         content: (
                             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-                                <NearbyShowsSection city={city} state={state} onShowPress={setDetailShow} />
+                                <NearbyShowsSection city={city} state={state} onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })} />
                             </ScrollView>
                         ),
                     },
@@ -180,11 +177,6 @@ export default function ScenePage() {
                 marginHorizontal={16}
             />
 
-            <ShowDetailModal
-                show={detailShow}
-                visible={detailShow !== null}
-                onClose={() => setDetailShow(null)}
-            />
         </SafeAreaView>
     );
 }

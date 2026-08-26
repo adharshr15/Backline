@@ -15,13 +15,11 @@ import { Fonts } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/context/AuthContext';
 import type { Band, Venue } from '@/context/AuthContext';
-import { Show } from '@/services/show.service';
 import { getBandsByFilter, BandSummary } from '@/services/band.service';
 import { getVenuesByFilter, VenueSummary } from '@/services/venue.service';
 import NearbyShowsSection from '@/components/explore/NearbyShowsSection';
 import DiscoverSection, { DiscoverItem } from '@/components/explore/DiscoverSection';
 import GenreFilterChips from '@/components/explore/GenreFilterChips';
-import ShowDetailModal from '@/components/show-detail-modal';
 import { getFollowedScenes, getSceneCities, SceneFollow, SceneCity } from '@/services/scene.service';
 
 type SearchResult = {
@@ -63,7 +61,6 @@ export default function ExploreScreen() {
     const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
     const [bands, setBands] = useState<BandSummary[]>([]);
     const [venues, setVenues] = useState<VenueSummary[]>([]);
-    const [detailShow, setDetailShow] = useState<Show | null>(null);
     const [followedScenes, setFollowedScenes] = useState<SceneFollow[]>([]);
     const [sceneCities, setSceneCities] = useState<SceneCity[]>([]);
 
@@ -312,7 +309,7 @@ export default function ExploreScreen() {
                                             <NearbyShowsSection
                                                 city={location.city!}
                                                 state={location.state!}
-                                                onShowPress={setDetailShow}
+                                                onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
                                             />
                                             <ThemedText style={styles.filterLabel}>FILTER BY GENRE</ThemedText>
                                             <GenreFilterChips selected={selectedGenres} onToggle={handleGenreToggle} />
@@ -343,7 +340,7 @@ export default function ExploreScreen() {
                                             <NearbyShowsSection
                                                 city={location.city!}
                                                 state={location.state!}
-                                                onShowPress={setDetailShow}
+                                                onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
                                             />
                                         </>
                                     )}
@@ -354,11 +351,6 @@ export default function ExploreScreen() {
                 </ScrollView>
             )}
 
-            <ShowDetailModal
-                show={detailShow}
-                visible={detailShow !== null}
-                onClose={() => setDetailShow(null)}
-            />
         </SafeAreaView>
     );
 }

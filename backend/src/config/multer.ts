@@ -38,3 +38,21 @@ export const upload = multer({
     fileSize: 5 * 1024 * 1024,
   },
 });
+
+// media filter: allow images and videos
+const mediaFileFilter: multer.Options["fileFilter"] = (req, file, cb) => {
+  if (file.mimetype.startsWith("image/") || file.mimetype.startsWith("video/")) {
+    cb(null, true);
+  } else {
+    cb(new Error("Only image and video files are allowed"));
+  }
+};
+
+// media upload instance (photos + videos, larger limit)
+export const uploadMedia = multer({
+  storage,
+  fileFilter: mediaFileFilter,
+  limits: {
+    fileSize: 60 * 1024 * 1024,
+  },
+});

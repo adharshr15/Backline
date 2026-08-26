@@ -106,7 +106,13 @@ export const getShowById = async (req: Request, res: Response) => {
       include: {
         venue: true,
         tour: true,
-        bands: { include: { band: true } }
+        bands: { include: { band: true } },
+        repostedByBands: { select: { id: true } },
+        repostedByUsers: { select: { id: true } },
+        repostedByVenues: { select: { id: true } },
+        rsvpBands: { select: { id: true } },
+        rsvpUsers: { select: { id: true } },
+        rsvpVenues: { select: { id: true } },
       }
     });
 
@@ -682,6 +688,90 @@ export const getRsvpShows = async (req: AuthRequest, res: Response) => {
     });
 
     res.json(shows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+
+// MEDIA
+
+export const getShowMedia = async (req: Request, res: Response) => {
+  try {
+    const showId = req.params.id as string;
+    const media = await prisma.showMedia.findMany({
+      where: { showId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+    });
+    res.json(media);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const addShowMedia = async (req: AuthRequest, res: Response) => {
+  try {
+    const showId = req.params.id as string;
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const file = req.file as Express.Multer.File | undefined;
+    if (!file) return res.status(400).json({ error: "No media file provided" });
+
+    const { contributorType, contributorId, type } = req.body as {
+      contributorType?: string;
+      contributorId?: string;
+      type?: string;
+    };
+
+    const show = await prisma.show.findFirst({ where: { id: showId, deletedAt: null } });
+    if (!show) return res.status(404).json({ error: "Show not found" });
+
+    const media = await prisma.showMedia.create({
+      data: {
+        showId,
+        url: `/uploads/${file.filename}`,
+        type: type === "VIDEO" ? "VIDEO" : "PHOTO",
+        uploaderUserId: userId,
+        contributorType: contributorType ?? "USER",
+        contributorId: contributorId ?? userId,
+      },
+    });
+
+    res.status(201).json(media);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const deleteShowMedia = async (req: AuthRequest, res: Response) => {
+  try {
+    const mediaId = req.params.mediaId as string;
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const media = await prisma.showMedia.findUnique({ where: { id: mediaId } });
+    if (!media || media.deletedAt) return res.status(404).json({ error: "Media not found" });
+
+    // Uploader can always delete their own media
+    let allowed = media.uploaderUserId === userId;
+
+    // Show owner (creator user / creator band member / creator or attached venue rep)
+    if (!allowed) allowed = await canManageShow(media.showId, userId);
+
+    // Member of any band on the show's lineup
+    if (!allowed) {
+      const show = await prisma.show.findUnique({
+        where: { id: media.showId },
+        include: { bands: { include: { band: { include: { members: true } } } } },
+      });
+      allowed = !!show?.bands.some(sb => sb.band.members.some(m => m.userId === userId));
+    }
+
+    if (!allowed) return res.status(403).json({ error: "Not allowed to delete this media" });
+
+    await prisma.showMedia.update({ where: { id: mediaId }, data: { deletedAt: new Date() } });
+    res.json({ message: "Deleted" });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

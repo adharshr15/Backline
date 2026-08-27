@@ -474,6 +474,12 @@ model Message {
   senderVenue     Venue?                      @relation("VenueMessages", fields: [senderVenueId], references: [id])
   senderVenueId   String?
 
+  // Optional attachment: an entity previewed inline in the message.
+  // One nullable FK per attachable kind (same idiom as the sender FKs above).
+  listing         Listing?                    @relation("ListingMessages", fields: [listingId], references: [id])
+  listingId       String?
+  // showId / show ← add here in the shows follow-up
+
   @@index([conversationId])
   @@index([createdAt])
 }
@@ -558,6 +564,7 @@ model Listing {
   createdByVenue    Venue?                    @relation("VenueListings", fields: [createdByVenueId], references: [id])
 
   media             ListingMedia[]
+  messages          Message[]                 @relation("ListingMessages")
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?

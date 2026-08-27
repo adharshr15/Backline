@@ -2,6 +2,7 @@ import { Response } from "express"
 import { prisma } from "../lib/prisma"
 import { AuthRequest } from "../middlewares/auth.middleware"
 import { ParticipantType } from "../../generated/prisma/enums"
+import { listingPreviewSelect } from "./message.controller"
 
 export const getMyConversations = async (req: AuthRequest, res: Response) => {
   try {
@@ -81,7 +82,8 @@ export const getMyConversations = async (req: AuthRequest, res: Response) => {
         },
         messages: {
           take: 1,
-          orderBy: { createdAt: "desc" }
+          orderBy: { createdAt: "desc" },
+          include: { listing: { select: listingPreviewSelect } }
         },
         invites: {
           where: { status: "PENDING" },
@@ -176,7 +178,7 @@ export const createConversation = async (req: AuthRequest, res: Response) => {
   try {
     const creatorId = req.user?.userId as string
 
-    const { name, userIds = [], bandIds = [], venueIds = [], senderType, senderId, content }:
+    const { name, userIds = [], bandIds = [], venueIds = [], senderType, senderId, content, listingId }:
       {
         name?: string
         userIds: string[]
@@ -185,7 +187,14 @@ export const createConversation = async (req: AuthRequest, res: Response) => {
         senderType: ParticipantType
         senderId: string
         content?: string
+        listingId?: string
       } = req.body
+
+    // validate optional listing attachment
+    if (listingId) {
+      const listing = await prisma.listing.findFirst({ where: { id: listingId, deletedAt: null } })
+      if (!listing) return res.status(400).json({ error: "Attached listing not found" })
+    }
 
     // determine sender field
     let senderField: any = {}
@@ -237,7 +246,8 @@ export const createConversation = async (req: AuthRequest, res: Response) => {
         data: {
           conversationId: conversation.id,
           content,
-          ...senderField
+          ...senderField,
+          ...(listingId ? { listingId } : {})
         }
       })
     }

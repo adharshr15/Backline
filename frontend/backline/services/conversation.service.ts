@@ -1,6 +1,90 @@
 import api from './api';
+import { Listing, formatListingPrice, getListingById } from './listing.service';
 
 export type ParticipantType = 'USER' | 'BAND' | 'VENUE';
+
+// ---- In-message attachments -------------------------------------------------
+// A message may carry one inline preview of another entity. Listings are the
+// first kind; shows (and future kinds) slot in behind the same interface.
+
+export type AttachmentKind = 'LISTING' | 'SHOW';
+
+// Slim listing shape the backend returns for previews (see listingPreviewSelect).
+export type ListingPreview = Pick<
+    Listing,
+    'id' | 'title' | 'coverUrl' | 'kind' | 'price' | 'openToTrades' | 'status' | 'category' | 'city' | 'state'
+>;
+
+// Discriminated union normalized from the per-kind FKs on a Message.
+export type MessageAttachment =
+    | { kind: 'LISTING'; listing: ListingPreview };
+    // | { kind: 'SHOW'; show: ShowPreview }  ← add in the shows follow-up
+
+// Flat presentational contract every attachment UI consumes.
+export interface AttachmentPreview {
+    kind: AttachmentKind;
+    id: string;
+    coverUrl?: string | null;   // relative path; card prefixes BASE_URL
+    fallback: 'icon' | 'image'; // listing → icon placeholder; show → default image
+    title: string;
+    subtitle: string;
+    route: string;              // tab route to open on tap, e.g. 'listing' | 'show'
+}
+
+// The single place each kind is taught how to look.
+export function toAttachmentPreview(a: MessageAttachment): AttachmentPreview {
+    switch (a.kind) {
+        case 'LISTING': {
+            const l = a.listing;
+            return {
+                kind: 'LISTING',
+                id: l.id,
+                coverUrl: l.coverUrl,
+                fallback: 'icon',
+                title: l.title,
+                subtitle: [formatListingPrice(l), l.category, l.city].filter(Boolean).join(' · '),
+                route: 'listing',
+            };
+        }
+    }
+}
+
+// A lightweight reference passed from a source screen through to send.
+export interface AttachmentRef {
+    kind: AttachmentKind;
+    id: string;
+}
+
+// Reads whichever attachment FK is populated on a message.
+export function getMessageAttachment(msg: Message): MessageAttachment | null {
+    if (msg.listing) return { kind: 'LISTING', listing: msg.listing };
+    return null;
+}
+
+// Collapses a resolved attachment back to a bare {kind, id} ref for sending.
+export function attachmentToRef(a: MessageAttachment): AttachmentRef {
+    switch (a.kind) {
+        case 'LISTING':
+            return { kind: 'LISTING', id: a.listing.id };
+    }
+}
+
+// Fetches the full entity for a bare {kind, id} ref (used to stage a preview).
+export async function resolveAttachment(kind: AttachmentKind, id: string): Promise<MessageAttachment> {
+    switch (kind) {
+        case 'LISTING':
+            return { kind: 'LISTING', listing: await getListingById(id) };
+        default:
+            throw new Error(`Unsupported attachment kind: ${kind}`);
+    }
+}
+
+// Maps a {kind, id} ref to the matching FK field on the send/create payload.
+function attachmentBody(attachment?: AttachmentRef): Record<string, string> {
+    if (!attachment) return {};
+    if (attachment.kind === 'LISTING') return { listingId: attachment.id };
+    return {};
+}
 
 export interface ParticipantProfile {
     id: string;
@@ -40,6 +124,9 @@ export interface Message {
     senderUser?: MessageSender | null;
     senderBand?: MessageSender | null;
     senderVenue?: MessageSender | null;
+    // Optional inline attachment (one FK per kind).
+    listingId?: string | null;
+    listing?: ListingPreview | null;
 }
 
 export interface Conversation {
@@ -129,10 +216,11 @@ export const sendMessage = async (
     conversationId: string,
     senderType: ParticipantType,
     senderId: string,
-    content: string
+    content: string,
+    attachment?: AttachmentRef
 ): Promise<Message> => {
     const res = await api.post(`/conversations/${conversationId}/messages`, {
-        senderType, senderId, content,
+        senderType, senderId, content, ...attachmentBody(attachment),
     });
     return res.data;
 };
@@ -181,11 +269,12 @@ export const createGroupConversation = async (
     recipients: Recipient[],
     content?: string,
     name?: string,
+    attachment?: AttachmentRef,
 ): Promise<Conversation> => {
     const userIds  = recipients.filter(r => r.type === 'USER').map(r => r.id);
     const bandIds  = recipients.filter(r => r.type === 'BAND').map(r => r.id);
     const venueIds = recipients.filter(r => r.type === 'VENUE').map(r => r.id);
-    const res = await api.post('/conversations', { senderType, senderId, userIds, bandIds, venueIds, content, name });
+    const res = await api.post('/conversations', { senderType, senderId, userIds, bandIds, venueIds, content, name, ...attachmentBody(attachment) });
     return res.data;
 };
 

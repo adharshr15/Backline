@@ -9,15 +9,18 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTabHref } from '@/hooks/use-tab-href';
 import { useAuth } from '@/context/AuthContext';
 import { BASE_URL } from '@/services/api';
 import api from '@/services/api';
 import { Fonts } from '@/constants/theme';
 import {
     getMyConversations, getMessages, sendMessage, createGroupConversation,
-    getParticipantProfile, getMessageSender,
+    getParticipantProfile, getMessageSender, resolveAttachment, attachmentToRef,
     Conversation, Message, Recipient, ParticipantType,
+    MessageAttachment, AttachmentKind,
 } from '@/services/conversation.service';
+import { StagedAttachmentBanner } from '@/components/message-attachment';
 
 const FONT = Fonts?.rounded ?? undefined;
 
@@ -37,12 +40,15 @@ interface SelectedRecipient {
 }
 
 export default function ComposeScreen() {
-    const { recipientType, recipientId, recipientName } = useLocalSearchParams<{
+    const { recipientType, recipientId, recipientName, attachmentType, attachmentId } = useLocalSearchParams<{
         recipientType?: string;
         recipientId?: string;
         recipientName?: string;
+        attachmentType?: string;
+        attachmentId?: string;
     }>();
     const router = useRouter();
+    const tabHref = useTabHref();
     const { activeProfile } = useAuth();
     const bgColor = useThemeColor({}, 'background');
     const textColor = useThemeColor({}, 'text');
@@ -71,6 +77,15 @@ export default function ComposeScreen() {
     const [groupName, setGroupName] = useState('');
     const [messageText, setMessageText] = useState('');
     const [sending, setSending] = useState(false);
+    const [pendingAttachment, setPendingAttachment] = useState<MessageAttachment | null>(null);
+
+    // Resolve a staged attachment passed in via params (e.g. from "Message Lister")
+    useEffect(() => {
+        if (!attachmentType || !attachmentId) return;
+        resolveAttachment(attachmentType as AttachmentKind, attachmentId)
+            .then(setPendingAttachment)
+            .catch(() => {});
+    }, [attachmentType, attachmentId]);
 
     // Existing 1:1 conversation detection
     const [existingConv, setExistingConv] = useState<Conversation | null>(null);
@@ -145,14 +160,15 @@ export default function ComposeScreen() {
     const handleSend = async () => {
         if (!messageText.trim() || sending || selected.length === 0) return;
         setSending(true);
+        const attachmentRef = pendingAttachment ? attachmentToRef(pendingAttachment) : undefined;
         try {
             if (existingConv) {
-                await sendMessage(existingConv.id, senderType, senderId, messageText.trim());
-                router.replace(`/messages/${existingConv.id}`);
+                await sendMessage(existingConv.id, senderType, senderId, messageText.trim(), attachmentRef);
+                router.replace(tabHref(`messages/${existingConv.id}`));
             } else {
                 const recipients: Recipient[] = selected.map(s => ({ type: s.type, id: s.id }));
-                const conv = await createGroupConversation(senderType, senderId, recipients, messageText.trim(), groupName.trim() || undefined);
-                router.replace(`/messages/${conv.id}`);
+                const conv = await createGroupConversation(senderType, senderId, recipients, messageText.trim(), groupName.trim() || undefined, attachmentRef);
+                router.replace(tabHref(`messages/${conv.id}`));
             }
         } catch (e) { console.error(e); }
         finally { setSending(false); }
@@ -284,6 +300,11 @@ export default function ComposeScreen() {
                     </ThemedText>
                 )}
             </View>
+
+            {/* Staged attachment preview */}
+            {pendingAttachment && (
+                <StagedAttachmentBanner attachment={pendingAttachment} onClear={() => setPendingAttachment(null)} />
+            )}
 
             {/* Input bar */}
             <View style={[styles.inputRow, {

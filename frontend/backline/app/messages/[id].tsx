@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTabHref } from '@/hooks/use-tab-href';
 import { useAuth } from '@/context/AuthContext';
 import { BASE_URL } from '@/services/api';
 import { Fonts } from '@/constants/theme';
@@ -15,14 +16,21 @@ import { Ionicons } from '@expo/vector-icons';
 import {
     getMessages, sendMessage, getMyConversations,
     Message, getMessageSender, getParticipantProfile,
-    ParticipantType,
+    ParticipantType, resolveAttachment, attachmentToRef, getMessageAttachment,
+    MessageAttachment, AttachmentKind, AttachmentPreview,
 } from '@/services/conversation.service';
+import { AttachmentCard, StagedAttachmentBanner } from '@/components/message-attachment';
 
 const FONT = Fonts?.rounded ?? undefined;
 
 export default function ConversationScreen() {
-    const { id: conversationId } = useLocalSearchParams<{ id: string }>();
+    const { id: conversationId, attachmentType, attachmentId } = useLocalSearchParams<{
+        id: string;
+        attachmentType?: string;
+        attachmentId?: string;
+    }>();
     const router = useRouter();
+    const tabHref = useTabHref();
     const { activeProfile } = useAuth();
     const bgColor = useThemeColor({}, 'background');
     const textColor = useThemeColor({}, 'text');
@@ -36,6 +44,19 @@ export default function ConversationScreen() {
     const [sending, setSending] = useState(false);
     const [title, setTitle] = useState('');
     const [isGroup, setIsGroup] = useState(false);
+    const [pendingAttachment, setPendingAttachment] = useState<MessageAttachment | null>(null);
+
+    // Resolve a staged attachment passed in via params (e.g. from "Message Lister")
+    useEffect(() => {
+        if (!attachmentType || !attachmentId) return;
+        resolveAttachment(attachmentType as AttachmentKind, attachmentId)
+            .then(setPendingAttachment)
+            .catch(() => {});
+    }, [attachmentType, attachmentId]);
+
+    const openAttachment = (preview: AttachmentPreview) => {
+        router.push({ pathname: tabHref(preview.route), params: { id: preview.id } });
+    };
 
     const HEADER_H = 52 + insets.top;
 
@@ -83,10 +104,12 @@ export default function ConversationScreen() {
     const handleSend = async () => {
         if (!text.trim() || sending || !conversationId) return;
         setSending(true);
+        const attachmentRef = pendingAttachment ? attachmentToRef(pendingAttachment) : undefined;
         try {
-            const msg = await sendMessage(conversationId, senderType, senderId, text.trim());
+            const msg = await sendMessage(conversationId, senderType, senderId, text.trim(), attachmentRef);
             setMessages(prev => [...prev, msg]);
             setText('');
+            setPendingAttachment(null);
             markRead(conversationId, senderType, senderId).catch(() => {});
             setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
         } catch (e) { console.error(e); }
@@ -165,19 +188,34 @@ export default function ConversationScreen() {
                                             ? [styles.bubbleMine, { backgroundColor: '#4A90D9' }]
                                             : [styles.bubbleTheirs, { backgroundColor: borderColor + '22' }],
                                     ]}>
-                                        <ThemedText style={[
-                                            styles.bubbleText,
-                                            mine && { color: '#fff' },
-                                            FONT && { fontFamily: FONT },
-                                        ]}>
-                                            {msg.content}
-                                        </ThemedText>
+                                        {(() => {
+                                            const attachment = getMessageAttachment(msg);
+                                            return attachment ? (
+                                                <View style={styles.bubbleAttachment}>
+                                                    <AttachmentCard attachment={attachment} onPress={openAttachment} dark={mine} />
+                                                </View>
+                                            ) : null;
+                                        })()}
+                                        {!!msg.content && (
+                                            <ThemedText style={[
+                                                styles.bubbleText,
+                                                mine && { color: '#fff' },
+                                                FONT && { fontFamily: FONT },
+                                            ]}>
+                                                {msg.content}
+                                            </ThemedText>
+                                        )}
                                     </View>
                                 </View>
                             </View>
                         );
                     }}
                 />
+            )}
+
+            {/* Staged attachment preview */}
+            {pendingAttachment && (
+                <StagedAttachmentBanner attachment={pendingAttachment} onClear={() => setPendingAttachment(null)} />
             )}
 
             {/* Input bar — always at bottom, above keyboard when open */}
@@ -228,6 +266,7 @@ const styles = StyleSheet.create({
     bubbleAvatar: { width: 28, height: 28, borderRadius: 14, marginRight: 6 },
     avatarHidden: { opacity: 0 },
     bubble: { maxWidth: '75%', borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8 },
+    bubbleAttachment: { marginBottom: 6, minWidth: 200 },
     bubbleMine: { borderBottomRightRadius: 4 },
     bubbleTheirs: { borderBottomLeftRadius: 4 },
     bubbleText: { fontSize: 15, lineHeight: 20 },

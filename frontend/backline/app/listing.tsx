@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTabHref } from '@/hooks/use-tab-href';
 import { useAuth } from '@/context/AuthContext';
 import { BASE_URL } from '@/services/api';
 import {
@@ -33,6 +34,7 @@ import { getMyConversations, getParticipantProfile, ParticipantType } from '@/se
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const tabHref = useTabHref();
   const { activeProfile } = useAuth();
   const { height, width } = useWindowDimensions();
   const borderColor = useThemeColor({}, 'text');
@@ -78,11 +80,17 @@ export default function ListingDetailScreen() {
         c.participants.some(p => getParticipantProfile(p)?.id === ownerInfo.owner.id)
       );
       if (existing) {
-        router.push(`/messages/${existing.id}`);
+        router.push({
+          pathname: tabHref(`messages/${existing.id}`),
+          params: { attachmentType: 'LISTING', attachmentId: listing.id },
+        });
       } else {
         router.push({
-          pathname: '/messages/compose',
-          params: { recipientType, recipientId: ownerInfo.owner.id, recipientName: ownerInfo.owner.name },
+          pathname: tabHref('messages/compose'),
+          params: {
+            recipientType, recipientId: ownerInfo.owner.id, recipientName: ownerInfo.owner.name,
+            attachmentType: 'LISTING', attachmentId: listing.id,
+          },
         });
       }
     } catch (e) { console.error(e); }
@@ -124,18 +132,18 @@ export default function ListingDetailScreen() {
   };
 
   const openOwnerProfile = () => {
-    if (!listing) return;
+    if (!listing || isOwner) return;
     const ownerInfo = getListingOwner(listing);
     if (!ownerInfo) return;
-    const base =
-      ownerInfo.type === 'band' ? '/explore/view-band' :
-      ownerInfo.type === 'venue' ? '/explore/view-venue' : '/explore/view-user';
-    router.push(`${base}/${ownerInfo.owner.id}` as any);
+    const seg =
+      ownerInfo.type === 'band' ? 'view-band' :
+      ownerInfo.type === 'venue' ? 'view-venue' : 'view-user';
+    router.push(tabHref(`${seg}/${ownerInfo.owner.id}`));
   };
 
   const openScene = () => {
     if (listing?.city && listing?.state) {
-      router.push({ pathname: '/profile/scene', params: { city: listing.city, state: listing.state } } as any);
+      router.push({ pathname: tabHref('scene'), params: { city: listing.city, state: listing.state } } as any);
     }
   };
 
@@ -269,7 +277,7 @@ export default function ListingDetailScreen() {
             <View style={[styles.divider, { backgroundColor: borderColor }]} />
             <View style={styles.section}>
               <ThemedText style={styles.label}>LISTED BY</ThemedText>
-              <TouchableOpacity style={styles.ownerRow} onPress={openOwnerProfile} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.ownerRow} onPress={openOwnerProfile} activeOpacity={0.7} disabled={isOwner}>
                 <Image
                   source={ownerInfo.owner.profileImageUrl
                     ? { uri: `${BASE_URL}${ownerInfo.owner.profileImageUrl}` }
@@ -278,9 +286,11 @@ export default function ListingDetailScreen() {
                 />
                 <View style={{ flex: 1 }}>
                   <ThemedText style={styles.ownerName}>{ownerInfo.owner.name}</ThemedText>
-                  <ThemedText style={styles.ownerType}>{ownerInfo.type.toUpperCase()}</ThemedText>
+                  <ThemedText style={styles.ownerType}>{isOwner ? 'YOUR LISTING' : ownerInfo.type.toUpperCase()}</ThemedText>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={borderColor} style={{ opacity: 0.4 }} />
+                {!isOwner && (
+                  <Ionicons name="chevron-forward" size={18} color={borderColor} style={{ opacity: 0.4 }} />
+                )}
               </TouchableOpacity>
             </View>
           </>

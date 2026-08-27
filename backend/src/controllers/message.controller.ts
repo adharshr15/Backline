@@ -3,7 +3,21 @@ import { prisma } from "../lib/prisma"
 import { AuthRequest } from "../middlewares/auth.middleware"
 import { ParticipantType } from "../../generated/prisma/enums"
 
-// GET 
+// Slim listing fields needed to render an in-message preview card.
+export const listingPreviewSelect = {
+  id: true, title: true, coverUrl: true, kind: true, price: true,
+  openToTrades: true, status: true, category: true, city: true, state: true,
+} as const;
+
+// Shared message include: senders + optional attachment previews.
+export const messageInclude = {
+  senderUser:  { select: { id: true, name: true, profileImageUrl: true } },
+  senderBand:  { select: { id: true, name: true, profileImageUrl: true } },
+  senderVenue: { select: { id: true, name: true, profileImageUrl: true } },
+  listing:     { select: listingPreviewSelect },
+} as const;
+
+// GET
 export const getMessages = async (req: AuthRequest, res: Response) => {
   try {
     const conversationId = req.params.id as string;
@@ -57,11 +71,7 @@ export const getMessages = async (req: AuthRequest, res: Response) => {
     const messages = await prisma.message.findMany({
       where: { conversationId },
       orderBy: { createdAt: "asc" },
-      include: {
-        senderUser:  { select: { id: true, name: true, profileImageUrl: true } },
-        senderBand:  { select: { id: true, name: true, profileImageUrl: true } },
-        senderVenue: { select: { id: true, name: true, profileImageUrl: true } },
-      },
+      include: messageInclude,
     });
 
     return res.status(200).json(messages);
@@ -79,10 +89,11 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
 
     if (!userId) return res.status(401).json({ error: "Unauthorized" })
 
-    const { content, senderType, senderId }: { 
-      content: string; 
-      senderType: ParticipantType; 
-      senderId: string 
+    const { content, senderType, senderId, listingId }: {
+      content: string;
+      senderType: ParticipantType;
+      senderId: string;
+      listingId?: string;
     } = req.body
 
     if (!content || !senderType || !senderId) {
@@ -128,6 +139,12 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
 
     if (!participant) return res.status(403).json({ error: "Sender is not a participant in this conversation" })
 
+    // validate optional listing attachment
+    if (listingId) {
+      const listing = await prisma.listing.findFirst({ where: { id: listingId, deletedAt: null } })
+      if (!listing) return res.status(400).json({ error: "Attached listing not found" })
+    }
+
     // create message
     const messageData: any = {
       conversationId,
@@ -136,8 +153,9 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     if (senderType === ParticipantType.USER) messageData.senderUserId = senderId
     if (senderType === ParticipantType.BAND) messageData.senderBandId = senderId
     if (senderType === ParticipantType.VENUE) messageData.senderVenueId = senderId
+    if (listingId) messageData.listingId = listingId
 
-    const message = await prisma.message.create({ data: messageData })
+    const message = await prisma.message.create({ data: messageData, include: messageInclude })
 
     // update conversation updatedAt
     await prisma.conversation.update({

@@ -10,16 +10,20 @@ import * as Location from 'expo-location';
 import { ThemedText } from '@/components/themed-text';
 import { Fonts } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTabHref } from '@/hooks/use-tab-href';
 import { useAuth } from '@/context/AuthContext';
 import { getListings, Listing, ListingKind } from '@/services/listing.service';
 import { getFollowedScenes, getSceneCities, SceneFollow, SceneCity } from '@/services/scene.service';
 import { ListingCard, useGridTileWidth } from '@/components/listing-card';
 import CreateListingModal from '@/components/profile/create-listing-modal';
+import LocationPickerModal from '@/components/marketplace/location-picker-modal';
+import { getSavedLocation, saveLocation, getHistory, addToHistory, clearHistory, SavedLocation } from '@/utils/marketplace-location';
 
 type KindFilter = 'ALL' | ListingKind;
 
 export default function MarketplaceScreen() {
     const router = useRouter();
+    const tabHref = useTabHref();
     const scheme = useColorScheme();
     const isDark = scheme === 'dark';
     const textColor = useThemeColor({}, 'text');
@@ -36,6 +40,8 @@ export default function MarketplaceScreen() {
     const [listings, setListings] = useState<Listing[]>([]);
     const [loading, setLoading] = useState(false);
     const [createVisible, setCreateVisible] = useState(false);
+    const [pickerVisible, setPickerVisible] = useState(false);
+    const [history, setHistory] = useState<SavedLocation[]>([]);
     const [followedScenes, setFollowedScenes] = useState<SceneFollow[]>([]);
     const [sceneCities, setSceneCities] = useState<SceneCity[]>([]);
 
@@ -50,26 +56,67 @@ export default function MarketplaceScreen() {
         activeProfile?.accountType === 'VENUE' ? { creatorVenueId: activeProfile.id } :
         activeProfile ? { creatorUserId: activeProfile.id } : {};
 
-    // Resolve location: GPS → profile fallback
+    // Resolve location via GPS, falling back to the active profile's city.
+    const resolveViaGps = useCallback(async (): Promise<{ city: string | null; state: string | null }> => {
+        try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status === 'granted') {
+                const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                const [addr] = await Location.reverseGeocodeAsync(loc.coords);
+                if (addr.city && addr.region) return { city: addr.city, state: addr.region };
+            }
+        } catch {}
+        return { city: activeProfile?.city ?? null, state: activeProfile?.state ?? null };
+    }, [activeProfile?.city, activeProfile?.state]);
+
+    // Startup: a saved manual choice wins; otherwise default to the profile's city/state.
     useEffect(() => {
         (async () => {
             setLocationLoading(true);
-            try {
-                const { status } = await Location.requestForegroundPermissionsAsync();
-                if (status === 'granted') {
-                    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-                    const [addr] = await Location.reverseGeocodeAsync(loc.coords);
-                    if (addr.city && addr.region) {
-                        setLocation({ city: addr.city, state: addr.region });
-                        setLocationLoading(false);
-                        return;
-                    }
-                }
-            } catch {}
-            setLocation({ city: activeProfile?.city ?? null, state: activeProfile?.state ?? null });
+            const saved = await getSavedLocation();
+            if (saved) {
+                setLocation({ city: saved.city, state: saved.state });
+            } else {
+                setLocation({ city: activeProfile?.city ?? null, state: activeProfile?.state ?? null });
+            }
             setLocationLoading(false);
         })();
+    }, [activeProfile?.city, activeProfile?.state]);
+
+    // Load recent-city history once.
+    useEffect(() => { getHistory().then(setHistory); }, []);
+
+    // Persist + apply a manual location choice, recording it in history.
+    const applyLocation = useCallback((loc: { city: string; state: string | null }) => {
+        setLocation(loc);
+        saveLocation(loc);
+        addToHistory(loc).then(setHistory);
+        setPickerVisible(false);
     }, []);
+
+    const handleClearHistory = useCallback(() => { clearHistory(); setHistory([]); }, []);
+
+    // "Use current location" from the picker: re-resolve via GPS and persist.
+    const handleUseCurrentLocation = useCallback(async () => {
+        setLocationLoading(true);
+        const resolved = await resolveViaGps();
+        if (resolved.city) applyLocation({ city: resolved.city, state: resolved.state });
+        setLocationLoading(false);
+    }, [resolveViaGps, applyLocation]);
+
+    // Free-text city: best-effort normalize to city/state via geocoding, else use raw text.
+    const handleFreeText = useCallback(async (loc: { city: string; state: string | null }) => {
+        // A suggestion pick already carries a state; only geocode raw free text.
+        if (loc.state) { applyLocation(loc); return; }
+        try {
+            const [coords] = await Location.geocodeAsync(loc.city);
+            if (coords) {
+                const [addr] = await Location.reverseGeocodeAsync(coords);
+                if (addr?.city) { applyLocation({ city: addr.city, state: addr.region ?? null }); return; }
+            }
+        } catch {}
+        applyLocation(loc);
+    }, [applyLocation]);
 
     useEffect(() => {
         if (!activeProfile) return;
@@ -104,12 +151,13 @@ export default function MarketplaceScreen() {
         { key: 'SALE', label: 'For Sale' },
     ];
 
-    const otherScenes = [
-        ...followedScenes.map(s => ({ city: s.city, state: s.state })),
+    // Suggested cities for the picker: followed scenes first, then venue cities.
+    const citySuggestions = [
+        ...followedScenes.map(s => ({ city: s.city, state: s.state, venueCount: undefined as number | undefined })),
         ...sceneCities
             .filter(c => !followedScenes.some(f => f.city.toLowerCase() === c.city.toLowerCase() && f.state.toLowerCase() === c.state.toLowerCase()))
-            .map(c => ({ city: c.city, state: c.state })),
-    ].slice(0, 12);
+            .map(c => ({ city: c.city, state: c.state, venueCount: c.venueCount })),
+    ];
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
@@ -135,27 +183,18 @@ export default function MarketplaceScreen() {
                 )}
             </View>
 
-            {/* City selector */}
-            {otherScenes.length > 0 && (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cityRow}>
-                    {locationLabel && (
-                        <View style={[styles.cityChip, styles.cityChipActive]}>
-                            <ThemedText style={styles.cityChipTextActive}>{location.city}</ThemedText>
-                        </View>
-                    )}
-                    {otherScenes
-                        .filter(s => s.city.toLowerCase() !== (location.city ?? '').toLowerCase())
-                        .map(s => (
-                            <TouchableOpacity
-                                key={`${s.city}-${s.state}`}
-                                style={[styles.cityChip, { borderColor }]}
-                                onPress={() => setLocation({ city: s.city, state: s.state })}
-                            >
-                                <ThemedText style={styles.cityChipText}>{s.city}</ThemedText>
-                            </TouchableOpacity>
-                        ))}
-                </ScrollView>
-            )}
+            {/* Location button */}
+            <TouchableOpacity
+                style={[styles.locationBtn, { borderColor }]}
+                onPress={() => setPickerVisible(true)}
+                activeOpacity={0.7}
+            >
+                <Ionicons name="location-sharp" size={16} color="#4A90D9" style={styles.locationIcon} />
+                <ThemedText style={styles.locationText} numberOfLines={1}>
+                    {locationLabel ?? 'Choose location'}
+                </ThemedText>
+                <Ionicons name="chevron-down" size={16} color={textColor} style={styles.locationChevron} />
+            </TouchableOpacity>
 
             {/* Filter chips */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
@@ -193,7 +232,7 @@ export default function MarketplaceScreen() {
                                 key={listing.id}
                                 listing={listing}
                                 width={tileWidth}
-                                onPress={(l) => router.push({ pathname: '/listing', params: { id: l.id } })}
+                                onPress={(l) => router.push({ pathname: tabHref('listing'), params: { id: l.id } })}
                             />
                         ))}
                     </View>
@@ -215,6 +254,17 @@ export default function MarketplaceScreen() {
                 defaultState={activeProfile?.state ?? location.state ?? ''}
                 defaultCountry={(activeProfile as any)?.country ?? ''}
                 onSaved={() => { setCreateVisible(false); loadListings(); }}
+            />
+
+            <LocationPickerModal
+                visible={pickerVisible}
+                current={location}
+                suggestions={citySuggestions}
+                history={history}
+                onSelect={handleFreeText}
+                onUseCurrentLocation={handleUseCurrentLocation}
+                onClearHistory={handleClearHistory}
+                onClose={() => setPickerVisible(false)}
             />
         </SafeAreaView>
     );
@@ -241,18 +291,21 @@ const styles = StyleSheet.create({
     },
     searchIcon: { marginRight: 8 },
     input: { flex: 1, fontSize: 16 },
-    cityRow: { paddingHorizontal: 16, gap: 8, paddingBottom: 12 },
-    cityChip: {
+    locationBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        marginHorizontal: 16,
+        marginBottom: 12,
         paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
         borderWidth: StyleSheet.hairlineWidth,
-        height: 32,
-        justifyContent: 'center',
+        maxWidth: '90%',
     },
-    cityChipActive: { backgroundColor: '#4A90D9', borderWidth: 0 },
-    cityChipText: { fontSize: 13, fontWeight: '600' },
-    cityChipTextActive: { fontSize: 13, fontWeight: '700', color: '#fff' },
+    locationIcon: { marginRight: 6 },
+    locationText: { fontSize: 14, fontWeight: '600', flexShrink: 1 },
+    locationChevron: { marginLeft: 6 },
     filterRow: { paddingHorizontal: 16, gap: 8, paddingBottom: 14, alignItems: 'center' },
     filterChip: {
         paddingHorizontal: 14,

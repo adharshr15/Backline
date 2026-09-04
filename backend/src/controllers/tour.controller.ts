@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
+import { fail } from "../middlewares/error.middleware";
 import { AuthRequest } from '../middlewares/auth.middleware';
 
 const canManageTour = async (tourId: string, userId: string) => {
@@ -27,7 +28,7 @@ export const getTours = async (req: AuthRequest, res: Response) => {
     res.json(tours);
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: error.message });
+    fail(res, error, "tour");
   }
 };
 
@@ -42,7 +43,7 @@ export const getTourById = async (req: AuthRequest, res: Response) => {
     res.json(tour);
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: error.message });
+    fail(res, error, "tour");
   }
 };
 
@@ -118,7 +119,7 @@ export const createTour = async (req: AuthRequest, res: Response) => {
     res.status(201).json(fullTour);
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: error.message });
+    fail(res, error, "tour");
   }
 };
 
@@ -166,15 +167,14 @@ export const updateTour = async (req: AuthRequest, res: Response) => {
         }
       }
 
-      // Remove band from show
+      // Remove band from tour. `deleteMany` keeps this idempotent — `delete` throws
+      // P2025 when the band is not on the tour, which surfaced as a bogus 404.
       if (removeBandId) {
-        await tx.bandTour.delete({
-          where: {
-            bandId_tourId: {
-              bandId: removeBandId,
-              tourId: id
-            }
-          }
+        await tx.bandTour.deleteMany({
+          where: { bandId: removeBandId, tourId: id }
+        });
+        await tx.tourInvite.deleteMany({
+          where: { bandId: removeBandId, tourId: id }
         });
       }
 
@@ -192,7 +192,7 @@ export const updateTour = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error(error);
     if (error.code === "P2025") return res.status(404).json({ error: "Tour not found" });
-    res.status(500).json({ error: error.message });
+    fail(res, error, "tour");
   }
 };
 
@@ -200,6 +200,13 @@ export const updateTour = async (req: AuthRequest, res: Response) => {
 export const deleteTour = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
+    const userId = req.user?.userId as string;
+
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const allowed = await canManageTour(id, userId);
+    if (!allowed) return res.status(403).json({ error: "Forbidden" });
+
     await prisma.$transaction(async (tx) => {
       // Remove all band relationships
       await tx.bandTour.deleteMany({ where: { tourId: id } });
@@ -215,6 +222,6 @@ export const deleteTour = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error(error);
     if (error.code === "P2025") return res.status(404).json({ error: "Tour not found" });
-    res.status(500).json({ error: error.message });
+    fail(res, error, "tour");
   }
 };

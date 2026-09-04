@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import request from "supertest"
-import { app } from "../src/index"
+import { app } from "../src/app"
 import { prisma } from "../src/lib/prisma"
 import { ParticipantType } from "../generated/prisma/enums"
 
@@ -32,7 +32,7 @@ beforeAll(async () => {
       name: "Adharsh",
       username: "creator",
       email: "creator@test.com",
-      password: "password",
+      password: "password", city: "Austin", state: "TX", country: "USA",
     });
 
   userId1 = creatorRes.body.user.id;
@@ -45,7 +45,7 @@ beforeAll(async () => {
       name: "Tayla",
       username: "invitee1",
       email: "invitee1@test.com",
-      password: "password",
+      password: "password", city: "Austin", state: "TX", country: "USA",
     });
   userId2 = inviteeRes.body.user.id;
   userToken2 = inviteeRes.body.token;
@@ -118,12 +118,12 @@ describe("Message Controller", () => {
     const res = await request(app)
       .get(`/conversations/${conversationId1}/messages`)
       .set("Authorization", `Bearer ${userToken1}`)
-      .send({
+      .query({
         senderType: "USER",
         senderId: userId1
       })
-    
-    console.log(res.body)
+
+    expect(res.status).toBe(200)
     expect(res.body.length).toBe(2)
   })
 })

@@ -1,0 +1,33 @@
+#!/bin/sh
+# Enforces the feature standard in CONTRIBUTING.md: the backend must typecheck and
+# the whole test suite must pass before anything is pushed.
+#
+# Install with:  cd backend && npm run hooks:install
+# Bypass in an emergency with:  git push --no-verify  (and then fix it)
+
+set -e
+
+# Only run when backend code actually changed.
+if git diff --quiet --exit-code origin/HEAD -- backend 2>/dev/null; then
+  exit 0
+fi
+
+echo "pre-push: verifying backend (typecheck + tests)..."
+
+cd "$(git rev-parse --show-toplevel)/backend"
+
+if ! npm run --silent typecheck; then
+  echo ""
+  echo "pre-push FAILED: TypeScript errors. Fix them, or push with --no-verify."
+  exit 1
+fi
+
+if ! npm test --silent; then
+  echo ""
+  echo "pre-push FAILED: tests did not pass."
+  echo "Every feature needs passing tests — see CONTRIBUTING.md."
+  echo "If the database is not running: docker compose up -d && npm run test:db"
+  exit 1
+fi
+
+echo "pre-push: backend verified."

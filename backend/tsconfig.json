@@ -4,6 +4,12 @@
     "moduleResolution": "bundler",
     "target": "ES2023",
     "strict": true,
-    "esModuleInterop": true
-  }
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  // One-off data-migration scripts are excluded: they reference models that later
+  // migrations dropped, so they no longer typecheck against the current schema.
+  "exclude": ["node_modules", "generated", "scripts"]
 }

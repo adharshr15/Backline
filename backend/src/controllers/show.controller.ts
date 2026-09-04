@@ -1,11 +1,21 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
+import { fail } from "../middlewares/error.middleware";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { AccountType, InviteStatus, ShowStatus } from "../../generated/prisma/client";
+import { ParticipantType } from "../../generated/prisma/enums";
+import { canActAs } from "../lib/authorization";
 
+
+/** Returns a valid Date, or null for a missing/unparseable value. */
+const parseDate = (value: unknown): Date | null => {
+  if (typeof value !== "string" && !(value instanceof Date)) return null;
+  const d = new Date(value as string);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
 
 // Helper: Check if user manages show
-const canManageShow = async (showId: string, userId: string) => {
+export const canManageShow = async (showId: string, userId: string) => {
   const show = await prisma.show.findUnique({
     where: { id: showId },
     include: {
@@ -93,7 +103,7 @@ export const getShows = async (req: Request, res: Response) => {
 
     res.json(shows);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
@@ -120,7 +130,7 @@ export const getShowById = async (req: Request, res: Response) => {
 
     res.json(show);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
@@ -148,7 +158,7 @@ export const getMyShowInvites = async (req: AuthRequest, res: Response) => {
     res.json(invites);
 
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
@@ -184,7 +194,24 @@ export const createShow = async (req: AuthRequest, res: Response) => {
     // Check that only one creator exists
     const creatorCount = [ creatorUserId, creatorBandId, creatorVenueId ].filter((v) => v !== undefined && v !== null).length;
     if (creatorCount != 1) {
-      return res.status(402).json({ error: "There can only be one creator of a show" });
+      // 402 is Payment Required; this is a malformed request.
+      return res.status(400).json({ error: "There can only be one creator of a show" });
+    }
+
+    if (!city || !state || !country) {
+      return res.status(400).json({ error: "city, state and country are required" });
+    }
+
+    // `date` and `doors` are both required non-null DateTimes in the schema. Parsing
+    // them here turns a missing or malformed value into a 400 instead of a Prisma 500.
+    const showDate = parseDate(date);
+    if (!showDate) return res.status(400).json({ error: "A valid date is required" });
+
+    const doorsDate = parseDate(doors);
+    if (!doorsDate) return res.status(400).json({ error: "A valid doors time is required" });
+
+    if (status && !Object.values(ShowStatus).includes(status)) {
+      return res.status(400).json({ error: "Invalid status" });
     }
 
     // Check that user is creator user (only when creatorUserId is specified)
@@ -212,12 +239,12 @@ export const createShow = async (req: AuthRequest, res: Response) => {
       // Create show with creator band
       const newShow = await tx.show.create({
         data: {
-          date: new Date(date),
+          date: showDate,
           city,
           state,
           country,
           tourId,
-          doors,
+          doors: doorsDate,
           posterUrl: posterImageUrl,
           ticketsUrl,
           status,
@@ -274,7 +301,7 @@ export const createShow = async (req: AuthRequest, res: Response) => {
     res.status(201).json(fullShow);
 
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
@@ -294,6 +321,21 @@ export const updateShow = async (req: AuthRequest, res: Response) => {
 
     const files = req.files as Record<string, Express.Multer.File[]>;
     const posterUrl = files?.posterImage?.[0] ? `/uploads/${files.posterImage[0].filename}` : undefined;
+
+    // Reject malformed dates/status up front rather than letting Prisma 500.
+    const nextDate = date !== undefined ? parseDate(date) : undefined;
+    if (date !== undefined && !nextDate) {
+      return res.status(400).json({ error: "A valid date is required" });
+    }
+
+    const nextDoors = doors !== undefined ? parseDate(doors) : undefined;
+    if (doors !== undefined && !nextDoors) {
+      return res.status(400).json({ error: "A valid doors time is required" });
+    }
+
+    if (status !== undefined && !Object.values(ShowStatus).includes(status)) {
+      return res.status(400).json({ error: "Invalid status" });
+    }
 
     const updatedShow = await prisma.$transaction(async (tx) => {
       // --- Venue: decide what to update ---
@@ -322,8 +364,9 @@ export const updateShow = async (req: AuthRequest, res: Response) => {
       await tx.show.update({
         where: { id },
         data: {
-          date: date ? new Date(date) : undefined,
-          city, state, country, tourId, doors, status, notes, ticketsUrl,
+          date: nextDate ?? undefined,
+          doors: nextDoors ?? undefined,
+          city, state, country, tourId, status, notes, ticketsUrl,
           ...venueUpdate,
           ...(bandLineup !== undefined ? { bandLineup: bandLineup || null } : {}),
           ...(posterUrl && { posterUrl }),
@@ -370,7 +413,7 @@ export const updateShow = async (req: AuthRequest, res: Response) => {
 
   } catch (error: any) {
     if (error.code === "P2025") return res.status(404).json({ error: "Show not found" });
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
@@ -406,7 +449,7 @@ export const leaveShow = async (req: AuthRequest, res: Response) => {
     res.json({ success: true });
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
@@ -433,7 +476,7 @@ export const deleteShow = async (req: AuthRequest, res: Response) => {
     if (error.code === "P2025")
       return res.status(404).json({ error: "Show not found" });
 
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
@@ -477,7 +520,7 @@ export const repostShow = async (req: AuthRequest, res: Response) => {
 
     res.json({ message: "Reposted" });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
@@ -495,9 +538,17 @@ export const unrepostShow = async (req: AuthRequest, res: Response) => {
 
     if (reposterType === 'band') {
       if (!reposterBandId) return res.status(400).json({ error: "reposterBandId required" });
+      // `repostShow` checks membership; this path must too, or anyone can remove
+      // any band's repost.
+      if (!(await canActAs(userId, ParticipantType.BAND, reposterBandId))) {
+        return res.status(403).json({ error: "Not a member of this band" });
+      }
       await prisma.show.update({ where: { id: showId }, data: { repostedByBands: { disconnect: { id: reposterBandId } } } });
     } else if (reposterType === 'venue') {
       if (!reposterVenueId) return res.status(400).json({ error: "reposterVenueId required" });
+      if (!(await canActAs(userId, ParticipantType.VENUE, reposterVenueId))) {
+        return res.status(403).json({ error: "Not a representative of this venue" });
+      }
       await prisma.show.update({ where: { id: showId }, data: { repostedByVenues: { disconnect: { id: reposterVenueId } } } });
     } else {
       await prisma.show.update({ where: { id: showId }, data: { repostedByUsers: { disconnect: { id: userId } } } });
@@ -506,7 +557,7 @@ export const unrepostShow = async (req: AuthRequest, res: Response) => {
     res.json({ message: "Unreposted" });
   } catch (error: any) {
     if (error.code === "P2025") return res.status(404).json({ error: "Show not found" });
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
@@ -582,7 +633,7 @@ export const getFeedShows = async (req: Request, res: Response) => {
 
     res.json(shows);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
@@ -626,7 +677,7 @@ export const rsvpShow = async (req: AuthRequest, res: Response) => {
 
     res.json({ message: "RSVP'd" });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
@@ -644,9 +695,16 @@ export const unrsvpShow = async (req: AuthRequest, res: Response) => {
 
     if (rsvpType === 'band') {
       if (!rsvpBandId) return res.status(400).json({ error: "rsvpBandId required" });
+      // `rsvpShow` checks membership; this path must too.
+      if (!(await canActAs(userId, ParticipantType.BAND, rsvpBandId))) {
+        return res.status(403).json({ error: "Not a member of this band" });
+      }
       await prisma.show.update({ where: { id: showId }, data: { rsvpBands: { disconnect: { id: rsvpBandId } } } });
     } else if (rsvpType === 'venue') {
       if (!rsvpVenueId) return res.status(400).json({ error: "rsvpVenueId required" });
+      if (!(await canActAs(userId, ParticipantType.VENUE, rsvpVenueId))) {
+        return res.status(403).json({ error: "Not a representative of this venue" });
+      }
       await prisma.show.update({ where: { id: showId }, data: { rsvpVenues: { disconnect: { id: rsvpVenueId } } } });
     } else {
       await prisma.show.update({ where: { id: showId }, data: { rsvpUsers: { disconnect: { id: userId } } } });
@@ -655,7 +713,7 @@ export const unrsvpShow = async (req: AuthRequest, res: Response) => {
     res.json({ message: "RSVP removed" });
   } catch (error: any) {
     if (error.code === "P2025") return res.status(404).json({ error: "Show not found" });
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
@@ -689,91 +747,11 @@ export const getRsvpShows = async (req: AuthRequest, res: Response) => {
 
     res.json(shows);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "show");
   }
 };
 
 
 // MEDIA
 
-export const getShowMedia = async (req: Request, res: Response) => {
-  try {
-    const showId = req.params.id as string;
-    const media = await prisma.showMedia.findMany({
-      where: { showId, deletedAt: null },
-      orderBy: { createdAt: "desc" },
-    });
-    res.json(media);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-export const addShowMedia = async (req: AuthRequest, res: Response) => {
-  try {
-    const showId = req.params.id as string;
-    const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-    const file = req.file as Express.Multer.File | undefined;
-    if (!file) return res.status(400).json({ error: "No media file provided" });
-
-    const { contributorType, contributorId, type } = req.body as {
-      contributorType?: string;
-      contributorId?: string;
-      type?: string;
-    };
-
-    const show = await prisma.show.findFirst({ where: { id: showId, deletedAt: null } });
-    if (!show) return res.status(404).json({ error: "Show not found" });
-
-    const media = await prisma.showMedia.create({
-      data: {
-        showId,
-        url: `/uploads/${file.filename}`,
-        type: type === "VIDEO" ? "VIDEO" : "PHOTO",
-        uploaderUserId: userId,
-        contributorType: contributorType ?? "USER",
-        contributorId: contributorId ?? userId,
-      },
-    });
-
-    res.status(201).json(media);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-export const deleteShowMedia = async (req: AuthRequest, res: Response) => {
-  try {
-    const mediaId = req.params.mediaId as string;
-    const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-    const media = await prisma.showMedia.findUnique({ where: { id: mediaId } });
-    if (!media || media.deletedAt) return res.status(404).json({ error: "Media not found" });
-
-    // Uploader can always delete their own media
-    let allowed = media.uploaderUserId === userId;
-
-    // Show owner (creator user / creator band member / creator or attached venue rep)
-    if (!allowed) allowed = await canManageShow(media.showId, userId);
-
-    // Member of any band on the show's lineup
-    if (!allowed) {
-      const show = await prisma.show.findUnique({
-        where: { id: media.showId },
-        include: { bands: { include: { band: { include: { members: true } } } } },
-      });
-      allowed = !!show?.bands.some(sb => sb.band.members.some(m => m.userId === userId));
-    }
-
-    if (!allowed) return res.status(403).json({ error: "Not allowed to delete this media" });
-
-    await prisma.showMedia.update({ where: { id: mediaId }, data: { deletedAt: new Date() } });
-    res.json({ message: "Deleted" });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-};
 

@@ -1,6 +1,6 @@
 import request from "supertest"
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { app } from "../src/index"
+import { app } from "../src/app"
 import { prisma } from "../src/lib/prisma"
 
 let testUserId: string
@@ -72,7 +72,7 @@ describe("User API", () => {
             .post('/auth/register')
             .send({
                 name: "Adharsh Rajavel",
-                password: "password",
+                password: "password", city: "Austin", state: "TX", country: "USA",
                 username: "adharsh",
                 email: "adharsh@gmail.com"
             })
@@ -84,7 +84,7 @@ describe("User API", () => {
             .post('/auth/register')
             .send({
                 name: "Tayla",
-                password: "password",
+                password: "password", city: "Austin", state: "TX", country: "USA",
                 username: "tayla",
                 email: "tayla@gmail.com"
             })
@@ -95,7 +95,7 @@ describe("User API", () => {
             .post('/auth/register')
             .send({
                 name: "Nick",
-                password: "password",
+                password: "password", city: "Austin", state: "TX", country: "USA",
                 username: "nick",
                 email: "nick@gmail.com"
             })
@@ -106,7 +106,7 @@ describe("User API", () => {
             .post('/auth/register')
             .send({
                 name: "Andres",
-                password: "password",
+                password: "password", city: "Austin", state: "TX", country: "USA",
                 username: "andres",
                 email: "andres@gmail.com"
             })
@@ -117,7 +117,7 @@ describe("User API", () => {
             .post('/auth/register')
             .send({
                 name: "Frankie",
-                password: "password",
+                password: "password", city: "Austin", state: "TX", country: "USA",
                 username: "frankie",
                 email: "frankie@gmail.com"
             })
@@ -176,7 +176,7 @@ describe("User API", () => {
             .send({
                 name: "test",
                 username: "adharsh",
-                password: "pass",
+                password: "password", city: "Austin", state: "TX", country: "USA",
                 email: "test@gmail"
             })
 
@@ -188,7 +188,7 @@ describe("User API", () => {
             .send({
                 name: "test",
                 username: "new",
-                password: "pas",
+                password: "password", city: "Austin", state: "TX", country: "USA",
                 email: "adharsh@gmail.com"
             })
 
@@ -325,11 +325,15 @@ describe("User API", () => {
         expect(res.body.length).toBeGreaterThan(0)
     })
     it("Should get a valid user", async () => {
+        // The route is GET /users/id/:id — `/users/:id` is not mounted.
         const res = await request(app)
-            .get(`/users/${nickId}`)
+            .get(`/users/id/${nickId}`)
             .set("Authorization", `Bearer ${taylaToken}`);
         expect(res.status).toBe(200)
         expect(res.body.id).toBe(nickId)
+        // Another user's record must not carry their email address.
+        expect(res.body.email).toBeUndefined()
+        expect(res.body.password).toBeUndefined()
     })
     it("Should fail in getting an invalid user", async () => {
         const res = await request(app)
@@ -392,7 +396,8 @@ describe("User API", () => {
                 removeBandId: theFootId
             })
             .set("Authorization", `Bearer ${adharshToken}`)
-        expect(res.status).toBe(500)
+        // An authorization failure, not a server error.
+        expect(res.status).toBe(403)
     })
 
     // DELETE

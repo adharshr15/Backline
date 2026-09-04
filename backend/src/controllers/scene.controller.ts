@@ -1,13 +1,26 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
+import { fail } from "../middlewares/error.middleware";
 import { AuthRequest } from "../middlewares/auth.middleware";
+import { canActAsLower } from "../lib/authorization";
 
 export const followScene = async (req: AuthRequest, res: Response) => {
     try {
+        const userId = req.user?.userId as string;
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
         const { city, state, country, followerId, followerType } = req.body as {
             city: string; state: string; country?: string;
             followerId: string; followerType: string;
         };
+
+        if (!city || !state) {
+            return res.status(400).json({ error: "city and state are required" });
+        }
+
+        if (!(await canActAsLower(userId, followerType, followerId))) {
+            return res.status(403).json({ error: "You cannot follow scenes as this profile" });
+        }
 
         await prisma.sceneFollow.upsert({
             where: { followerId_followerType_city_state: { followerId, followerType, city, state } },
@@ -17,15 +30,22 @@ export const followScene = async (req: AuthRequest, res: Response) => {
 
         res.json({ success: true });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        fail(res, error, "scene");
     }
 };
 
 export const unfollowScene = async (req: AuthRequest, res: Response) => {
     try {
+        const userId = req.user?.userId as string;
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
         const { city, state, followerId, followerType } = req.body as {
             city: string; state: string; followerId: string; followerType: string;
         };
+
+        if (!(await canActAsLower(userId, followerType, followerId))) {
+            return res.status(403).json({ error: "You cannot unfollow scenes as this profile" });
+        }
 
         await prisma.sceneFollow.deleteMany({
             where: { followerId, followerType, city, state },
@@ -33,7 +53,7 @@ export const unfollowScene = async (req: AuthRequest, res: Response) => {
 
         res.json({ success: true });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        fail(res, error, "scene");
     }
 };
 
@@ -51,7 +71,7 @@ export const getFollowedScenes = async (req: Request, res: Response) => {
 
         res.json(scenes);
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        fail(res, error, "scene");
     }
 };
 
@@ -80,6 +100,6 @@ export const getSceneCities = async (req: Request, res: Response) => {
 
         res.json(cities);
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        fail(res, error, "scene");
     }
 };

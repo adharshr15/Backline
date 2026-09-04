@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
+import { fail } from "../middlewares/error.middleware";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { ListingKind, ListingStatus } from "../../generated/prisma/client";
 
@@ -61,7 +62,7 @@ export const getListings = async (req: Request, res: Response) => {
 
     res.json(listings);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "listing");
   }
 };
 
@@ -81,7 +82,7 @@ export const getListingById = async (req: Request, res: Response) => {
 
     res.json(listing);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "listing");
   }
 };
 
@@ -106,7 +107,7 @@ export const getListingsByProfile = async (req: Request, res: Response) => {
 
     res.json(listings);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "listing");
   }
 };
 
@@ -171,7 +172,7 @@ export const createListing = async (req: AuthRequest, res: Response) => {
 
     res.status(201).json(listing);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "listing");
   }
 };
 
@@ -216,7 +217,7 @@ export const updateListing = async (req: AuthRequest, res: Response) => {
     res.json(listing);
   } catch (error: any) {
     if (error.code === "P2025") return res.status(404).json({ error: "Listing not found" });
-    res.status(500).json({ error: error.message });
+    fail(res, error, "listing");
   }
 };
 
@@ -244,7 +245,7 @@ export const setListingStatus = async (req: AuthRequest, res: Response) => {
     res.json(listing);
   } catch (error: any) {
     if (error.code === "P2025") return res.status(404).json({ error: "Listing not found" });
-    res.status(500).json({ error: error.message });
+    fail(res, error, "listing");
   }
 };
 
@@ -264,7 +265,7 @@ export const deleteListing = async (req: AuthRequest, res: Response) => {
     res.json({ message: "Listing deleted" });
   } catch (error: any) {
     if (error.code === "P2025") return res.status(404).json({ error: "Listing not found" });
-    res.status(500).json({ error: error.message });
+    fail(res, error, "listing");
   }
 };
 
@@ -279,7 +280,7 @@ export const getListingMedia = async (req: Request, res: Response) => {
     });
     res.json(media);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "listing");
   }
 };
 
@@ -316,7 +317,7 @@ export const addListingMedia = async (req: AuthRequest, res: Response) => {
 
     res.status(201).json(media);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "listing");
   }
 };
 
@@ -336,7 +337,7 @@ export const deleteListingMedia = async (req: AuthRequest, res: Response) => {
     await prisma.listingMedia.update({ where: { id: mediaId }, data: { deletedAt: new Date() } });
     res.json({ message: "Deleted" });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "listing");
   }
 };
 
@@ -409,6 +410,6 @@ export const reorderListingPhotos = async (req: AuthRequest, res: Response) => {
 
     res.json(updated);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    fail(res, error, "listing");
   }
 };

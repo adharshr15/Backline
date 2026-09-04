@@ -1,14 +1,15 @@
 import { RequestHandler, Router } from 'express'
-import { getShows, getShowById, createShow, updateShow, deleteShow, leaveShow, repostShow, unrepostShow, getFeedShows, rsvpShow, unrsvpShow, getRsvpShows, getShowMedia, addShowMedia, deleteShowMedia } from '../controllers/show.controller'
+import { getShows, getShowById, createShow, updateShow, deleteShow, leaveShow, repostShow, unrepostShow, getFeedShows, rsvpShow, unrsvpShow, getRsvpShows } from '../controllers/show.controller'
+import { getShowPosts } from '../controllers/post.controller'
 import { authenticate } from '../middlewares/auth.middleware'
-import { upload, uploadMedia } from '../config/multer'
+import { upload } from '../config/multer'
 
 const router = Router()
 
 router.get('/feed', getFeedShows)
 router.get('/rsvp', authenticate as RequestHandler, getRsvpShows as RequestHandler)
 router.get('/', getShows)
-router.get('/:id/media', getShowMedia as RequestHandler)
+router.get('/:id/posts', getShowPosts as RequestHandler)
 router.get('/:id', getShowById)
 
 router.use(authenticate as RequestHandler)
@@ -20,7 +21,5 @@ router.post("/:id/repost", repostShow as RequestHandler)
 router.delete("/:id/repost", unrepostShow as RequestHandler)
 router.post("/:id/rsvp", rsvpShow as RequestHandler)
 router.delete("/:id/rsvp", unrsvpShow as RequestHandler)
-router.post("/:id/media", uploadMedia.single('media'), addShowMedia as RequestHandler)
-router.delete("/media/:mediaId", deleteShowMedia as RequestHandler)
 
 export default router

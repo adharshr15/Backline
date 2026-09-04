@@ -5,32 +5,42 @@ import bcrypt from "bcrypt";
 import { InviteStatus } from '../../generated/prisma/enums'
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { AccountType } from '../../generated/prisma/enums';
+import { userPrivateSelect, userPublicSelect } from '../lib/prismaSelects';
+import { fail } from '../middlewares/error.middleware';
 import fs from 'fs';
 import path from 'path';
 
 
+const MAX_PAGE_SIZE = 100;
+const MIN_PASSWORD_LENGTH = 8;
+const BCRYPT_ROUNDS = 12;
+
 export const getUsers = async (req: AuthRequest, res: Response) => {
   // Gets all Users
   try {
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 20;
+    // An unbounded `limit` let one request pull the entire user table.
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(req.query.limit) || 20));
 
     const users = await prisma.user.findMany({
       skip: (page - 1) * limit,
       take: limit,
       orderBy: { createdAt: "desc" },
+      // `email` is deliberately not selected: this is a directory listing for every
+      // authenticated user, and it was handing out the address of every account.
       select: {
         id: true,
         username: true,
         name: true,
-        email: true,
         accountType: true,
+        profileImageUrl: true,
         createdAt: true
       }
     });
 
     res.json(users);
   } catch (error) {
+    console.error("getUsers error:", error);
     res.status(500).json({ error: "Failed to fetch users" });
   }
 };
@@ -40,15 +50,15 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
 
+    // Callers other than the account owner get the public shape (no email).
+    const isSelf = req.user?.userId === id;
+
     const user = await prisma.user.findUnique({
       where: { id },
-      include: {
-        bandMemberships: {
-          include: { band: true }
-        },
-        venueReps: {
-          include: { venue: true }
-        }
+      select: {
+        ...(isSelf ? userPrivateSelect : userPublicSelect),
+        bandMemberships: { include: { band: true } },
+        venueReps: { include: { venue: true } },
       }
     });
 
@@ -56,10 +66,9 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    delete (user as any).password;
-
     res.json(user);
   } catch (error) {
+    console.error("getUserById error:", error);
     res.status(500).json({ error: "Failed to fetch user" });
   }
 };
@@ -69,24 +78,21 @@ export const getUserByUsername = async (req: AuthRequest, res: Response) => {
       const username = req.params.username as string;
 
       const user = await prisma.user.findUnique({
-        where: { username }, 
-        include: {
-          bandMemberships: {
-            include: { band: true }
-          },
-          venueReps: {
-            include: { venue: true }
-          }
+        where: { username },
+        select: {
+          ...userPublicSelect,
+          bandMemberships: { include: { band: true } },
+          venueReps: { include: { venue: true } },
         }
       })
 
       if (!user) return res.status(404).json({ error: "User not found" });
 
-      delete(user as any).password;
-
       res.json(user);
-    } catch (e: any) {
-      res.status(500).json({ error: "Failed to fetch user", e });
+    } catch (error) {
+      // The raw error object used to be serialised into the response body.
+      console.error("getUserByUsername error:", error);
+      res.status(500).json({ error: "Failed to fetch user" });
     }
 }
 
@@ -128,9 +134,10 @@ export const getMyProfiles = async (req: AuthRequest, res: Response) => {
       }
     })
 
-    res.status(201).json({ bands, venues });
+    res.status(200).json({ bands, venues });
   }
   catch (error) {
+    console.error("getMyProfiles error:", error);
     res.status(500).json({ error: "Failed to get profiles"})
   }
   
@@ -210,54 +217,6 @@ export const getMyVenueInvites = async (req: AuthRequest, res: Response) => {
   }
 }
 
-export const createUser = async (req: AuthRequest, res: Response) => {
-  // Creates a User
-  try {
-    const { username, name, email, password, bio, city, state, country } = req.body;
-
-    const files = req.files as Record<string, Express.Multer.File[]>;
-
-    const profileImageUrl = files?.profileImage?.[0]
-      ? `/uploads/${files.profileImage[0].filename}`
-      : undefined
-
-    const headerImageUrl = files?.headerImage?.[0]
-      ? `/uploads/${files.headerImage[0].filename}`
-      : undefined
-
-    const emailExisting = await prisma.user.findUnique({ where: { email } });
-    const usernameExisting = await prisma.user.findUnique({ where: { username } });
-
-    if (emailExisting || usernameExisting) {
-      throw new Error("Username or Email already exists");
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const result = await prisma.user.create({
-      data: {
-        username,
-        name,
-        email,
-        password: hashedPassword,
-        accountType: AccountType.USER,
-        bio,
-        city,
-        state,
-        country,
-        profileImageUrl,
-        headerImageUrl
-      }
-    });
-
-    delete (result as any).password;
-
-    res.status(201).json(result);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to create user" });
-  }
-};
-
 export const updateUser = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -269,6 +228,7 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       name,
       email,
       password,
+      currentPassword,
       bio,
       city,
       state,
@@ -280,6 +240,18 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
     const files = req.files as Record<string, Express.Multer.File[]>;
 
     const currentUser = await prisma.user.findUnique({ where: { id: userId } });
+    if (!currentUser) return res.status(404).json({ error: "User not found" });
+
+    // Changing the password requires proving knowledge of the old one, so a stolen
+    // or leaked token cannot be used to lock the real owner out of their account.
+    if (password) {
+      if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
+        return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+      }
+      if (!currentPassword || !(await bcrypt.compare(currentPassword, currentUser.password))) {
+        return res.status(403).json({ error: "Current password is incorrect" });
+      }
+    }
 
     const updatedUser = await prisma.$transaction(async (tx) => {
       const updateData: any = {}
@@ -312,7 +284,7 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       }
 
       if (password) {
-        updateData.password = await bcrypt.hash(password, 10);
+        updateData.password = await bcrypt.hash(password, BCRYPT_ROUNDS);
       }
 
       // remove user from band
@@ -381,8 +353,15 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
 
     res.status(200).json(updatedUser);
 
-  } catch (error) {
-    console.error(error);
+  } catch (error: any) {
+    if (error?.code === "P2002") {
+      const target = (error.meta?.target as string[] | undefined)?.join(", ") ?? "field";
+      return res.status(409).json({ error: `That ${target} is already taken` });
+    }
+    if (error?.message === "Not a member of this band" || error?.message === "Not a member of this venue") {
+      return res.status(403).json({ error: error.message });
+    }
+    console.error("updateUser error:", error);
     res.status(500).json({ error: "Failed to update user" });
   }
 };
@@ -440,8 +419,7 @@ export const respondToBandInvite = async (req: AuthRequest, res: Response) => {
 
     res.status(200).json(updatedBand);
   } catch (error: any) {
-    console.error("respondToBandInvite error:", error.message);
-    res.status(500).json({ error: error.message });
+    fail(res, error, "respondToBandInvite");
   }
 };
 

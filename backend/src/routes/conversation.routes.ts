@@ -3,6 +3,7 @@ import { getMyConversations, createConversation, updateConversation, respondToCo
 import { authenticate } from '../middlewares/auth.middleware'
 import { getMessages, sendMessage } from '../controllers/message.controller'
 import { messageRateLimiter, conversationRateLimiter } from "../middlewares/rateLimit.middleware"
+import { uploadMessageImage } from '../config/multer'
 
 const router = Router()
 
@@ -21,7 +22,7 @@ router.delete("/:id", conversationRateLimiter, leaveConversation as RequestHandl
 router.put("/:id", conversationRateLimiter, updateConversation as RequestHandler)  
 
 // messages
-router.post("/:id/messages", messageRateLimiter, sendMessage as RequestHandler)
+router.post("/:id/messages", messageRateLimiter, uploadMessageImage.single('image'), sendMessage as RequestHandler)
 router.get("/:id/messages", messageRateLimiter, getMessages as RequestHandler)
 
 export default router

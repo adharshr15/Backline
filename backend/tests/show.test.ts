@@ -1,6 +1,6 @@
 import request from "supertest"
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { app } from "../src/index"
+import { app } from "../src/app"
 import { prisma } from "../src/lib/prisma"
 
 let userId: string
@@ -20,6 +20,10 @@ let tourId: string
 let bandInviteId: string
 let venueInviteId: string
 
+// Relative to now, so the suite keeps working as the calendar moves.
+const FUTURE_DATE = new Date(Date.now() + 30 * 86_400_000).toISOString()
+const FUTURE_DOORS = new Date(Date.now() + 30 * 86_400_000 + 19 * 3_600_000).toISOString()
+
 beforeAll(async () => {
   await prisma.$transaction([
     prisma.showInvite.deleteMany(),
@@ -38,7 +42,7 @@ beforeAll(async () => {
     .post('/auth/register')
     .send({
       email: "user@test.com",
-      password: "password",
+      password: "password", city: "Austin", state: "TX", country: "USA",
       username: "adharsh",
       name: "Adharsh"
     })
@@ -63,7 +67,7 @@ beforeAll(async () => {
     .post('/auth/register')
     .send({
       email: "user2@test",
-      password: "password",
+      password: "password", city: "Austin", state: "TX", country: "USA",
       username: "tayla",
       name: "Tayla"
     })
@@ -88,7 +92,7 @@ beforeAll(async () => {
     .post('/auth/register')
     .send({
       email: "user3@test",
-      password: "pass",
+      password: "password", city: "Austin", state: "TX", country: "USA",
       username: "andres",
       name: "Andres"
     })
@@ -113,7 +117,7 @@ beforeAll(async () => {
     .post('/auth/register')
     .send({
       email: "venue@test",
-      password: "password",
+      password: "password", city: "Austin", state: "TX", country: "USA",
       username: "nick",
       name: "Nick"
     })
@@ -159,7 +163,9 @@ describe("Show API", () => {
     const res = await request(app)
       .post("/shows")
       .send({
-        date: "2026-04-05",
+        // Must be in the future: GET /shows returns only upcoming shows by default.
+        date: FUTURE_DATE,
+        doors: FUTURE_DOORS,
         city: "Austin",
         state: "Texas",
         country: "United States",
@@ -213,7 +219,7 @@ describe("Show API", () => {
   })
   it("Should allow band to accept show invite", async () => {
     const res = await request(app)
-      .post(`/bands/shows/invites/${bandInviteId}/respond`)
+      .post(`/bands/show-invites/${bandInviteId}/respond`)
       .send({ action: "ACCEPT" })
       .set('Authorization', `Bearer ${otherUserToken}`)
 
@@ -286,20 +292,21 @@ describe("Show API", () => {
       .put(`/shows/${showId}`)
       .send({
         city: "Dallas",
-        addBandId: band2Id,
-        removeBandId: otherBandId
+        // The controller (and the frontend) use the plural field names.
+        addBandIds: [band2Id],
+        removeBandIds: [otherBandId]
       })
       .set("Authorization", `Bearer ${userToken}`)
 
-    console.log(res.body)
     expect(res.status).toBe(200)
     expect(res.body.city).toBe("Dallas")
 
-    // Check that a show invite was created for band2Id
+    // Check that a show invite was created for band2Id.
+    // `toBeDefined` would pass on null, so assert the row itself.
     const newInvite = await prisma.showInvite.findFirst({
       where: { showId, bandId: band2Id, status: "PENDING" }
     })
-    expect(newInvite).toBeDefined()
+    expect(newInvite).not.toBeNull()
 
     // Check that otherBandId was removed from the show
     const showBands = await prisma.showBand.findMany({

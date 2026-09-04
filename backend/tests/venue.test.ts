@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import request from "supertest"
-import { app } from "../src/index"
+import { app } from "../src/app"
 import { prisma } from "../src/lib/prisma"
 
 let userId1: string
@@ -37,7 +37,7 @@ beforeAll(async () => {
             name: "Creator User",
             username: "creator",
             email: "creator@test.com",
-            password: "password",
+            password: "password", city: "Austin", state: "TX", country: "USA",
         });
 
     creatorId = creatorRes.body.user.id;
@@ -50,7 +50,7 @@ beforeAll(async () => {
             name: "Invitee 1",
             username: "invitee1",
             email: "invitee1@test.com",
-            password: "password",
+            password: "password", city: "Austin", state: "TX", country: "USA",
         });
     inviteeId1 = invitee1.body.user.id;
     inviteeToken1 = invitee1.body.token;
@@ -61,7 +61,7 @@ beforeAll(async () => {
             name: "Invitee 2",
             username: "invitee2",
             email: "invitee2@test.com",
-            password: "password",
+            password: "password", city: "Austin", state: "TX", country: "USA",
         });
     inviteeId2 = invitee2.body.user.id;
     inviteeToken2 = invitee2.body.token;

@@ -99,6 +99,8 @@ model User {
   showsReposted     Show[]                    @relation("showRepostedByUser")
   showsRsvp         Show[]                    @relation("showRsvpByUser")
   listings          Listing[]                 @relation("UserListings")
+  posts             Post[]                    @relation("UserPosts")
+  postComments      PostComment[]             @relation("UserPostComments")
 }
 
 model Band {
@@ -132,6 +134,8 @@ model Band {
   following         Follow[]                  @relation("BandFollowing")
   followers         Follow[]                  @relation("BandFollowers")
   listings          Listing[]                 @relation("BandListings")
+  posts             Post[]                    @relation("BandPosts")
+  postComments      PostComment[]             @relation("BandPostComments")
 }
 
 model BandMember {
@@ -204,6 +208,8 @@ model Venue {
   following         Follow[]                  @relation("VenueFollowing")
   followers         Follow[]                  @relation("VenueFollowers")
   listings          Listing[]                 @relation("VenueListings")
+  posts             Post[]                    @relation("VenuePosts")
+  postComments      PostComment[]             @relation("VenuePostComments")
 
   @@index([city])
   @@index([capacity]) 
@@ -293,7 +299,7 @@ model Show {
 
   bands             ShowBand[]
   showInvites       ShowInvite[]
-  media             ShowMedia[]
+  posts             Post[]
 
   repostedByUsers   User[]                    @relation("showRepostedByUser")
   repostedByBands   Band[]                    @relation("showRepostedByBand")
@@ -336,21 +342,6 @@ model VenueBlock {
 enum MediaType {
   PHOTO
   VIDEO
-}
-
-model ShowMedia {
-  id              String    @id @default(cuid())
-  show            Show      @relation(fields: [showId], references: [id])
-  showId          String
-  url             String
-  type            MediaType @default(PHOTO)
-  uploaderUserId  String
-  contributorType String
-  contributorId   String
-  createdAt       DateTime  @default(now())
-  deletedAt       DateTime?
-
-  @@index([showId])
 }
 
 model ShowBand {
@@ -474,6 +465,9 @@ model Message {
   senderVenue     Venue?                      @relation("VenueMessages", fields: [senderVenueId], references: [id])
   senderVenueId   String?
 
+  // Optional image attachment (relative /uploads path).
+  imageUrl        String?
+
   // Optional attachment: an entity previewed inline in the message.
   // One nullable FK per attachable kind (same idiom as the sender FKs above).
   listing         Listing?                    @relation("ListingMessages", fields: [listingId], references: [id])
@@ -588,4 +582,75 @@ model ListingMedia {
   deletedAt         DateTime?
 
   @@index([listingId])
+}
+
+// A profile-owned piece of media (photo/video). May optionally be linked to a
+// Show — adding media to a show creates a linked Post on the contributor's
+// profile. Supports Instagram-style captions, comments, and likes.
+model Post {
+  id              String        @id @default(cuid())
+  url             String
+  type            MediaType     @default(PHOTO)
+  caption         String?
+
+  // The logged-in user who uploaded (for authorization).
+  uploaderUserId  String
+
+  // Owner profile (exactly one set) — mirrors the Listing createdBy triplet.
+  ownerUserId     String?
+  ownerUser       User?         @relation("UserPosts", fields: [ownerUserId], references: [id])
+  ownerBandId     String?
+  ownerBand       Band?         @relation("BandPosts", fields: [ownerBandId], references: [id])
+  ownerVenueId    String?
+  ownerVenue      Venue?        @relation("VenuePosts", fields: [ownerVenueId], references: [id])
+
+  // Optional link to a show whose gallery this post appears in.
+  showId          String?
+  show            Show?         @relation(fields: [showId], references: [id])
+
+  comments        PostComment[]
+  likes           PostLike[]
+
+  createdAt       DateTime      @default(now())
+  deletedAt       DateTime?
+
+  @@index([ownerUserId])
+  @@index([ownerBandId])
+  @@index([ownerVenueId])
+  @@index([showId])
+}
+
+model PostComment {
+  id               String    @id @default(cuid())
+  post             Post      @relation(fields: [postId], references: [id])
+  postId           String
+  text             String
+
+  // The logged-in user who commented (for authorization).
+  commenterUserId  String
+
+  // Author profile (exactly one set).
+  authorUserId     String?
+  authorUser       User?     @relation("UserPostComments", fields: [authorUserId], references: [id])
+  authorBandId     String?
+  authorBand       Band?     @relation("BandPostComments", fields: [authorBandId], references: [id])
+  authorVenueId    String?
+  authorVenue      Venue?    @relation("VenuePostComments", fields: [authorVenueId], references: [id])
+
+  createdAt        DateTime  @default(now())
+  deletedAt        DateTime?
+
+  @@index([postId])
+}
+
+model PostLike {
+  id         String   @id @default(cuid())
+  post       Post     @relation(fields: [postId], references: [id])
+  postId     String
+  likerType  String
+  likerId    String
+  createdAt  DateTime @default(now())
+
+  @@unique([postId, likerType, likerId])
+  @@index([postId])
 }

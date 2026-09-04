@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { prisma } from '../lib/prisma';
+import { fail } from '../middlewares/error.middleware';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { Response } from 'express';
 
@@ -58,6 +59,6 @@ export const search = async (req: AuthRequest, res: Response) => {
         res.json(results);
     } catch (error: any) {
         console.error('search error:', error.message);
-        res.status(500).json({ error: error.message });
+        fail(res, error, "search");
     }
 };

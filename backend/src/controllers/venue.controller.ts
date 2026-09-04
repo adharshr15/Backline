@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { prisma } from '../lib/prisma';
+import { fail } from '../middlewares/error.middleware';
 import { VenueRole } from '../../generated/prisma/client'
 import { Request, Response } from 'express';
 import { InviteStatus } from '../../generated/prisma/client';
@@ -50,7 +51,7 @@ export const getVenues = async (req: AuthRequest, res: Response) => {
         res.json(venues);
     } catch (error: any) {
         console.error("Prisma getVenues error:", error.message);
-        res.status(500).json({ error: error.message });
+        fail(res, error, "venue");
     }
 };
 
@@ -72,7 +73,7 @@ export const getVenueById = async (req: AuthRequest, res: Response) => {
         res.json(venue);
     } catch (error: any) {
         console.error("Prisma getVenueById error: ", error.message);
-        res.status(500).json({ error: error.message });
+        fail(res, error, "venue");
     }
 };
 
@@ -107,7 +108,7 @@ export const getMyShowInvites = async (req: AuthRequest, res: Response) => {
         res.status(200).json(invites);
     } catch (error: any) {
         console.error("Prisma getMyShowInvites error:", error.message);
-        res.status(500).json({ error: error.message });
+        fail(res, error, "venue");
     }
 };
 
@@ -180,7 +181,7 @@ export const createVenue = async (req: AuthRequest, res: Response) => {
         res.status(201).json(venue);
     } catch (error: any) {
         console.error("Prisma createVenue error:", error.message);
-        return res.status(500).json({ error: error.message });
+        return fail(res, error, "venue");
     }
 };
 
@@ -214,6 +215,12 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
 
         const files = req.files as Record<string, Express.Multer.File[]>;
 
+        // Roster changes are manager-only. `userRep` is already loaded above.
+        const isManager = userRep.role === "MANAGER";
+        if ((removeRepresentativeId || inviteRepresentativeId || updateRole) && !isManager) {
+            return res.status(403).json({ error: "Only managers can change the representative roster" });
+        }
+
         const currentVenue = await prisma.venue.findUnique({ where: { id: venueId } });
 
         const updatedVenue = await prisma.$transaction(async (tx) => {
@@ -246,16 +253,8 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
                 updateData.headerImageUrl = `/uploads/${files.headerImage[0].filename}`;
             }
 
-            // Check if requester is a manager
-            const requesterMembership = await tx.venueRepresentative.findUnique({
-                where: { userId_venueId: { userId, venueId } }
-            });
-            const isManager = requesterMembership?.role === "MANAGER" || requesterMembership?.role === "REPRESENTATIVE";
-
-            // Force remove representative if requester is manager
+            // Remove a representative (manager-only; checked before the transaction)
             if (removeRepresentativeId) {
-                if (!isManager) throw new Error("Only managers can remove representatives");
-
                 await tx.venueRepresentative.delete({
                     where: { userId_venueId: { userId: removeRepresentativeId, venueId } }
                 });
@@ -263,9 +262,6 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
 
             // invite new representative if provided
             if (inviteRepresentativeId) {
-                if (!isManager)
-                    throw new Error("Only managers can add representatives");
-
                 // Check existing rep or invite
                 const existingRep = await tx.venueRepresentative.findUnique({
                     where: { userId_venueId: { userId: inviteRepresentativeId, venueId } }
@@ -284,11 +280,8 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
                 }
             }
 
-            // Update member's role 
+            // Update member's role (manager-only; checked before the transaction)
             if (updateRole) {
-                if (!isManager)
-                    throw new Error("Only managers can update roles");
-
                 await tx.venueRepresentative.update({
                     where: { userId_venueId: { userId: updateRole.userId, venueId } },
                     data: { role: updateRole.venueRole }
@@ -308,7 +301,7 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
     } catch (error: any) {
         console.error(error);
         if (error.code === "P2025") return res.status(404).json({ error: "Venue not found" });
-        res.status(500).json({ error: error.message });
+        fail(res, error, "venue");
     }
 };
 
@@ -370,8 +363,7 @@ export const respondToShowInvite = async (req: AuthRequest, res: Response) => {
 
         res.status(200).json(updatedShow);
     } catch (error: any) {
-        console.error("Prisma respondtoShowInvite error:", error.message);
-        res.status(500).json({ error: error.message })
+        fail(res, error, "venue.respondToShowInvite")
     }
 };
 
@@ -393,6 +385,6 @@ export const deleteVenue = async (req: AuthRequest, res: Response) => {
     } catch (error: any) {
         console.error("Prisma deleteVenue error: ", error.message);
         if (error.code === "P2025") return res.status(404).json({ error: "Venue not found" });
-        res.status(500).json({ error: error.message });
+        fail(res, error, "venue");
     }
 };

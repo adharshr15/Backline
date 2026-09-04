@@ -1,8 +1,11 @@
 import 'dotenv/config';
 import { prisma } from '../lib/prisma';
+import { fail } from '../middlewares/error.middleware';
 import { AccountType } from '../../generated/prisma/client';
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
+import { canActAs } from '../lib/authorization';
+import { ParticipantType } from '../../generated/prisma/enums';
 
 const buildFollowerWhere = (followerType: AccountType, followerBandId?: string, followerVenueId?: string, userId?: string) => {
     if (followerType === 'USER') return { followerType, followerUserId: userId };
@@ -62,7 +65,7 @@ export const follow = async (req: AuthRequest, res: Response) => {
         res.status(201).json(follow);
     } catch (error: any) {
         console.error('follow error:', error.message);
-        res.status(500).json({ error: error.message });
+        fail(res, error, "follow");
     }
 };
 
@@ -72,6 +75,15 @@ export const unfollow = async (req: AuthRequest, res: Response) => {
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
         const { followerType, followerBandId, followerVenueId, followeeType, followeeId } = req.body;
+
+        // Mirror the membership checks in `follow` — without them anyone could make
+        // any band or venue unfollow anyone.
+        if (followerType === 'BAND' && !(await canActAs(userId, ParticipantType.BAND, followerBandId))) {
+            return res.status(403).json({ error: 'Not a member of this band' });
+        }
+        if (followerType === 'VENUE' && !(await canActAs(userId, ParticipantType.VENUE, followerVenueId))) {
+            return res.status(403).json({ error: 'Not a representative of this venue' });
+        }
 
         const followerWhere = buildFollowerWhere(followerType, followerBandId, followerVenueId, userId);
         const followeeWhere = buildFolloweeWhere(followeeType, followeeId);
@@ -85,7 +97,7 @@ export const unfollow = async (req: AuthRequest, res: Response) => {
         res.status(200).json({ message: 'Unfollowed successfully' });
     } catch (error: any) {
         console.error('unfollow error:', error.message);
-        res.status(500).json({ error: error.message });
+        fail(res, error, "follow");
     }
 };
 
@@ -105,7 +117,7 @@ export const checkFollowing = async (req: AuthRequest, res: Response) => {
         res.json({ isFollowing: !!existing });
     } catch (error: any) {
         console.error('checkFollowing error:', error.message);
-        res.status(500).json({ error: error.message });
+        fail(res, error, "follow");
     }
 };
 
@@ -132,7 +144,7 @@ export const getFollowers = async (req: AuthRequest, res: Response) => {
         res.json(result);
     } catch (error: any) {
         console.error('getFollowers error:', error.message);
-        res.status(500).json({ error: error.message });
+        fail(res, error, "follow");
     }
 };
 
@@ -159,6 +171,6 @@ export const getFollowing = async (req: AuthRequest, res: Response) => {
         res.json(result);
     } catch (error: any) {
         console.error('getFollowing error:', error.message);
-        res.status(500).json({ error: error.message });
+        fail(res, error, "follow");
     }
 };

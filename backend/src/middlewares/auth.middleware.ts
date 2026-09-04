@@ -1,17 +1,15 @@
 import { Request, Response, NextFunction } from "express"
-import { RateLimiterMemory } from "rate-limiter-flexible"
 import jwt from "jsonwebtoken"
+import { jwtSecret } from "../lib/env"
 
 export interface AuthRequest extends Request {
   user?: {
     userId: string
-    role: string
   };
-  files?: { 
-    [fieldName: string]: Express.Multer.File[] 
+  files?: {
+    [fieldName: string]: Express.Multer.File[]
   };
 }
-
 
 export const authenticate = (
   req: AuthRequest,
@@ -24,15 +22,22 @@ export const authenticate = (
     return res.status(401).json({ error: "No token provided" })
   }
 
-  const token = header.split(" ")[1]
+  const [scheme, token] = header.split(" ")
+
+  if (scheme?.toLowerCase() !== "bearer" || !token) {
+    return res.status(401).json({ error: "Malformed Authorization header" })
+  }
 
   try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET as string
-    ) as { userId: string, role: string }
+    const decoded = jwt.verify(token, jwtSecret()) as { userId?: string }
 
-    req.user = decoded
+    // The token only ever carries `userId` (see lib/auth.ts). Reject anything else
+    // rather than letting a payload-shaped token through with an undefined id.
+    if (!decoded?.userId) {
+      return res.status(401).json({ error: "Invalid token" })
+    }
+
+    req.user = { userId: decoded.userId }
 
     next()
   } catch {

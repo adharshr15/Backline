@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import request from "supertest"
-import { app } from "../src/index"
+import { app } from "../src/app"
 import { prisma } from "../src/lib/prisma"
 import { ParticipantType } from "../generated/prisma/enums"
 
@@ -39,7 +39,7 @@ beforeAll(async () => {
       name: "Creator User",
       username: "creator",
       email: "creator@test.com",
-      password: "password",
+      password: "password", city: "Austin", state: "TX", country: "USA",
     });
 
   creatorId = creatorRes.body.user.id;
@@ -52,7 +52,7 @@ beforeAll(async () => {
       name: "Invitee 1",
       username: "invitee1",
       email: "invitee1@test.com",
-      password: "password",
+      password: "password", city: "Austin", state: "TX", country: "USA",
     });
   inviteeId = inviteeRes.body.user.id;
   inviteeToken = inviteeRes.body.token;
@@ -472,8 +472,7 @@ describe("Conversation Controller", () => {
         name: "Houston 3/26 Show"
       })
 
-    console.log(res.body)
-    expect(res.status).toBe(201)
+    expect(res.status).toBe(200)
 
     // name updated
     expect(res.body.name).toBe("Houston 3/26 Show")
@@ -534,41 +533,40 @@ describe("Conversation Controller", () => {
   })
 
   // GET
+  // These are GETs: the controller reads senderType/senderId from the query string,
+  // so they must be sent with .query(), not in a request body.
   it("Should get all conversations for a user", async () => {
     const res = await request(app)
       .get("/conversations")
       .set("Authorization", `Bearer ${creatorToken}`)
-      .send({
+      .query({
         senderType: "USER",
         senderId: creatorId
       })
 
-    console.log(res.body)
-    expect(res.status).toBe(201)
+    expect(res.status).toBe(200)
   })
   it("Should get all conversations for a band", async () => {
     const res = await request(app)
       .get("/conversations")
       .set("Authorization", `Bearer ${inviteeToken}`)
-      .send({
+      .query({
         senderType: "BAND",
         senderId: band1Id
       })
 
-    console.log(res.body)
-    expect(res.status).toBe(201)
+    expect(res.status).toBe(200)
   })
   it("Should get all conversations for a venue", async () => {
     const res = await request(app)
       .get("/conversations")
       .set("Authorization", `Bearer ${inviteeToken}`)
-      .send({
+      .query({
         senderType: "VENUE",
         senderId: venue1Id
       })
 
-    console.log(res.body)
-    expect(res.status).toBe(201)
+    expect(res.status).toBe(200)
   })
 
   // DELETE
@@ -584,11 +582,13 @@ describe("Conversation Controller", () => {
 
     expect(res.body.message).toBe("Left conversation");
 
+    // The invitee never accepted their *user* invite (see the groupchat test), so they
+    // can only read this conversation as band1, which did accept.
     const conversationRes = await request(app)
       .get(`/conversations/${testConversationId4}`)
-      .send({
-        senderType: "USER",
-        senderId: inviteeId
+      .query({
+        senderType: "BAND",
+        senderId: band1Id
       })
       .set("Authorization", `Bearer ${inviteeToken}`);
 
@@ -596,8 +596,5 @@ describe("Conversation Controller", () => {
 
     const participantUserIds = conversationRes.body.participants.map((p: any) => p.userId);
     expect(participantUserIds).not.toContain(creatorId);
-
-    console.log("Remaining participants:", participantUserIds);
-
   })
 })

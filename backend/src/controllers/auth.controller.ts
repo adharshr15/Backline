@@ -3,7 +3,14 @@ import bcrypt from "bcrypt"
 import { prisma } from "../lib/prisma"
 import { generateToken } from "../lib/auth"
 import { AuthRequest } from "../middlewares/auth.middleware"
-import { AccountType } from "../../generated/prisma/enums"
+import { fail } from "../middlewares/error.middleware"
+
+const BCRYPT_ROUNDS = 12
+const MIN_PASSWORD_LENGTH = 8
+
+// A real bcrypt hash of a value nobody can supply, compared against when the
+// account does not exist so login timing does not leak account existence.
+const DUMMY_HASH = "$2b$12$C6UzMDM.H6dfI/f/IKcEe.6aBLLo0m5tS0fh2xB2f3nJXsQ0Q9YfW"
 
 export const register = async (req: AuthRequest, res: Response) => {
   try {
@@ -11,6 +18,10 @@ export const register = async (req: AuthRequest, res: Response) => {
 
     if (!name || !username || !email || !password || !city || !state || !country) {
       return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
     }
 
     const files = req.files as Record<string, Express.Multer.File[]>;
@@ -27,7 +38,7 @@ export const register = async (req: AuthRequest, res: Response) => {
     const existingEmail = await prisma.user.findUnique({ where: { email } });
     if (existingEmail) { return res.status(409).json({ error: "Email already in use" }); }
 
-    const hashedPassword = await bcrypt.hash(password, 10)
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS)
 
     const user = await prisma.user.create({
       data: {
@@ -60,8 +71,8 @@ export const register = async (req: AuthRequest, res: Response) => {
         profileImageUrl: user.profileImageUrl
       }
     })
-  } catch (error: any) {
-    res.status(500).json({ error: error.message })
+  } catch (error) {
+    return fail(res, error, "register")
   }
 }
 
@@ -69,17 +80,20 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { username, email, password } = req.body
 
+    if ((!email && !username) || !password) {
+      return res.status(400).json({ error: "Missing credentials" })
+    }
+
     const user = await prisma.user.findUnique({
       where: email ? { email } : { username }
     })
 
-    if (!user) {
-      return res.status(401).json({ error: "Invalid credentials" })
-    }
+    // Always run a bcrypt comparison so a missing account and a wrong password
+    // take the same time — otherwise the response latency reveals which usernames exist.
+    const hash = user?.password ?? DUMMY_HASH
+    const valid = await bcrypt.compare(password, hash)
 
-    const valid = await bcrypt.compare(password, user.password)
-
-    if (!valid) {
+    if (!user || !valid) {
       return res.status(401).json({ error: "Invalid credentials" })
     }
 
@@ -101,8 +115,8 @@ export const login = async (req: Request, res: Response) => {
         headerImageUrl: user.headerImageUrl
       }
     })
-  } catch (error: any) {
-    res.status(500).json({ error: error.message })
+  } catch (error) {
+    return fail(res, error, "login")
   }
 }
 
@@ -145,14 +159,31 @@ export const getMe = async (req: AuthRequest, res: Response) => {
   }
 }
 
+// These power inline "already taken" hints on the signup form, so they are
+// necessarily unauthenticated and necessarily confirm existence. The rate limiter
+// on the route is what stops them being used to enumerate the whole user base.
 export const checkEmail = async (req: Request, res: Response) => {
-  const { email } = req.query;
-  const existing = await prisma.user.findUnique({ where: { email: String(email) } });
-  res.json({ isUnique: !existing });
+  try {
+    const { email } = req.query;
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ error: "email is required" });
+    }
+    const existing = await prisma.user.findUnique({ where: { email } });
+    res.json({ isUnique: !existing });
+  } catch (error) {
+    return fail(res, error, "checkEmail");
+  }
 };
 
 export const checkUsername = async (req: Request, res: Response) => {
-  const { username } = req.query;
-  const existing = await prisma.user.findUnique({ where: { username: String(username) } });
-  res.json({ isUnique: !existing });
+  try {
+    const { username } = req.query;
+    if (!username || typeof username !== "string") {
+      return res.status(400).json({ error: "username is required" });
+    }
+    const existing = await prisma.user.findUnique({ where: { username } });
+    res.json({ isUnique: !existing });
+  } catch (error) {
+    return fail(res, error, "checkUsername");
+  }
 }

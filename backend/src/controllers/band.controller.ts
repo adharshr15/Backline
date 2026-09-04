@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { prisma } from '../lib/prisma'
+import { fail } from '../middlewares/error.middleware'
 import { BandRole, InviteStatus } from '../../generated/prisma/client'
 import { Request, Response } from 'express'
 import { AuthRequest } from '../middlewares/auth.middleware';
@@ -42,7 +43,7 @@ export const getBands = async (req: AuthRequest, res: Response) => {
     res.json(bands)
   } catch (error: any) {
     console.error("Prisma getBands error:", error.message)
-    res.status(500).json({ error: error.message })
+    fail(res, error, "band")
   }
 }
 
@@ -66,7 +67,7 @@ export const getBandById = async (req: AuthRequest, res: Response) => {
     res.json(band)
   } catch (error: any) {
     console.error("Prisma getBandById error:", error.message)
-    res.status(500).json({ error: error.message })
+    fail(res, error, "band")
   }
 }
 
@@ -103,7 +104,7 @@ export const getMyShowInvites = async (req: AuthRequest, res: Response) => {
     res.status(200).json(invites);
   } catch (error: any) {
     console.error("Prisma getMyShowInvites error:", error.message);
-    res.status(500).json({ error: error.message });
+    fail(res, error, "band");
   }
 };
 
@@ -183,7 +184,7 @@ export const createBand = async (req: AuthRequest, res: Response) => {
     res.status(201).json(band);
   } catch (error: any) {
     console.error("Prisma createBand error:", error.message);
-    res.status(500).json({ error: error.message });
+    fail(res, error, "band");
   }
 };
 
@@ -208,6 +209,21 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
       } = req.body;
 
     const files = req.files as Record<string, Express.Multer.File[]>;
+
+    // Only members may edit the band at all. Without this, any authenticated user
+    // could rewrite any band's name, bio and images.
+    const requesterMembership = await prisma.bandMember.findUnique({
+      where: { userId_bandId: { userId, bandId } }
+    });
+    if (!requesterMembership) {
+      return res.status(403).json({ error: "Not a member of this band" });
+    }
+    const isManager = requesterMembership.role === "MANAGER";
+
+    // Roster changes are manager-only.
+    if ((removeMemberId || inviteMemberId || updateRole) && !isManager) {
+      return res.status(403).json({ error: "Only managers can change the band roster" });
+    }
 
     const currentBand = await prisma.band.findUnique({ where: { id: bandId } });
 
@@ -237,16 +253,8 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
         updateData.headerImageUrl = `/uploads/${files.headerImage[0].filename}`;
       }
 
-      // Check if requester is a manager
-      const requesterMembership = await tx.bandMember.findUnique({
-        where: { userId_bandId: { userId, bandId } }
-      });
-      const isManager = requesterMembership?.role === "MANAGER" || requesterMembership?.role === "MEMBER";
-
-      // Force remove member if requester is manager
+      // Remove a member (manager-only; checked before the transaction)
       if (removeMemberId) {
-        if (!isManager) throw new Error("Only managers can remove members");
-
         await tx.bandMember.delete({
           where: { userId_bandId: { userId: removeMemberId, bandId } }
         });
@@ -254,8 +262,6 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
 
       // Invite new member if provided
       if (inviteMemberId) {
-        if (!isManager) throw new Error("Only managers can add members");
-
         const existingMember = await tx.bandMember.findUnique({
           where: { userId_bandId: { userId: inviteMemberId, bandId } }
         });
@@ -272,10 +278,8 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
         }
       }
 
-      // Update member's role if provided
+      // Update member's role if provided (manager-only; checked before the transaction)
       if (updateRole) {
-        if (!isManager) throw new Error("Only managers can update roles");
-
         await tx.bandMember.update({
           where: { userId_bandId: { userId: updateRole.userId, bandId } },
           data: { role: updateRole.bandRole }
@@ -304,7 +308,7 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error(error);
     if (error.code === "P2025") return res.status(404).json({ error: "Band not found" });
-    res.status(500).json({ error: error.message });
+    fail(res, error, "band");
   }
 };
 
@@ -369,7 +373,7 @@ export const respondToShowInvite = async (req: AuthRequest, res: Response) => {
     res.status(200).json(updatedShow);
   } catch (error: any) {
     console.error("Prisma respondToShowInvite error:", error.message);
-    res.status(500).json({ error: error.message });
+    fail(res, error, "band");
   }
 };
 
@@ -428,7 +432,7 @@ export const respondToTourInvite = async (req: AuthRequest, res: Response) => {
     res.status(200).json(updatedTour);
   } catch (error: any) {
     console.error("Prisma respondToTourInvite error:", error.message);
-    res.status(500).json({ error: error.message });
+    fail(res, error, "band");
   }
 };
 
@@ -489,6 +493,6 @@ export const deleteBand = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: "Band not found" });
     }
 
-    res.status(500).json({ error: error.message });
+    fail(res, error, "band");
   }
 };

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import request from "supertest"
-import { app } from "../src/index"
+import { app } from "../src/app"
 import { prisma } from "../src/lib/prisma"
 
 let testBandId: string
@@ -35,7 +35,7 @@ beforeAll(async () => {
             name: "Creator User",
             username: "creator",
             email: "creator@test.com",
-            password: "password",
+            password: "password", city: "Austin", state: "TX", country: "USA",
         });
 
     creatorId = creatorRes.body.user.id;
@@ -48,7 +48,7 @@ beforeAll(async () => {
             name: "Invitee 1",
             username: "invitee1",
             email: "invitee1@test.com",
-            password: "password",
+            password: "password", city: "Austin", state: "TX", country: "USA",
         });
     inviteeId1 = invitee1.body.user.id;
     invitee1Token = invitee1.body.token;
@@ -59,7 +59,7 @@ beforeAll(async () => {
             name: "Invitee 2",
             username: "invitee2",
             email: "invitee2@test.com",
-            password: "password",
+            password: "password", city: "Austin", state: "TX", country: "USA",
         });
     inviteeId2 = invitee2.body.user.id;
     invitee2Token = invitee2.body.token;
@@ -74,13 +74,15 @@ beforeAll(async () => {
     testTourId = tour1.id;
     console.log('testTourId: ', testTourId);
 
+    // `doors` is a required DateTime, and createdByBandId is a real FK — a literal
+    // "test" string here made the whole suite fail before any assertion ran.
     const show1 = await prisma.show.create({
         data: {
-            date: new Date(2026, 3, 4),
+            date: new Date(Date.now() + 30 * 86_400_000),
+            doors: new Date(Date.now() + 30 * 86_400_000 + 19 * 3_600_000),
             city: "Austin",
             state: "Texas",
             country: "United States",
-            createdByBandId: "test"
         }
     })
     testShowId = show1.id;

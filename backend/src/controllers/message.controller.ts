@@ -90,14 +90,22 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     if (!userId) return res.status(401).json({ error: "Unauthorized" })
 
     const { content, senderType, senderId, listingId }: {
-      content: string;
+      content?: string;
       senderType: ParticipantType;
       senderId: string;
       listingId?: string;
     } = req.body
 
-    if (!content || !senderType || !senderId) {
-      return res.status(400).json({ error: "content, senderType, and senderId are required" })
+    const file = req.file as Express.Multer.File | undefined
+    const imageUrl = file ? `/uploads/${file.filename}` : undefined
+
+    if (!senderType || !senderId) {
+      return res.status(400).json({ error: "senderType and senderId are required" })
+    }
+
+    // a message must carry text and/or an image
+    if (!content?.trim() && !imageUrl) {
+      return res.status(400).json({ error: "content or image is required" })
     }
 
     // validate senderType
@@ -148,12 +156,13 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     // create message
     const messageData: any = {
       conversationId,
-      content
+      content: content?.trim() ?? ""
     }
     if (senderType === ParticipantType.USER) messageData.senderUserId = senderId
     if (senderType === ParticipantType.BAND) messageData.senderBandId = senderId
     if (senderType === ParticipantType.VENUE) messageData.senderVenueId = senderId
     if (listingId) messageData.listingId = listingId
+    if (imageUrl) messageData.imageUrl = imageUrl
 
     const message = await prisma.message.create({ data: messageData, include: messageInclude })
 

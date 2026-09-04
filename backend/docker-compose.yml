@@ -2,12 +2,15 @@ services:
   postgres:
     image: postgres:18.1
     restart: always
+    # Values come from backend/.env (gitignored). Copy .env.example to .env first.
     environment:
-      POSTGRES_USER: adharshrajavel
-      POSTGRES_PASSWORD: Rockets3137
-      POSTGRES_DB: backline
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in backend/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in backend/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-backline}
+    # Bind to localhost only: the default (0.0.0.0) exposes the database to the
+    # whole local network, including other devices on the same Wi-Fi.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres:/var/lib/postgresql
 

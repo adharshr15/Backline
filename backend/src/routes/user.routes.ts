@@ -1,12 +1,11 @@
 import { RequestHandler, Router } from 'express'
-import { getUsers, getUserById, getMyProfiles, getMyInvites, getMyBandInvites, getMyVenueInvites, createUser, updateUser, respondToBandInvite, respondToVenueInvite, deleteUser, getUserByUsername, } from '../controllers/user.controller'
+import { getUsers, getUserById, getMyProfiles, getMyInvites, getMyBandInvites, getMyVenueInvites, updateUser, respondToBandInvite, respondToVenueInvite, deleteUser, getUserByUsername, } from '../controllers/user.controller'
 import { authenticate } from '../middlewares/auth.middleware'
 import { upload } from '../config/multer'
 
 const router = Router()
 
-// public routes (registration)
-// router.post('/', createUser)
+// Registration lives on POST /auth/register.
 
 // protected routes
 router.use(authenticate as RequestHandler)

@@ -1,5 +1,18 @@
 node_modules
-# Keep environment variables out of version control
+
+# Keep environment variables out of version control.
+# The negation must come after the wildcard, or .env.example is ignored too.
 .env*
+!.env.example
 
 /generated/prisma
+
+# User-uploaded files. These are real people's photos and private message
+# attachments — they must never be committed.
+# `uploads/*` rather than `uploads/`: git cannot re-include a file inside an
+# excluded directory, so the .gitkeep would be ignored too.
+uploads/*
+!uploads/.gitkeep
+
+# Test/coverage output
+coverage/

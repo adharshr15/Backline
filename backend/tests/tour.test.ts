@@ -1,6 +1,6 @@
 import request from "supertest"
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { app } from "../src/index"
+import { app } from "../src/app"
 import { prisma } from "../src/lib/prisma"
 
 let user1Id: string
@@ -37,7 +37,7 @@ beforeAll(async () => {
     .post('/auth/register')
     .send({
       email: "user@test",
-      password: "pass",
+      password: "password", city: "Austin", state: "TX", country: "USA",
       username: "adharsh",
       name: "Adharsh"
     })
@@ -63,7 +63,7 @@ beforeAll(async () => {
     .post('/auth/register')
     .send({
       email: "user2@test",
-      password: "pass",
+      password: "password", city: "Austin", state: "TX", country: "USA",
       username: "tayla",
       name: "Tayla"
     })
@@ -89,7 +89,7 @@ beforeAll(async () => {
     .post('/auth/register')
     .send({
       email: "user3@test",
-      password: "pass",
+      password: "password", city: "Austin", state: "TX", country: "USA",
       username: "nick",
       name: "Nick"
     })
@@ -202,7 +202,7 @@ describe("Tour API", () => {
   })
   it("Should allow band to accept tour invite", async () => {
     const res = await request(app)
-      .post(`/bands/tours/invites/${tourInviteId}/respond`)
+      .post(`/bands/tour-invites/${tourInviteId}/respond`)
       .send(({ action: "ACCEPT" } ))
       .set('Authorization', `Bearer ${user2Token}`)
     

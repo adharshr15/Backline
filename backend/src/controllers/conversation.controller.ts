@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma"
 import { AuthRequest } from "../middlewares/auth.middleware"
 import { ParticipantType } from "../../generated/prisma/enums"
 import { listingPreviewSelect } from "./message.controller"
+import { canActAs, isValidParticipantType } from "../lib/authorization"
 
 export const getMyConversations = async (req: AuthRequest, res: Response) => {
   try {
@@ -99,7 +100,7 @@ export const getMyConversations = async (req: AuthRequest, res: Response) => {
       }
     });
 
-    return res.status(201).json(conversations);
+    return res.status(200).json(conversations);
 
   } catch (error) {
     console.error(error);
@@ -178,6 +179,8 @@ export const createConversation = async (req: AuthRequest, res: Response) => {
   try {
     const creatorId = req.user?.userId as string
 
+    if (!creatorId) return res.status(401).json({ error: "Unauthorized" })
+
     const { name, userIds = [], bandIds = [], venueIds = [], senderType, senderId, content, listingId }:
       {
         name?: string
@@ -189,6 +192,16 @@ export const createConversation = async (req: AuthRequest, res: Response) => {
         content?: string
         listingId?: string
       } = req.body
+
+    if (!isValidParticipantType(senderType)) {
+      return res.status(400).json({ error: "Invalid ParticipantType" })
+    }
+
+    // Without this the caller could open a conversation — and send its first message
+    // and invites — as any other user, band or venue.
+    if (!(await canActAs(creatorId, senderType, senderId))) {
+      return res.status(403).json({ error: "You cannot send as this profile" })
+    }
 
     // validate optional listing attachment
     if (listingId) {
@@ -450,7 +463,7 @@ export const updateConversation = async (req: AuthRequest, res: Response) => {
       }
     })
 
-    return res.status(201).json(fullConversation)
+    return res.status(200).json(fullConversation)
 
   } catch (error) {
     console.error(error)
@@ -691,6 +704,16 @@ export const markConversationRead = async (req: AuthRequest, res: Response) => {
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
     const { senderType, senderId } = req.body as { senderType: ParticipantType; senderId: string };
+
+    // An unvalidated senderType previously left the filter as `{ conversationId }`,
+    // which marked the conversation read for *every* participant.
+    if (!isValidParticipantType(senderType) || !senderId) {
+      return res.status(400).json({ error: "senderType and senderId are required" });
+    }
+
+    if (!(await canActAs(userId, senderType, senderId))) {
+      return res.status(403).json({ error: "You cannot act as this profile" });
+    }
 
     let participantFilter: any = { conversationId };
     if (senderType === ParticipantType.USER)  participantFilter.userId  = senderId;

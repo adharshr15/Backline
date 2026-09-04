@@ -1,5 +1,6 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Redirect, Stack, router } from 'expo-router';
+// SDK 56+ : expo-router vendors react-navigation and re-exports the theme API.
+// Importing from @react-navigation/native directly now fails the bundler check.
+import { DarkTheme, DefaultTheme, ThemeProvider, Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -8,13 +9,12 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
 
   if (loading) return null;
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Redirect href={user ? "/(tabs)" : "/(auth)/login"} />
       <Stack>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

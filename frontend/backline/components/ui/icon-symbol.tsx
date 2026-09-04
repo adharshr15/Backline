@@ -5,7 +5,12 @@ import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
-type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
+// expo-symbols (SDK 57) widened `name` to also accept a per-platform object
+// ({ ios, android }), which cannot be used as a Record key. Take the string form.
+// Derived rather than naming SFSymbols7_0 directly, since that alias is versioned.
+type SFSymbolName = Extract<SymbolViewProps['name'], string>;
+
+type IconMapping = Record<SFSymbolName, ComponentProps<typeof MaterialIcons>['name']>;
 type IconSymbolName = keyof typeof MAPPING;
 
 /**

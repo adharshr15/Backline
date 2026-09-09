@@ -12,6 +12,7 @@ import searchRoutes from './routes/search.routes'
 import uploadsRoutes from './routes/uploads.routes'
 import membershipRoutes from './routes/membership.routes'
 import sceneRoutes from './routes/scene.routes'
+import genreRoutes from './routes/genre.routes'
 import listingRoutes from './routes/listing.routes'
 import postRoutes from './routes/post.routes'
 import metricsRoutes from './routes/metrics.routes'
@@ -42,6 +43,7 @@ app.use('/follows', followRoutes)
 app.use('/search', searchRoutes)
 app.use('/membership-invites', membershipRoutes)
 app.use('/scenes', sceneRoutes)
+app.use('/genres', genreRoutes)
 app.use('/listings', listingRoutes)
 app.use('/posts', postRoutes)
 app.use('/metrics', metricsRoutes)

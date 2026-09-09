@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../src/app";
 import { prisma } from "../src/lib/prisma";
+import { syncGenreSeed } from "../src/lib/genres";
 
 export interface TestUser {
   id: string;
@@ -137,6 +138,15 @@ export const createScene = async (overrides: Partial<{
     },
   });
   return scene.id;
+};
+
+/**
+ * Seed the real taxonomy. Call in beforeAll for any suite that touches genres --
+ * it goes through the same syncGenreSeed() the production script uses, so the
+ * test taxonomy can never drift from the shipped one.
+ */
+export const seedGenres = async () => {
+  await syncGenreSeed();
 };
 
 export const createGenre = async (slug: string, name?: string, parentSlug?: string) => {

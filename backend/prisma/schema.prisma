@@ -101,6 +101,8 @@ model User {
   listings          Listing[]                 @relation("UserListings")
   posts             Post[]                    @relation("UserPosts")
   postComments      PostComment[]             @relation("UserPostComments")
+
+  @@index([city, state])
 }
 
 model Band {
@@ -136,6 +138,8 @@ model Band {
   listings          Listing[]                 @relation("BandListings")
   posts             Post[]                    @relation("BandPosts")
   postComments      PostComment[]             @relation("BandPostComments")
+
+  @@index([city, state])
 }
 
 model BandMember {
@@ -212,8 +216,9 @@ model Venue {
   postComments      PostComment[]             @relation("VenuePostComments")
 
   @@index([city])
-  @@index([capacity]) 
-  @@index([latitude, longitude]) 
+  @@index([city, state])
+  @@index([capacity])
+  @@index([latitude, longitude])
 }
 
 model VenueRepresentative {
@@ -325,6 +330,7 @@ model Show {
   @@index([tourId])
   @@index([venueId])
   @@index([city])
+  @@index([city, state, date])
   @@index([date])
   @@index([status])
 }
@@ -353,6 +359,7 @@ model ShowBand {
   role              ShowRole?
 
   @@unique([bandId, showId])
+  @@index([showId])
 }
 
 model ShowInvite {

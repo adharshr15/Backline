@@ -5,9 +5,11 @@ import bcrypt from "bcrypt";
 import { InviteStatus } from '../../generated/prisma/enums'
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { AccountType } from '../../generated/prisma/enums';
-import { userPrivateSelect, userPublicSelect } from '../lib/prismaSelects';
+import { userPrivateSelect, userPublicSelect, userCraftsSelect } from '../lib/prismaSelects';
 import { fail } from '../middlewares/error.middleware';
-import { resolveSceneId } from '../lib/scenes';
+import { resolveSceneId, stateSpellings } from '../lib/scenes';
+import { Craft } from '../../generated/prisma/enums';
+import { clampLimit, parsePage, parseCsv, parseBool, parseText, paginated } from '../lib/query';
 import fs from 'fs';
 import path from 'path';
 
@@ -58,6 +60,7 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
       where: { id },
       select: {
         ...(isSelf ? userPrivateSelect : userPublicSelect),
+        crafts: userCraftsSelect,
         bandMemberships: { include: { band: true } },
         venueReps: { include: { venue: true } },
       }
@@ -74,6 +77,185 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
   }
 };
 
+const MAX_CRAFTS = 6;
+const MAX_HEADLINE = 120;
+
+/** A craft label describing what someone does, for list subtitles. */
+const craftLabel = (craft: string) =>
+  craft
+    .toLowerCase()
+    .split("_")
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+const peopleSubtitle = (crafts: { craft: string; forHire: boolean }[]) => {
+  if (crafts.length === 0) return "";
+  const primary = craftLabel(crafts[0].craft);
+  return crafts.some(c => c.forHire) ? `${primary} · For hire` : primary;
+};
+
+/**
+ * GET /users/discover
+ *
+ * Authenticated. Finding the photographers, promoters and sound engineers in a
+ * scene. `GET /users` is already behind auth, and a public people-search over
+ * city plus "for hire" is a different privacy posture again, so this stays authed.
+ *
+ *   ?craft=<csv>  ?forHire=  ?city= &state=  ?sceneSlug=  ?q=  ?page= &limit=
+ */
+export const discoverUsers = async (req: AuthRequest, res: Response) => {
+  try {
+    const page = parsePage(req.query.page);
+    const limit = clampLimit(req.query.limit);
+    const forHire = parseBool(req.query.forHire);
+    const q = parseText(req.query.q);
+    const city = parseText(req.query.city);
+    const state = parseText(req.query.state);
+    const sceneSlug = parseText(req.query.sceneSlug);
+
+    const craftTokens = parseCsv(req.query.craft, MAX_CRAFTS);
+    const valid = Object.values(Craft) as string[];
+    const invalid = craftTokens.filter(c => !valid.includes(c.toUpperCase()));
+    if (invalid.length) {
+      return res.status(400).json({ error: `Invalid craft: ${invalid.join(", ")}` });
+    }
+    const crafts = craftTokens.map(c => c.toUpperCase() as Craft);
+
+    const where: any = { deletedAt: null };
+
+    if (sceneSlug) {
+      const scene = await prisma.scene.findUnique({
+        where: { slug: sceneSlug },
+        select: { id: true },
+      });
+      // Unknown scene is an empty result, not a 404: this is a filter.
+      if (!scene) return res.json({ people: [], page, limit, hasMore: false });
+      where.sceneId = scene.id;
+    }
+
+    if (city) where.city = { equals: city, mode: "insensitive" };
+    if (state) where.state = { in: stateSpellings(state), mode: "insensitive" };
+    if (q) {
+      where.OR = [
+        { name: { contains: q, mode: "insensitive" } },
+        { username: { contains: q, mode: "insensitive" } },
+      ];
+    }
+
+    const craftFilter: any = {};
+    if (crafts.length) craftFilter.craft = { in: crafts };
+    if (forHire !== undefined) craftFilter.forHire = forHire;
+
+    // Discovery is about people who have said what they do, so a craft is required
+    // to appear here at all.
+    where.crafts = { some: craftFilter };
+
+    const people = await prisma.user.findMany({
+      where,
+      // Explicit select, never include: include on a User returns the password hash.
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        accountType: true,
+        bio: true,
+        city: true,
+        state: true,
+        profileImageUrl: true,
+        crafts: userCraftsSelect,
+      },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    res.json({
+      people: people.map(p => ({ ...p, subtitle: peopleSubtitle(p.crafts) })),
+      page,
+      limit,
+      hasMore: people.length === limit,
+    });
+  } catch (error: any) {
+    fail(res, error, "users");
+  }
+};
+
+/**
+ * PUT /users/:id/crafts
+ *
+ * Self only. canActAs is for polymorphic profiles; a user's own crafts are plain
+ * identity, so this compares against the token's userId directly. "me" is
+ * accepted as an alias, matching PUT /users/me.
+ *
+ * Replaces the whole set, so sending a shorter array is the "undo" operation --
+ * which is why the refusal test covers removal, not just addition.
+ */
+export const updateUserCrafts = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const target = req.params.id as string;
+    if (target !== "me" && target !== userId) {
+      return res.status(403).json({ error: "You can only change your own crafts" });
+    }
+
+    const { crafts } = req.body as {
+      crafts?: { craft?: string; forHire?: boolean; headline?: string }[];
+    };
+
+    if (!Array.isArray(crafts)) {
+      return res.status(400).json({ error: "crafts must be an array" });
+    }
+    if (crafts.length > MAX_CRAFTS) {
+      return res.status(400).json({ error: `At most ${MAX_CRAFTS} crafts` });
+    }
+
+    const valid = Object.values(Craft) as string[];
+    const seen = new Set<string>();
+    const rows: { craft: Craft; forHire: boolean; headline: string | null; position: number }[] = [];
+
+    for (const [position, entry] of crafts.entries()) {
+      const craft = typeof entry?.craft === "string" ? entry.craft.toUpperCase() : "";
+      if (!valid.includes(craft)) {
+        return res.status(400).json({ error: `Invalid craft: ${entry?.craft ?? ""}` });
+      }
+      if (seen.has(craft)) {
+        return res.status(400).json({ error: `Duplicate craft: ${craft}` });
+      }
+      seen.add(craft);
+
+      if (entry.headline !== undefined && entry.headline !== null) {
+        if (typeof entry.headline !== "string" || entry.headline.length > MAX_HEADLINE) {
+          return res.status(400).json({ error: `headline must be at most ${MAX_HEADLINE} characters` });
+        }
+      }
+
+      rows.push({
+        craft: craft as Craft,
+        forHire: entry.forHire === true,
+        headline: entry.headline?.trim() || null,
+        position,
+      });
+    }
+
+    await prisma.$transaction([
+      prisma.userCraft.deleteMany({ where: { userId } }),
+      prisma.userCraft.createMany({ data: rows.map(r => ({ ...r, userId })) }),
+    ]);
+
+    res.json({
+      crafts: await prisma.userCraft.findMany({
+        where: { userId },
+        select: { craft: true, forHire: true, headline: true },
+        orderBy: { position: "asc" },
+      }),
+    });
+  } catch (error: any) {
+    fail(res, error, "users");
+  }
+};
+
 export const getUserByUsername = async (req: AuthRequest, res: Response) => {
     try {
       const username = req.params.username as string;
@@ -82,6 +264,7 @@ export const getUserByUsername = async (req: AuthRequest, res: Response) => {
         where: { username },
         select: {
           ...userPublicSelect,
+          crafts: userCraftsSelect,
           bandMemberships: { include: { band: true } },
           venueReps: { include: { venue: true } },
         }

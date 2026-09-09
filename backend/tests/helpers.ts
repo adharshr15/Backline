@@ -164,6 +164,22 @@ export const createGenre = async (slug: string, name?: string, parentSlug?: stri
   return genre.id;
 };
 
+/** Set a user's crafts through the real endpoint. */
+export const setCrafts = async (
+  user: TestUser,
+  crafts: { craft: string; forHire?: boolean; headline?: string }[],
+) => {
+  const res = await request(app)
+    .put(`/users/me/crafts`)
+    .set(auth(user.token))
+    .send({ crafts });
+
+  if (res.status !== 200) {
+    throw new Error(`setCrafts failed (${res.status}): ${JSON.stringify(res.body)}`);
+  }
+  return res.body.crafts as { craft: string; forHire: boolean; headline: string | null }[];
+};
+
 /** Tag a band with genres by slug, in order (position 0 = primary). */
 export const attachGenres = async (bandId: string, slugs: string[]) => {
   const genres = await prisma.genre.findMany({ where: { slug: { in: slugs } } });

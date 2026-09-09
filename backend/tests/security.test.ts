@@ -308,6 +308,28 @@ describe("scene follows", () => {
   });
 });
 
+describe("user crafts", () => {
+  it("refuses to set another user's crafts", async () => {
+    const res = await request(app).put(`/users/${alice.id}/crafts`).set(auth(mallory.token))
+      .send({ crafts: [{ craft: "PROMOTER" }] });
+
+    expect(res.status).toBe(403);
+    expect(await prisma.userCraft.count({ where: { userId: alice.id } })).toBe(0);
+  });
+
+  it("refuses to clear another user's crafts", async () => {
+    // An empty array is the delete operation, so the inverse needs its own check.
+    await request(app).put("/users/me/crafts").set(auth(alice.token))
+      .send({ crafts: [{ craft: "PHOTOGRAPHER", forHire: true }] });
+
+    const res = await request(app).put(`/users/${alice.id}/crafts`).set(auth(mallory.token))
+      .send({ crafts: [] });
+
+    expect(res.status).toBe(403);
+    expect(await prisma.userCraft.count({ where: { userId: alice.id } })).toBe(1);
+  });
+});
+
 describe("show RSVP and repost", () => {
   let showId: string;
 

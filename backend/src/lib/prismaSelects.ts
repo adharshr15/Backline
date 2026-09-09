@@ -19,7 +19,6 @@ export const userPrivateSelect = {
   country: true,
   profileImageUrl: true,
   headerImageUrl: true,
-  isPromoter: true,
   createdAt: true,
 } as const;
 
@@ -35,8 +34,16 @@ export const userPublicSelect = {
   country: true,
   profileImageUrl: true,
   headerImageUrl: true,
-  isPromoter: true,
   createdAt: true,
+} as const;
+
+/**
+ * A user's crafts (photographer, promoter, sound engineer, …), ordered.
+ * Supersedes the dead `isPromoter` boolean, which no endpoint ever wrote.
+ */
+export const userCraftsSelect = {
+  select: { craft: true, forHire: true, headline: true },
+  orderBy: { position: "asc" },
 } as const;
 
 /** Minimal shape for avatars and name chips in lists. */

@@ -112,31 +112,49 @@ const resolveGenreIds = async (tokens: string[]): Promise<string[]> => {
 const sceneBySlug = (slug: string) =>
     prisma.scene.findFirst({ where: { slug, deletedAt: null } });
 
+/** Compact scene reference returned alongside follow/unfollow. */
+const sceneRef = (s: { id: string; slug: string; name: string; city: string; state: string }) => ({
+    id: s.id,
+    slug: s.slug,
+    name: s.name,
+    city: s.city,
+    state: s.state,
+});
+
 export const followScene = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.userId as string;
         if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-        const { city, state, country, followerId, followerType } = req.body as {
-            city: string; state: string; country?: string;
+        const { sceneId, slug, city, state, country, followerId, followerType } = req.body as {
+            sceneId?: string; slug?: string;
+            city?: string; state?: string; country?: string;
             followerId: string; followerType: string;
         };
 
-        if (!city || !state) {
-            return res.status(400).json({ error: "city and state are required" });
+        if (!sceneId && !slug && !(city && state)) {
+            return res.status(400).json({ error: "sceneId, slug, or city and state are required" });
         }
 
+        // Authorization before any write, and before creating a scene as a side
+        // effect -- a caller who may not act as this profile should not be able to
+        // bring scenes into existence either.
         if (!(await canActAsLower(userId, followerType, followerId))) {
             return res.status(403).json({ error: "You cannot follow scenes as this profile" });
         }
 
-        // Follows are keyed on sceneId now. The request still speaks city/state --
-        // the shipped app sends exactly that -- so resolve it here, creating the
-        // scene if this is the first anyone has heard of that city.
-        const scene = await resolveScene({ city, state, country });
-        if (!scene) {
-            return res.status(400).json({ error: "city and state are required" });
+        // An explicit id or slug must exist. Only the city/state form creates,
+        // because the shipped app follows a city that may have nothing in it yet.
+        let scene = null;
+        if (sceneId) {
+            scene = await prisma.scene.findFirst({ where: { id: sceneId, deletedAt: null } });
+        } else if (slug) {
+            scene = await sceneBySlug(slug);
+        } else {
+            scene = await resolveScene({ city, state, country });
         }
+
+        if (!scene) return res.status(404).json({ error: "Not found" });
 
         await prisma.sceneFollow.upsert({
             where: {
@@ -153,7 +171,8 @@ export const followScene = async (req: AuthRequest, res: Response) => {
             update: {},
         });
 
-        res.json({ success: true });
+        // `scene` is additive -- the shipped client reads only the status.
+        res.json({ success: true, scene: sceneRef(scene) });
     } catch (error: any) {
         fail(res, error, "scene");
     }
@@ -164,30 +183,55 @@ export const unfollowScene = async (req: AuthRequest, res: Response) => {
         const userId = req.user?.userId as string;
         if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-        const { city, state, followerId, followerType } = req.body as {
-            city: string; state: string; followerId: string; followerType: string;
+        const { sceneId, slug, city, state, followerId, followerType } = req.body as {
+            sceneId?: string; slug?: string;
+            city?: string; state?: string;
+            followerId: string; followerType: string;
         };
 
+        if (!sceneId && !slug && !(city && state)) {
+            return res.status(400).json({ error: "sceneId, slug, or city and state are required" });
+        }
+
+        // The inverse of follow needs the same check. Missing inverse checks have
+        // been the most common authorization bug in this codebase.
         if (!(await canActAsLower(userId, followerType, followerId))) {
             return res.status(403).json({ error: "You cannot unfollow scenes as this profile" });
         }
 
-        // Resolve without creating: unfollowing a city nothing has ever heard of
-        // should not bring that scene into existence.
-        const scene = city && state ? await findSceneByLocation(city, state) : null;
-
-        if (scene) {
-            await prisma.sceneFollow.deleteMany({
-                where: { followerId, followerType, sceneId: scene.id },
-            });
+        // Never creates: unfollowing a city nothing has heard of must not bring
+        // that scene into existence.
+        let scene = null;
+        if (sceneId) {
+            scene = await prisma.scene.findFirst({ where: { id: sceneId, deletedAt: null } });
+        } else if (slug) {
+            scene = await sceneBySlug(slug);
+        } else if (city && state) {
+            scene = await findSceneByLocation(city, state);
         }
 
-        res.json({ success: true });
+        if (!scene) return res.status(404).json({ error: "Not found" });
+
+        await prisma.sceneFollow.deleteMany({
+            where: { followerId, followerType, sceneId: scene.id },
+        });
+
+        res.json({ success: true, scene: sceneRef(scene) });
     } catch (error: any) {
         fail(res, error, "scene");
     }
 };
 
+/**
+ * GET /scenes/following?followerId=&followerType=
+ *
+ * Still returns a bare array with city and state at the top level of each row --
+ * the shipped ScenePage does
+ *   scenes.some(s => s.city.toLowerCase() === city.toLowerCase())
+ * and that has to keep working. The values now come from the joined Scene rather
+ * than the legacy columns, which is what makes the SceneFollow migration
+ * invisible to the running app. `scene` is added additively.
+ */
 export const getFollowedScenes = async (req: Request, res: Response) => {
     try {
         const { followerId, followerType } = req.query as Record<string, string>;
@@ -195,12 +239,73 @@ export const getFollowedScenes = async (req: Request, res: Response) => {
             return res.status(400).json({ error: "followerId and followerType required" });
         }
 
-        const scenes = await prisma.sceneFollow.findMany({
+        // Was unbounded. A list endpoint without a cap is a bulk export.
+        const limit = clampLimit(req.query.limit, 100, 200);
+
+        const follows = await prisma.sceneFollow.findMany({
             where: { followerId, followerType },
             orderBy: { createdAt: "asc" },
+            take: limit,
+            select: {
+                id: true,
+                sceneId: true,
+                followerId: true,
+                followerType: true,
+                createdAt: true,
+                scene: {
+                    select: {
+                        id: true,
+                        slug: true,
+                        name: true,
+                        city: true,
+                        state: true,
+                        country: true,
+                        imageUrl: true,
+                    },
+                },
+            },
         });
 
-        res.json(scenes);
+        res.json(
+            follows.map(f => ({
+                id: f.id,
+                sceneId: f.sceneId,
+                followerId: f.followerId,
+                followerType: f.followerType,
+                createdAt: f.createdAt,
+                city: f.scene.city,
+                state: f.scene.state,
+                country: f.scene.country,
+                scene: f.scene,
+            })),
+        );
+    } catch (error: any) {
+        fail(res, error, "scene");
+    }
+};
+
+/**
+ * GET /scenes/:slug/following?followerId=&followerType=
+ *
+ * A direct "am I following this?" check, so the frontend can stop fetching the
+ * whole follow list and scanning it.
+ */
+export const getSceneFollowState = async (req: Request, res: Response) => {
+    try {
+        const { followerId, followerType } = req.query as Record<string, string>;
+        if (!followerId || !followerType) {
+            return res.status(400).json({ error: "followerId and followerType required" });
+        }
+
+        const scene = await sceneBySlug(req.params.slug as string);
+        if (!scene) return res.status(404).json({ error: "Not found" });
+
+        const follow = await prisma.sceneFollow.findFirst({
+            where: { followerId, followerType, sceneId: scene.id },
+            select: { id: true },
+        });
+
+        res.json({ isFollowing: follow !== null });
     } catch (error: any) {
         fail(res, error, "scene");
     }

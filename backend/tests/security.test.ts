@@ -268,6 +268,44 @@ describe("scene follows", () => {
     });
     expect(stillThere).not.toBeNull();
   });
+
+  // The endpoint now also accepts { sceneId } and { slug }. Each identification
+  // form is its own way in, so each is checked separately.
+  it("refuses to follow by sceneId as another profile", async () => {
+    const scene = await prisma.scene.findFirstOrThrow({ where: { city: "Austin" } });
+
+    const res = await request(app).post("/scenes/follow").set(auth(mallory.token))
+      .send({ sceneId: scene.id, followerId: aliceBand, followerType: "band" });
+
+    expect(res.status).toBe(403);
+  });
+
+  it("refuses to unfollow by slug as another profile, and the follow survives", async () => {
+    const scene = await prisma.scene.findFirstOrThrow({ where: { city: "Austin" } });
+
+    await request(app).post("/scenes/follow").set(auth(alice.token))
+      .send({ sceneId: scene.id, followerId: aliceBand, followerType: "band" });
+
+    const res = await request(app).delete("/scenes/follow").set(auth(mallory.token))
+      .send({ slug: scene.slug, followerId: aliceBand, followerType: "band" });
+
+    expect(res.status).toBe(403);
+
+    const stillThere = await prisma.sceneFollow.findFirst({
+      where: { followerId: aliceBand, followerType: "band", sceneId: scene.id },
+    });
+    expect(stillThere).not.toBeNull();
+  });
+
+  it("does not create a scene as a side effect of a refused follow", async () => {
+    // Authorization runs before resolution, so a caller who may not act as the
+    // profile cannot use this endpoint to mint scene rows either.
+    const res = await request(app).post("/scenes/follow").set(auth(mallory.token))
+      .send({ city: "Galveston", state: "TX", followerId: aliceBand, followerType: "band" });
+
+    expect(res.status).toBe(403);
+    expect(await prisma.scene.findUnique({ where: { slug: "galveston-tx" } })).toBeNull();
+  });
 });
 
 describe("show RSVP and repost", () => {

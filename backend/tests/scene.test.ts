@@ -374,6 +374,303 @@ describe("scene read endpoints", () => {
     });
   });
 
+  describe("scene follows", () => {
+    let mallory: TestUser;
+    let aliceBandId: string;
+
+    beforeAll(async () => {
+      mallory = await registerUser({ username: "mallory_scene", city: "Houston", state: "TX" });
+      aliceBandId = await createBand(alice, "Alice Follow Band");
+    });
+
+    const clearFollows = () => prisma.sceneFollow.deleteMany({});
+
+    describe("POST /scenes/follow", () => {
+      it("follows by sceneId", async () => {
+        await clearFollows();
+
+        const res = await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ sceneId: houstonId, followerId: alice.id, followerType: "user" });
+
+        expect(res.status).toBe(200);
+        expect(res.body.scene).toMatchObject({ slug: "houston-tx", city: "Houston", state: "TX" });
+
+        const rows = await prisma.sceneFollow.findMany({ where: { followerId: alice.id } });
+        expect(rows).toHaveLength(1);
+        expect(rows[0].sceneId).toBe(houstonId);
+      });
+
+      it("follows by slug", async () => {
+        await clearFollows();
+
+        const res = await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ slug: "dallas-tx", followerId: alice.id, followerType: "user" });
+
+        expect(res.status).toBe(200);
+        expect(res.body.scene.slug).toBe("dallas-tx");
+      });
+
+      it("still accepts the legacy city/state body and stores a real sceneId", async () => {
+        // This is the shape the shipped app sends. It must keep working.
+        await clearFollows();
+
+        const res = await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ city: "Houston", state: "TX", country: "USA", followerId: alice.id, followerType: "user" });
+
+        expect(res.status).toBe(200);
+
+        const row = await prisma.sceneFollow.findFirstOrThrow({ where: { followerId: alice.id } });
+        expect(row.sceneId).toBe(houstonId);
+      });
+
+      it("creates the scene when following a city nothing has reached yet", async () => {
+        await clearFollows();
+
+        const res = await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ city: "Lubbock", state: "TX", followerId: alice.id, followerType: "user" });
+
+        expect(res.status).toBe(200);
+        expect(res.body.scene.slug).toBe("lubbock-tx");
+        expect(await prisma.scene.findUnique({ where: { slug: "lubbock-tx" } })).not.toBeNull();
+      });
+
+      it("is idempotent", async () => {
+        await clearFollows();
+
+        const body = { sceneId: houstonId, followerId: alice.id, followerType: "user" };
+        await request(app).post("/scenes/follow").set(auth(alice.token)).send(body);
+        const second = await request(app).post("/scenes/follow").set(auth(alice.token)).send(body);
+
+        expect(second.status).toBe(200);
+        expect(await prisma.sceneFollow.count({ where: { followerId: alice.id } })).toBe(1);
+      });
+
+      it("404s an unknown sceneId or slug rather than creating one", async () => {
+        const byId = await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ sceneId: "does-not-exist", followerId: alice.id, followerType: "user" });
+        expect(byId.status).toBe(404);
+
+        const bySlug = await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ slug: "nowhere-zz", followerId: alice.id, followerType: "user" });
+        expect(bySlug.status).toBe(404);
+
+        expect(await prisma.scene.findUnique({ where: { slug: "nowhere-zz" } })).toBeNull();
+      });
+
+      it("400s when no scene is identified at all", async () => {
+        const res = await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ followerId: alice.id, followerType: "user" });
+        expect(res.status).toBe(400);
+      });
+
+      it("401s without a token", async () => {
+        const res = await request(app)
+          .post("/scenes/follow")
+          .send({ sceneId: houstonId, followerId: alice.id, followerType: "user" });
+        expect(res.status).toBe(401);
+      });
+
+      it("refuses to follow as another user, and writes nothing", async () => {
+        await clearFollows();
+
+        const res = await request(app)
+          .post("/scenes/follow")
+          .set(auth(mallory.token))
+          .send({ sceneId: houstonId, followerId: alice.id, followerType: "user" });
+
+        expect(res.status).toBe(403);
+        expect(await prisma.sceneFollow.count({ where: { followerId: alice.id } })).toBe(0);
+      });
+
+      it("refuses to follow as a band the caller is not in, and writes nothing", async () => {
+        await clearFollows();
+
+        const res = await request(app)
+          .post("/scenes/follow")
+          .set(auth(mallory.token))
+          .send({ sceneId: houstonId, followerId: aliceBandId, followerType: "band" });
+
+        expect(res.status).toBe(403);
+        expect(await prisma.sceneFollow.count({ where: { followerId: aliceBandId } })).toBe(0);
+      });
+
+      it("does not create a scene as a side effect of a refused follow", async () => {
+        const res = await request(app)
+          .post("/scenes/follow")
+          .set(auth(mallory.token))
+          .send({ city: "Amarillo", state: "TX", followerId: alice.id, followerType: "user" });
+
+        expect(res.status).toBe(403);
+        expect(await prisma.scene.findUnique({ where: { slug: "amarillo-tx" } })).toBeNull();
+      });
+    });
+
+    describe("DELETE /scenes/follow", () => {
+      it("unfollows by sceneId", async () => {
+        await clearFollows();
+        await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ sceneId: houstonId, followerId: alice.id, followerType: "user" });
+
+        const res = await request(app)
+          .delete("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ sceneId: houstonId, followerId: alice.id, followerType: "user" });
+
+        expect(res.status).toBe(200);
+        expect(await prisma.sceneFollow.count({ where: { followerId: alice.id } })).toBe(0);
+      });
+
+      it("still accepts the legacy city/state body", async () => {
+        await clearFollows();
+        await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ city: "Houston", state: "TX", followerId: alice.id, followerType: "user" });
+
+        const res = await request(app)
+          .delete("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ city: "Houston", state: "TX", followerId: alice.id, followerType: "user" });
+
+        expect(res.status).toBe(200);
+        expect(await prisma.sceneFollow.count({ where: { followerId: alice.id } })).toBe(0);
+      });
+
+      it("404s for a city with no scene, and does not create one", async () => {
+        const res = await request(app)
+          .delete("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ city: "Abilene", state: "TX", followerId: alice.id, followerType: "user" });
+
+        expect(res.status).toBe(404);
+        expect(await prisma.scene.findUnique({ where: { slug: "abilene-tx" } })).toBeNull();
+      });
+
+      it("refuses to unfollow on another profile's behalf, and the row survives", async () => {
+        // The inverse of follow needs the same check -- this is the bug class
+        // CONTRIBUTING calls out as the most common one in this codebase.
+        await clearFollows();
+        await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ sceneId: houstonId, followerId: alice.id, followerType: "user" });
+
+        const res = await request(app)
+          .delete("/scenes/follow")
+          .set(auth(mallory.token))
+          .send({ sceneId: houstonId, followerId: alice.id, followerType: "user" });
+
+        expect(res.status).toBe(403);
+
+        const rows = await prisma.sceneFollow.findMany({ where: { followerId: alice.id } });
+        expect(rows).toHaveLength(1);
+        expect(rows[0].sceneId).toBe(houstonId);
+      });
+
+      it("401s without a token", async () => {
+        const res = await request(app)
+          .delete("/scenes/follow")
+          .send({ sceneId: houstonId, followerId: alice.id, followerType: "user" });
+        expect(res.status).toBe(401);
+      });
+    });
+
+    describe("GET /scenes/following", () => {
+      it("keeps city and state at the top level, sourced from the scene", async () => {
+        // The shipped ScenePage does scenes.some(s => s.city.toLowerCase() === ...).
+        // The legacy columns are nullable now, so these must come from the relation.
+        await clearFollows();
+        await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ sceneId: houstonId, followerId: alice.id, followerType: "user" });
+
+        // Blank the legacy columns to prove nothing reads them any more.
+        await prisma.sceneFollow.updateMany({ data: { city: null, state: null, country: null } });
+
+        const res = await request(app).get(
+          `/scenes/following?followerId=${alice.id}&followerType=user`,
+        );
+
+        expect(res.status).toBe(200);
+        expect(Array.isArray(res.body)).toBe(true);
+        expect(res.body[0]).toMatchObject({ city: "Houston", state: "TX" });
+        expect(res.body[0].scene).toMatchObject({ slug: "houston-tx", name: "Houston" });
+      });
+
+      it("clamps an oversized limit", async () => {
+        const res = await request(app).get(
+          `/scenes/following?followerId=${alice.id}&followerType=user&limit=99999`,
+        );
+        expect(res.status).toBe(200);
+        expect(res.body.length).toBeLessThanOrEqual(200);
+      });
+
+      it("400s without follower identification", async () => {
+        expect((await request(app).get("/scenes/following")).status).toBe(400);
+      });
+    });
+
+    describe("GET /scenes/:slug/following", () => {
+      it("reports follow state directly", async () => {
+        await clearFollows();
+
+        const before = await request(app).get(
+          `/scenes/houston-tx/following?followerId=${alice.id}&followerType=user`,
+        );
+        expect(before.body).toEqual({ isFollowing: false });
+
+        await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ sceneId: houstonId, followerId: alice.id, followerType: "user" });
+
+        const after = await request(app).get(
+          `/scenes/houston-tx/following?followerId=${alice.id}&followerType=user`,
+        );
+        expect(after.body).toEqual({ isFollowing: true });
+      });
+
+      it("404s an unknown scene", async () => {
+        const res = await request(app).get(
+          `/scenes/nowhere-zz/following?followerId=${alice.id}&followerType=user`,
+        );
+        expect(res.status).toBe(404);
+      });
+    });
+
+    describe("follower counts", () => {
+      it("appear on the scene detail payload", async () => {
+        await clearFollows();
+        await request(app)
+          .post("/scenes/follow")
+          .set(auth(alice.token))
+          .send({ sceneId: houstonId, followerId: alice.id, followerType: "user" });
+
+        const res = await request(app).get("/scenes/houston-tx");
+        expect(res.body.counts.followers).toBe(1);
+
+        await clearFollows();
+      });
+    });
+  });
+
   describe("GET /scenes/cities", () => {
     it("keeps the legacy shape and adds slug", async () => {
       const res = await request(app).get("/scenes/cities");

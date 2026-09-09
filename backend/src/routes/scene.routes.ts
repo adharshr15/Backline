@@ -11,6 +11,7 @@ import {
     getSceneVenues,
     getScenePeople,
     getSceneShows,
+    getSceneFollowState,
 } from "../controllers/scene.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 
@@ -32,6 +33,7 @@ router.get("/:slug/bands", getSceneBands as RequestHandler);
 router.get("/:slug/venues", getSceneVenues as RequestHandler);
 router.get("/:slug/people", getScenePeople as RequestHandler);
 router.get("/:slug/shows", getSceneShows as RequestHandler);
+router.get("/:slug/following", getSceneFollowState as RequestHandler);
 router.get("/:slug", getSceneBySlug as RequestHandler);
 
 router.use(authenticate as RequestHandler);

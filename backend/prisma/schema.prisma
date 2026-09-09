@@ -558,20 +558,21 @@ model Follow {
 
 model SceneFollow {
   id           String   @id @default(cuid())
-  city         String
-  state        String
-  country      String?
   followerId   String
   followerType String
   createdAt    DateTime @default(now())
 
-  /// Nullable until the backfill has run; a later migration makes it required
-  /// and moves the unique constraint onto it. Do not read city/state once that
-  /// lands -- read through `scene`.
-  sceneId      String?
-  scene        Scene?   @relation(fields: [sceneId], references: [id])
+  sceneId      String
+  scene        Scene    @relation(fields: [sceneId], references: [id])
 
-  @@unique([followerId, followerType, city, state])
+  /// Legacy. Superseded by `scene`; kept nullable for one release so migration B
+  /// stays revertible. Nothing reads these -- responses that still expose city
+  /// and state read them through the relation.
+  city         String?
+  state        String?
+  country      String?
+
+  @@unique([followerId, followerType, sceneId])
   @@index([city, state])
   @@index([followerId, followerType])
   @@index([sceneId])

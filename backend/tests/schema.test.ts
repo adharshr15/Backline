@@ -198,34 +198,45 @@ describe("explore schema", () => {
   });
 
   describe("SceneFollow.sceneId", () => {
-    it("accepts a scene reference while city/state are still required", async () => {
+    it("resolves its scene through the relation", async () => {
       const sceneId = await createScene({ city: "Waco", state: "TX", slug: "waco-tx" });
 
       const follow = await prisma.sceneFollow.create({
         data: {
-          city: "Waco",
-          state: "TX",
-          country: "USA",
           followerId: alice.id,
           followerType: "user",
           sceneId,
+          city: "Waco",
+          state: "TX",
+          country: "USA",
         },
         include: { scene: { select: { slug: true } } },
       });
 
-      expect(follow.scene?.slug).toBe("waco-tx");
+      expect(follow.scene.slug).toBe("waco-tx");
     });
 
-    it("still allows a legacy row with no sceneId until the backfill runs", async () => {
+    it("requires a scene", async () => {
+      // Was nullable while the backfill was pending; migration B made it required.
+      const sceneId = await createScene({ city: "Tulsa", state: "OK", slug: "tulsa-ok" });
       const follow = await prisma.sceneFollow.create({
-        data: {
-          city: "Tulsa",
-          state: "OK",
-          followerId: alice.id,
-          followerType: "user",
-        },
+        data: { followerId: alice.id, followerType: "user", sceneId },
       });
-      expect(follow.sceneId).toBeNull();
+      expect(follow.sceneId).toBe(sceneId);
+      expect(follow.city).toBeNull();
+    });
+
+    it("allows one follow per (follower, scene)", async () => {
+      const sceneId = await createScene({ city: "Tyler", state: "TX", slug: "tyler-tx" });
+      await prisma.sceneFollow.create({
+        data: { followerId: alice.id, followerType: "user", sceneId },
+      });
+
+      await expect(
+        prisma.sceneFollow.create({
+          data: { followerId: alice.id, followerType: "user", sceneId },
+        }),
+      ).rejects.toThrow();
     });
   });
 

@@ -3,6 +3,16 @@ import { prisma } from "../lib/prisma";
 import { fail } from "../middlewares/error.middleware";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { canActAsLower } from "../lib/authorization";
+import { resolveScene, stateSpellings } from "../lib/scenes";
+
+/** Look up a scene by location without creating one. */
+const findSceneByLocation = (city: string, state: string) =>
+    prisma.scene.findFirst({
+        where: {
+            city: { equals: city, mode: "insensitive" },
+            state: { in: stateSpellings(state), mode: "insensitive" },
+        },
+    });
 
 export const followScene = async (req: AuthRequest, res: Response) => {
     try {
@@ -22,9 +32,26 @@ export const followScene = async (req: AuthRequest, res: Response) => {
             return res.status(403).json({ error: "You cannot follow scenes as this profile" });
         }
 
+        // Follows are keyed on sceneId now. The request still speaks city/state --
+        // the shipped app sends exactly that -- so resolve it here, creating the
+        // scene if this is the first anyone has heard of that city.
+        const scene = await resolveScene({ city, state, country });
+        if (!scene) {
+            return res.status(400).json({ error: "city and state are required" });
+        }
+
         await prisma.sceneFollow.upsert({
-            where: { followerId_followerType_city_state: { followerId, followerType, city, state } },
-            create: { city, state, country: country ?? null, followerId, followerType },
+            where: {
+                followerId_followerType_sceneId: { followerId, followerType, sceneId: scene.id },
+            },
+            create: {
+                sceneId: scene.id,
+                followerId,
+                followerType,
+                city: scene.city,
+                state: scene.state,
+                country: scene.country,
+            },
             update: {},
         });
 
@@ -47,9 +74,15 @@ export const unfollowScene = async (req: AuthRequest, res: Response) => {
             return res.status(403).json({ error: "You cannot unfollow scenes as this profile" });
         }
 
-        await prisma.sceneFollow.deleteMany({
-            where: { followerId, followerType, city, state },
-        });
+        // Resolve without creating: unfollowing a city nothing has ever heard of
+        // should not bring that scene into existence.
+        const scene = city && state ? await findSceneByLocation(city, state) : null;
+
+        if (scene) {
+            await prisma.sceneFollow.deleteMany({
+                where: { followerId, followerType, sceneId: scene.id },
+            });
+        }
 
         res.json({ success: true });
     } catch (error: any) {

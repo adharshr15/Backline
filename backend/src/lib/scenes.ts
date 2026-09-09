@@ -160,6 +160,62 @@ export const resolveScene = async (loc: SceneLocation) => {
 /** Convenience for write paths: the scene id, or null. */
 export const resolveSceneId = async (loc: SceneLocation) => (await resolveScene(loc))?.id ?? null;
 
+export type SceneCounts = {
+  bands: number;
+  venues: number;
+  upcomingShows: number;
+  followers: number;
+};
+
+/**
+ * Counts for a page of scenes in four queries, independent of page size.
+ *
+ * Deliberately not Prisma's per-row `_count` on bands/venues/shows: that emits a
+ * correlated subquery per relation per row, i.e. 3 x 100 subqueries for a full
+ * page. A groupBy over the page's ids is one query each.
+ */
+export const countsForScenes = async (sceneIds: string[]): Promise<Map<string, SceneCounts>> => {
+  const empty = (): SceneCounts => ({ bands: 0, venues: 0, upcomingShows: 0, followers: 0 });
+  const out = new Map(sceneIds.map(id => [id, empty()]));
+  if (sceneIds.length === 0) return out;
+
+  const inPage = { in: sceneIds };
+  const [bands, venues, shows, follows] = await Promise.all([
+    prisma.band.groupBy({
+      by: ["sceneId"],
+      where: { sceneId: inPage, deletedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.venue.groupBy({
+      by: ["sceneId"],
+      where: { sceneId: inPage, deletedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.show.groupBy({
+      by: ["sceneId"],
+      where: {
+        sceneId: inPage,
+        deletedAt: null,
+        date: { gte: new Date() },
+        status: { not: "CANCELLED" },
+      },
+      _count: { _all: true },
+    }),
+    prisma.sceneFollow.groupBy({
+      by: ["sceneId"],
+      where: { sceneId: inPage },
+      _count: { _all: true },
+    }),
+  ]);
+
+  for (const row of bands) if (row.sceneId) out.get(row.sceneId)!.bands = row._count._all;
+  for (const row of venues) if (row.sceneId) out.get(row.sceneId)!.venues = row._count._all;
+  for (const row of shows) if (row.sceneId) out.get(row.sceneId)!.upcomingShows = row._count._all;
+  for (const row of follows) out.get(row.sceneId)!.followers = row._count._all;
+
+  return out;
+};
+
 const KM_PER_DEG_LAT = 111.32;
 
 /**

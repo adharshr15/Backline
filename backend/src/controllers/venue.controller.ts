@@ -5,6 +5,7 @@ import { VenueRole } from '../../generated/prisma/client'
 import { Request, Response } from 'express';
 import { InviteStatus } from '../../generated/prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware';
+import { resolveSceneId } from '../lib/scenes';
 import fs from 'fs';
 import path from 'path';
 
@@ -135,10 +136,13 @@ export const createVenue = async (req: AuthRequest, res: Response) => {
 
         const accountType = "VENUE";
 
+        // Resolved outside the transaction: it may create a Scene row.
+        const sceneId = await resolveSceneId({ city, state, country });
+
         const venue = await prisma.$transaction(async (tx) => {
             // 1. Create venue + creator as representative
             const createdVenue = await tx.venue.create({
-                data: { name, city, state, country, latitude, longitude, capacity, bio, contactEmail, accountType, profileImageUrl, headerImageUrl, 
+                data: { name, city, state, country, sceneId, latitude, longitude, capacity, bio, contactEmail, accountType, profileImageUrl, headerImageUrl,
                     representatives: {
                         create: [
                             {
@@ -223,6 +227,17 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
 
         const currentVenue = await prisma.venue.findUnique({ where: { id: venueId } });
 
+        // Keep sceneId tracking the venue's current city/state. Partial update, so
+        // resolve against the merged location.
+        const sceneId =
+            city || state || country
+                ? await resolveSceneId({
+                    city: city ?? currentVenue?.city,
+                    state: state ?? currentVenue?.state,
+                    country: country ?? currentVenue?.country,
+                })
+                : undefined;
+
         const updatedVenue = await prisma.$transaction(async (tx) => {
             const updateData: any = {};
             if (name) updateData.name = name;
@@ -230,6 +245,7 @@ export const updateVenue = async (req: AuthRequest, res: Response) => {
             if (city) updateData.city = city;
             if (state) updateData.state = state;
             if (country) updateData.country = country;
+            if (sceneId !== undefined) updateData.sceneId = sceneId;
             if (address) updateData.address = address;
             if (latitude !== undefined) updateData.latitude = latitude;
             if (longitude !== undefined) updateData.longitude = longitude;

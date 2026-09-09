@@ -4,6 +4,7 @@ import { fail } from '../middlewares/error.middleware'
 import { BandRole, InviteStatus } from '../../generated/prisma/client'
 import { Request, Response } from 'express'
 import { AuthRequest } from '../middlewares/auth.middleware';
+import { resolveSceneId } from '../lib/scenes';
 import { request } from 'node:http';
 import fs from 'fs';
 import path from 'path';
@@ -128,6 +129,10 @@ export const createBand = async (req: AuthRequest, res: Response) => {
 
     const accountType = "BAND";
 
+    // Resolved outside the transaction: it may create a Scene row, and holding
+    // that inside the band transaction would widen the window for a write race.
+    const sceneId = await resolveSceneId({ city, state, country });
+
     const band = await prisma.$transaction(async (tx) => {
       // 1. Create band + creator as member (ONLY ONCE)
       const createdBand = await tx.band.create({
@@ -137,6 +142,7 @@ export const createBand = async (req: AuthRequest, res: Response) => {
           city,
           state,
           country,
+          sceneId,
           accountType,
           bio,
           profileImageUrl,
@@ -227,6 +233,18 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
 
     const currentBand = await prisma.band.findUnique({ where: { id: bandId } });
 
+    // sceneId must track the band's current city/state. Resolve against the
+    // merged location, since this is a partial update -- passing only `city`
+    // still moves the band to a different scene.
+    const sceneId =
+      city || state || country
+        ? await resolveSceneId({
+            city: city ?? currentBand?.city,
+            state: state ?? currentBand?.state,
+            country: country ?? currentBand?.country,
+          })
+        : undefined;
+
     const updatedBand = await prisma.$transaction(async (tx) => {
       const updateData: any = {};
       if (name) updateData.name = name;
@@ -235,6 +253,7 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
       if (state) updateData.state = state;
       if (country) updateData.country = country;
       if (bio) updateData.bio = bio;
+      if (sceneId !== undefined) updateData.sceneId = sceneId;
 
       if (files?.profileImage?.[0]) {
         if (currentBand?.profileImageUrl) {

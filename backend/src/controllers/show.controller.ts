@@ -5,6 +5,7 @@ import { AuthRequest } from "../middlewares/auth.middleware";
 import { AccountType, InviteStatus, ShowStatus } from "../../generated/prisma/client";
 import { ParticipantType } from "../../generated/prisma/enums";
 import { canActAs } from "../lib/authorization";
+import { resolveSceneId } from "../lib/scenes";
 
 
 /** Returns a valid Date, or null for a missing/unparseable value. */
@@ -235,6 +236,10 @@ export const createShow = async (req: AuthRequest, res: Response) => {
       ? `/uploads/${files.posterImage[0].filename}`
       : undefined
 
+    // From the show's own city/state, not the venue's -- venueId is nullable, and
+    // deriving through the venue would drop every DIY/house show from discovery.
+    const sceneId = await resolveSceneId({ city, state, country });
+
     const show = await prisma.$transaction(async (tx) => {
       // Create show with creator band
       const newShow = await tx.show.create({
@@ -243,6 +248,7 @@ export const createShow = async (req: AuthRequest, res: Response) => {
           city,
           state,
           country,
+          sceneId,
           tourId,
           doors: doorsDate,
           posterUrl: posterImageUrl,
@@ -337,6 +343,21 @@ export const updateShow = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: "Invalid status" });
     }
 
+    // Keep sceneId tracking the show's current city/state. Resolved against the
+    // merged location, and outside the transaction since it may create a Scene.
+    let nextSceneId: string | null | undefined;
+    if (city || state || country) {
+      const existing = await prisma.show.findUnique({
+        where: { id },
+        select: { city: true, state: true, country: true },
+      });
+      nextSceneId = await resolveSceneId({
+        city: city ?? existing?.city,
+        state: state ?? existing?.state,
+        country: country ?? existing?.country,
+      });
+    }
+
     const updatedShow = await prisma.$transaction(async (tx) => {
       // --- Venue: decide what to update ---
       let venueUpdate: Record<string, any> = {};
@@ -367,6 +388,7 @@ export const updateShow = async (req: AuthRequest, res: Response) => {
           date: nextDate ?? undefined,
           doors: nextDoors ?? undefined,
           city, state, country, tourId, status, notes, ticketsUrl,
+          ...(nextSceneId !== undefined ? { sceneId: nextSceneId } : {}),
           ...venueUpdate,
           ...(bandLineup !== undefined ? { bandLineup: bandLineup || null } : {}),
           ...(posterUrl && { posterUrl }),

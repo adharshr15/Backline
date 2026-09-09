@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma"
 import { generateToken } from "../lib/auth"
 import { AuthRequest } from "../middlewares/auth.middleware"
 import { fail } from "../middlewares/error.middleware"
+import { resolveSceneId } from "../lib/scenes"
 
 const BCRYPT_ROUNDS = 12
 const MIN_PASSWORD_LENGTH = 8
@@ -40,6 +41,8 @@ export const register = async (req: AuthRequest, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS)
 
+    const sceneId = await resolveSceneId({ city, state, country });
+
     const user = await prisma.user.create({
       data: {
         name,
@@ -48,6 +51,7 @@ export const register = async (req: AuthRequest, res: Response) => {
         city,
         state,
         country,
+        sceneId,
         password: hashedPassword,
         profileImageUrl,
         accountType: "USER"

@@ -7,6 +7,7 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 import { AccountType } from '../../generated/prisma/enums';
 import { userPrivateSelect, userPublicSelect } from '../lib/prismaSelects';
 import { fail } from '../middlewares/error.middleware';
+import { resolveSceneId } from '../lib/scenes';
 import fs from 'fs';
 import path from 'path';
 
@@ -253,6 +254,18 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Keep sceneId tracking the user's current city/state. Partial update, so
+    // resolve against the merged location; done outside the transaction because
+    // it may create a Scene row.
+    const sceneId =
+      city || state || country
+        ? await resolveSceneId({
+            city: city ?? currentUser.city,
+            state: state ?? currentUser.state,
+            country: country ?? currentUser.country,
+          })
+        : undefined;
+
     const updatedUser = await prisma.$transaction(async (tx) => {
       const updateData: any = {}
 
@@ -263,6 +276,7 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       if (city) updateData.city = city;
       if (state) updateData.state = state;
       if (country) updateData.country = country;
+      if (sceneId !== undefined) updateData.sceneId = sceneId;
 
 
       if (files?.profileImage?.[0]) {

@@ -4,25 +4,63 @@ import { fail } from '../middlewares/error.middleware'
 import { BandRole, InviteStatus } from '../../generated/prisma/client'
 import { Request, Response } from 'express'
 import { AuthRequest } from '../middlewares/auth.middleware';
-import { resolveSceneId } from '../lib/scenes';
+import { resolveSceneId, stateSpellings } from '../lib/scenes';
+import { resolveGenreIds } from '../lib/genres';
+import { clampLimit, parsePage, parseCsv, parseText } from '../lib/query';
 import { request } from 'node:http';
 import fs from 'fs';
 import path from 'path';
 
+/**
+ * GET /bands
+ *
+ * ?search= &city= &state= &sceneSlug= &excludeId= &page= &limit=
+ * ?genre= csv of slugs, display names or aliases (genreSlugs is an alias)
+ *
+ * Response stays a bare array -- several screens bind to it directly.
+ */
 export const getBands = async (req: AuthRequest, res: Response) => {
   try {
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 20;
-    const search = req.query.search as string | undefined;
-    const genre = req.query.genre as string | undefined;
-    const city  = req.query.city  as string | undefined;
-    const state = req.query.state as string | undefined;
+    const page = parsePage(req.query.page);
+    // Was `Number(req.query.limit) || 20` with no ceiling, which made ?limit=999999
+    // a bulk export of the band table.
+    const limit = clampLimit(req.query.limit);
+
+    const search = parseText(req.query.search);
+    const city = parseText(req.query.city);
+    const state = parseText(req.query.state);
+    const sceneSlug = parseText(req.query.sceneSlug);
+    const excludeId = parseText(req.query.excludeId, 64);
+
+    const genreTokens = [
+      ...parseCsv(req.query.genre, 5),
+      ...parseCsv(req.query.genreSlugs, 5),
+    ];
 
     const where: any = { deletedAt: null };
-    if (search) where.name  = { contains: search, mode: 'insensitive' };
-    if (genre)  where.genre = { contains: genre,  mode: 'insensitive' };
-    if (city)   where.city  = { equals:   city,   mode: 'insensitive' };
-    if (state)  where.state = { equals:   state,  mode: 'insensitive' };
+    if (search) where.name = { contains: search, mode: 'insensitive' };
+    if (city) where.city = { equals: city, mode: 'insensitive' };
+    if (state) where.state = { in: stateSpellings(state), mode: 'insensitive' };
+    // The frontend has been sending excludeId all along and it was silently ignored.
+    if (excludeId) where.id = { not: excludeId };
+
+    if (sceneSlug) {
+      const scene = await prisma.scene.findUnique({
+        where: { slug: sceneSlug },
+        select: { id: true },
+      });
+      if (!scene) return res.json([]);
+      where.sceneId = scene.id;
+    }
+
+    if (genreTokens.length) {
+      // Was `where.genre = { contains: genre }` against the free-text column, so
+      // ?genre=Rock also matched every band tagged "Punk Rock". Genre membership
+      // is now an explicit taxonomy decision rather than a substring accident.
+      const genreIds = await resolveGenreIds(genreTokens);
+      if (genreIds.length === 0) return res.json([]);
+      where.genres = { some: { genreId: { in: genreIds } } };
+    }
 
     const bands = await prisma.band.findMany({
       where,
@@ -32,16 +70,21 @@ export const getBands = async (req: AuthRequest, res: Response) => {
       select: {
         id: true,
         name: true,
+        // Legacy free-text genre, kept as the display fallback for one release.
         genre: true,
         city: true,
         state: true,
         country: true,
         profileImageUrl: true,
-        createdAt: true
+        createdAt: true,
+        genres: {
+          select: { position: true, genre: { select: { slug: true, name: true } } },
+          orderBy: { position: 'asc' },
+        },
       }
     });
 
-    res.json(bands)
+    res.json(bands.map(b => ({ ...b, genres: b.genres.map(g => g.genre) })))
   } catch (error: any) {
     console.error("Prisma getBands error:", error.message)
     fail(res, error, "band")

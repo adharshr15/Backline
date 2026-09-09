@@ -5,7 +5,8 @@ import { VenueRole } from '../../generated/prisma/client'
 import { Request, Response } from 'express';
 import { InviteStatus } from '../../generated/prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware';
-import { resolveSceneId } from '../lib/scenes';
+import { resolveSceneId, stateSpellings } from '../lib/scenes';
+import { clampLimit, parsePage, parseText, parseNumber } from '../lib/query';
 import fs from 'fs';
 import path from 'path';
 
@@ -16,18 +17,50 @@ const authorizeVenueRep = async (venueId: string, userId: string) => {
     return rep;
 };
 
+/**
+ * GET /venues
+ *
+ * ?search= &city= &state= &sceneSlug= &excludeId=
+ * ?minCapacity= &maxCapacity=   (finally puts @@index([capacity]) to work)
+ * ?page= &limit=
+ *
+ * Response stays a bare array.
+ */
 export const getVenues = async (req: AuthRequest, res: Response) => {
     try {
-        const page = Number(req.query.page) || 1;
-        const limit = Number(req.query.limit) || 20;
-        const search = req.query.search as string | undefined;
-        const city   = req.query.city  as string | undefined;
-        const state  = req.query.state as string | undefined;
+        const page = parsePage(req.query.page);
+        // Was unbounded, same bulk-export hole getUsers already closed.
+        const limit = clampLimit(req.query.limit);
+
+        const search = parseText(req.query.search);
+        const city = parseText(req.query.city);
+        const state = parseText(req.query.state);
+        const sceneSlug = parseText(req.query.sceneSlug);
+        const excludeId = parseText(req.query.excludeId, 64);
+        const minCapacity = parseNumber(req.query.minCapacity, 0, 1_000_000);
+        const maxCapacity = parseNumber(req.query.maxCapacity, 0, 1_000_000);
 
         const where: any = { deletedAt: null };
         if (search) where.name  = { contains: search, mode: 'insensitive' };
         if (city)   where.city  = { equals:   city,   mode: 'insensitive' };
-        if (state)  where.state = { equals:   state,  mode: 'insensitive' };
+        if (state)  where.state = { in: stateSpellings(state), mode: 'insensitive' };
+        if (excludeId) where.id = { not: excludeId };
+
+        if (minCapacity !== undefined || maxCapacity !== undefined) {
+            where.capacity = {
+                ...(minCapacity !== undefined ? { gte: minCapacity } : {}),
+                ...(maxCapacity !== undefined ? { lte: maxCapacity } : {}),
+            };
+        }
+
+        if (sceneSlug) {
+            const scene = await prisma.scene.findUnique({
+                where: { slug: sceneSlug },
+                select: { id: true },
+            });
+            if (!scene) return res.json([]);
+            where.sceneId = scene.id;
+        }
 
         const venues = await prisma.venue.findMany({
             skip: (page - 1) * limit,

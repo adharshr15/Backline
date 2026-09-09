@@ -4,6 +4,7 @@ import { fail } from "../middlewares/error.middleware";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { canActAsLower } from "../lib/authorization";
 import { resolveScene, stateSpellings, boundingBox, haversineKm } from "../lib/scenes";
+import { resolveGenreIds } from "../lib/genres";
 import { Craft } from "../../generated/prisma/enums";
 import {
     clampLimit,
@@ -88,24 +89,6 @@ const countsForScenes = async (sceneIds: string[]): Promise<Map<string, SceneCou
     for (const row of follows) out.get(row.sceneId)!.followers = row._count._all;
 
     return out;
-};
-
-/** Resolve genre slugs, display names or aliases to Genre ids. */
-const resolveGenreIds = async (tokens: string[]): Promise<string[]> => {
-    if (tokens.length === 0) return [];
-    const lowered = tokens.map(t => t.toLowerCase());
-
-    const genres = await prisma.genre.findMany({
-        where: {
-            OR: [
-                { slug: { in: lowered } },
-                { name: { in: tokens, mode: "insensitive" } },
-                { aliases: { hasSome: lowered } },
-            ],
-        },
-        select: { id: true },
-    });
-    return genres.map(g => g.id);
 };
 
 /** The scene named by :slug, or null. */

@@ -48,5 +48,8 @@ export const existenceCheckRateLimiter = createIpLimiter(
 )
 
 export const messageRateLimiter = createLimiter(30, 60 * 1000, "Too many messages. Slow down.")
+// Search fires as the user types. Its own budget so a fast typist cannot drain
+// the general 200/min allowance and start failing unrelated requests.
+export const searchRateLimiter = createLimiter(60, 60 * 1000, "Too many searches. Please slow down.")
 export const conversationRateLimiter = createLimiter(10, 60 * 1000, "Too many conversation actions. Please slow down.")
 export const generalRateLimiter = createLimiter(200, 60 * 1000, "Too many requests. Please try again later.")

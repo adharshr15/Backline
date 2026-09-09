@@ -133,7 +133,8 @@ export default function ExploreScreen() {
         setSearchLoading(true);
         try {
             const res = await api.get('/search', { params: { q: text.trim() } });
-            setSearchResults(res.data);
+            // /search returns an envelope: { results, counts, page, limit, hasMore }.
+            setSearchResults(res.data.results);
         } catch (e) {
             console.error('search error:', e);
         } finally {

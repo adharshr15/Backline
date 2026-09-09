@@ -16,7 +16,7 @@ import api from '@/services/api';
 import { Fonts } from '@/constants/theme';
 import {
     getMyConversations, getMessages, sendMessage, createGroupConversation,
-    getParticipantProfile, getMessageSender, resolveAttachment, attachmentToRef,
+    findDirectConversation, getMessageSender, resolveAttachment, attachmentToRef,
     Conversation, Message, Recipient, ParticipantType,
     MessageAttachment, AttachmentKind,
 } from '@/services/conversation.service';
@@ -105,12 +105,7 @@ export default function ComposeScreen() {
             return;
         }
         const recipId = selected[0].id;
-        const match = allConvs.find(c => {
-            const others = c.participants
-                .map(p => getParticipantProfile(p))
-                .filter(p => p && p.id !== senderId);
-            return others.length === 1 && others[0]?.id === recipId;
-        });
+        const match = findDirectConversation(allConvs, senderId, recipId);
         if (match) {
             setExistingConv(match);
             setPreviewLoading(true);
@@ -128,10 +123,11 @@ export default function ComposeScreen() {
         if (!q.trim()) { setSearchResults([]); return; }
         setSearching(true);
         try {
-            const res = await api.get('/search', { params: { q } });
+            // /search returns an envelope: { results, counts, page, limit, hasMore }.
+            const res = await api.get('/search', { params: { q, type: 'user,band,venue' } });
             const selectedIds = new Set(selected.map(s => s.id));
             selectedIds.add(senderId);
-            setSearchResults((res.data as SearchResult[]).filter(r => !selectedIds.has(r.id)));
+            setSearchResults((res.data.results as SearchResult[]).filter(r => !selectedIds.has(r.id)));
         } catch { setSearchResults([]); }
         finally { setSearching(false); }
     }, [selected, senderId]);

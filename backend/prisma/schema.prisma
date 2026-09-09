@@ -68,6 +68,25 @@ enum ConversationType {
   VENUE_VENUE
 }
 
+/// The trades a user practices in a scene. Replaces the dead User.isPromoter
+/// boolean. API inputs are validated against Object.values(Craft) -- never free text.
+enum Craft {
+  PHOTOGRAPHER
+  VIDEOGRAPHER
+  PROMOTER
+  SOUND_ENGINEER
+  BOOKER
+  TOUR_MANAGER
+  STAGE_MANAGER
+  LIGHTING_TECH
+  DESIGNER
+  MERCH
+  JOURNALIST
+  DJ
+  LUTHIER
+  INSTRUCTOR
+}
+
 model User {
   id                String                    @id @default(cuid())
   username          String                    @unique
@@ -101,8 +120,15 @@ model User {
   listings          Listing[]                 @relation("UserListings")
   posts             Post[]                    @relation("UserPosts")
   postComments      PostComment[]             @relation("UserPostComments")
+  crafts            UserCraft[]
+
+  /// Always reflects the row's current city/state. Nullable only because the
+  /// backfill runs after this column exists, and because city/state are optional.
+  sceneId           String?
+  scene             Scene?                    @relation(fields: [sceneId], references: [id])
 
   @@index([city, state])
+  @@index([sceneId])
 }
 
 model Band {
@@ -138,8 +164,13 @@ model Band {
   listings          Listing[]                 @relation("BandListings")
   posts             Post[]                    @relation("BandPosts")
   postComments      PostComment[]             @relation("BandPostComments")
+  genres            BandGenre[]
+
+  sceneId           String?
+  scene             Scene?                    @relation(fields: [sceneId], references: [id])
 
   @@index([city, state])
+  @@index([sceneId])
 }
 
 model BandMember {
@@ -215,10 +246,14 @@ model Venue {
   posts             Post[]                    @relation("VenuePosts")
   postComments      PostComment[]             @relation("VenuePostComments")
 
+  sceneId           String?
+  scene             Scene?                    @relation(fields: [sceneId], references: [id])
+
   @@index([city])
   @@index([city, state])
   @@index([capacity])
   @@index([latitude, longitude])
+  @@index([sceneId])
 }
 
 model VenueRepresentative {
@@ -327,12 +362,18 @@ model Show {
   updatedAt         DateTime                  @updatedAt
   deletedAt         DateTime?
 
+  /// Set from the show's own city/state, not derived through the venue --
+  /// Show.venueId is nullable, and deriving would silently drop every DIY show.
+  sceneId           String?
+  scene             Scene?                    @relation(fields: [sceneId], references: [id])
+
   @@index([tourId])
   @@index([venueId])
   @@index([city])
   @@index([city, state, date])
   @@index([date])
   @@index([status])
+  @@index([sceneId, date])
 }
 
 model VenueBlock {
@@ -524,9 +565,114 @@ model SceneFollow {
   followerType String
   createdAt    DateTime @default(now())
 
+  /// Nullable until the backfill has run; a later migration makes it required
+  /// and moves the unique constraint onto it. Do not read city/state once that
+  /// lands -- read through `scene`.
+  sceneId      String?
+  scene        Scene?   @relation(fields: [sceneId], references: [id])
+
   @@unique([followerId, followerType, city, state])
   @@index([city, state])
   @@index([followerId, followerType])
+  @@index([sceneId])
+}
+
+/// A local music community, keyed by city. Backfilled from the cities that
+/// already have venues, shows, bands or users, and created on demand when a
+/// profile is saved in a city that has no scene yet.
+///
+/// Sub-scenes ("Houston Shoegaze") are a (sceneId, genreId) query, never rows --
+/// materializing them would mean touching scene rows whenever a band's genre changes.
+model Scene {
+  id             String    @id @default(cuid())
+  slug           String    @unique
+  name           String
+  city           String
+  state          String
+  country        String    @default("USA")
+  latitude       Float?
+  longitude      Float?
+  bio            String?
+  imageUrl       String?
+  headerImageUrl String?
+  isCurated      Boolean   @default(false)
+
+  /// Reserved for a future hierarchy ("Greater Houston", or merging katy-tx into
+  /// houston-tx). Null for every row today.
+  parentId       String?
+  parent         Scene?    @relation("SceneParent", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  children       Scene[]   @relation("SceneParent")
+
+  follows        SceneFollow[]
+  shows          Show[]
+  bands          Band[]
+  venues         Venue[]
+  users          User[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  @@index([city, state])
+  @@index([state])
+  @@index([latitude, longitude])
+  @@index([parentId])
+  @@index([isCurated])
+}
+
+/// Seeded taxonomy (src/lib/genres.seed.ts). Replaces matching the free-text
+/// Band.genre string with `contains`.
+model Genre {
+  id        String      @id @default(cuid())
+  slug      String      @unique
+  name      String
+  /// Spellings users actually type: ["shoe gaze", "nugaze"]. Queried with
+  /// `{ aliases: { has: token } }` -- fine as a seq scan at ~150 rows.
+  aliases   String[]    @default([])
+  parentId  String?
+  parent    Genre?      @relation("GenreParent", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  children  Genre[]     @relation("GenreParent")
+  sortOrder Int         @default(100)
+  isActive  Boolean     @default(true)
+  bands     BandGenre[]
+  createdAt DateTime    @default(now())
+
+  @@index([parentId])
+  @@index([isActive, sortOrder])
+}
+
+model BandGenre {
+  id        String   @id @default(cuid())
+  bandId    String
+  band      Band     @relation(fields: [bandId], references: [id])
+  genreId   String
+  genre     Genre    @relation(fields: [genreId], references: [id])
+  /// 0 = primary genre.
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([bandId, genreId])
+  @@index([bandId])
+  /// Load-bearing: the unique above only serves bandId-leading lookups, and the
+  /// hot "Houston Shoegaze" query filters on genreId first.
+  @@index([genreId])
+}
+
+model UserCraft {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  craft     Craft
+  forHire   Boolean  @default(false)
+  headline  String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, craft])
+  @@index([userId])
+  /// Serves "photographers for hire", intersected against User.sceneId.
+  @@index([craft, forHire])
 }
 
 enum ListingKind {

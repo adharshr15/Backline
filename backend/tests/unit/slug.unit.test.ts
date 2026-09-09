@@ -2,9 +2,51 @@ import { describe, it, expect } from "vitest";
 import {
   slugifySegment,
   sceneSlugBase,
+  normalizeState,
+  stateSpellings,
   boundingBox,
   haversineKm,
 } from "../../src/lib/scenes";
+
+describe("normalizeState", () => {
+  it("uppercases a two-letter code", () => {
+    expect(normalizeState("tx")).toBe("TX");
+    expect(normalizeState("Tx")).toBe("TX");
+  });
+
+  it("maps a full state name to its code", () => {
+    expect(normalizeState("Texas")).toBe("TX");
+    expect(normalizeState("texas")).toBe("TX");
+    expect(normalizeState("New York")).toBe("NY");
+    expect(normalizeState("north carolina")).toBe("NC");
+    expect(normalizeState("District of Columbia")).toBe("DC");
+  });
+
+  it("passes through unrecognized regions untouched", () => {
+    expect(normalizeState("Ontario")).toBe("Ontario");
+    expect(normalizeState("Jalisco")).toBe("Jalisco");
+  });
+
+  it("returns an empty string for blank input", () => {
+    expect(normalizeState("")).toBe("");
+    expect(normalizeState(null)).toBe("");
+    expect(normalizeState(undefined)).toBe("");
+  });
+});
+
+describe("stateSpellings", () => {
+  it("covers both the code and the full name so legacy rows still match", () => {
+    const spellings = stateSpellings("TX").map(s => s.toLowerCase());
+    expect(spellings).toContain("tx");
+    expect(spellings).toContain("texas");
+  });
+
+  it("is the same set whichever spelling it is given", () => {
+    const fromCode = new Set(stateSpellings("TX").map(s => s.toLowerCase()));
+    const fromName = new Set(stateSpellings("Texas").map(s => s.toLowerCase()));
+    expect([...fromName]).toEqual(expect.arrayContaining([...fromCode]));
+  });
+});
 
 describe("slugifySegment", () => {
   it("lowercases and dashes multi-word names", () => {
@@ -49,6 +91,15 @@ describe("sceneSlugBase", () => {
   it("collides deliberately across casings so one city cannot become two scenes", () => {
     expect(sceneSlugBase("Houston", "TX")).toBe(sceneSlugBase("houston", "tx"));
     expect(sceneSlugBase("HOUSTON", "Tx")).toBe(sceneSlugBase("Houston", "TX"));
+  });
+
+  it("collapses a spelled-out state onto its code", () => {
+    // "College Station, Texas" and "College Station, TX" are one city; without
+    // this they became two scenes and split the city's bands and venues.
+    expect(sceneSlugBase("College Station", "Texas")).toBe("college-station-tx");
+    expect(sceneSlugBase("College Station", "Texas")).toBe(
+      sceneSlugBase("College Station", "TX"),
+    );
   });
 });
 

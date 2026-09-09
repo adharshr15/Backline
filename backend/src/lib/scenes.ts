@@ -12,6 +12,46 @@ import { prisma } from "./prisma";
  * a Scene id once per write turns every read into an indexed equality on a cuid.
  */
 
+const US_STATE_CODES: Record<string, string> = {
+  alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA",
+  colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA",
+  hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA",
+  kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD",
+  massachusetts: "MA", michigan: "MI", minnesota: "MN", mississippi: "MS",
+  missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV",
+  "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+  "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK",
+  oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC",
+  "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT",
+  virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI",
+  wyoming: "WY", "district of columbia": "DC", "washington dc": "DC",
+  "puerto rico": "PR", "u.s. virgin islands": "VI", guam: "GU",
+};
+
+/**
+ * Canonicalize a state so one city cannot become two scenes.
+ *
+ * Without this, "College Station, Texas" and "College Station, TX" resolve to
+ * different scenes and the city's bands, venues and shows are split across both.
+ * Two-letter input is uppercased; a recognized full name maps to its code;
+ * anything else (international regions) is passed through trimmed.
+ */
+export const normalizeState = (state?: string | null): string => {
+  const raw = state?.trim();
+  if (!raw) return "";
+  if (/^[A-Za-z]{2}$/.test(raw)) return raw.toUpperCase();
+  return US_STATE_CODES[raw.toLowerCase().replace(/\./g, "").replace(/\s+/g, " ")] ?? raw;
+};
+
+/** Every spelling that canonicalizes to the same state, for matching legacy rows. */
+export const stateSpellings = (state: string): string[] => {
+  const code = normalizeState(state);
+  const names = Object.entries(US_STATE_CODES)
+    .filter(([, c]) => c === code)
+    .map(([name]) => name);
+  return [...new Set([state, code, ...names])].filter(Boolean);
+};
+
 /** "Saint Paul" -> "saint-paul"; strips accents, punctuation and repeated dashes. */
 export const slugifySegment = (s: string) =>
   s
@@ -22,9 +62,12 @@ export const slugifySegment = (s: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-/** "Houston", "TX" -> "houston-tx". Falls back to country when state is blank. */
+/**
+ * "Houston", "TX" -> "houston-tx". Falls back to country when state is blank.
+ * The state is canonicalized first, so "Texas" and "TX" produce the same slug.
+ */
 export const sceneSlugBase = (city: string, state?: string | null, country?: string | null) => {
-  const region = slugifySegment(state ?? "") || slugifySegment(country ?? "");
+  const region = slugifySegment(normalizeState(state)) || slugifySegment(country ?? "");
   const c = slugifySegment(city);
   return region ? `${c}-${region}` : c;
 };
@@ -75,15 +118,19 @@ const displayName = (city: string) =>
  */
 export const resolveScene = async (loc: SceneLocation) => {
   const city = loc.city?.trim();
-  const state = loc.state?.trim();
-  if (!city || !state) return null;
+  const rawState = loc.state?.trim();
+  if (!city || !rawState) return null;
 
-  const existing = await prisma.scene.findFirst({
-    where: {
-      city: { equals: city, mode: "insensitive" },
-      state: { equals: state, mode: "insensitive" },
-    },
-  });
+  // Stored canonicalized ("TX", not "Texas"), but matched against every spelling
+  // so rows written before this normalization existed still resolve.
+  const state = normalizeState(rawState);
+
+  const where = {
+    city: { equals: city, mode: "insensitive" as const },
+    state: { in: stateSpellings(rawState), mode: "insensitive" as const },
+  };
+
+  const existing = await prisma.scene.findFirst({ where });
   if (existing) return existing;
 
   const base = sceneSlugBase(city, state, loc.country);
@@ -104,12 +151,7 @@ export const resolveScene = async (loc: SceneLocation) => {
   } catch {
     // Lost a race against a concurrent write for the same city. Re-read rather
     // than failing the caller's create/update.
-    const raced = await prisma.scene.findFirst({
-      where: {
-        city: { equals: city, mode: "insensitive" },
-        state: { equals: state, mode: "insensitive" },
-      },
-    });
+    const raced = await prisma.scene.findFirst({ where });
     if (raced) return raced;
     throw new Error(`Could not resolve a scene for "${city}, ${state}"`);
   }

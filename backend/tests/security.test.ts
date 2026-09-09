@@ -308,6 +308,51 @@ describe("scene follows", () => {
   });
 });
 
+describe("show feed", () => {
+  // GET /shows/feed was mounted above router.use(authenticate) and took
+  // followerId straight from the query string, so anyone could read any
+  // profile's personalized feed -- and with it, that profile's entire follow
+  // graph -- by guessing a cuid.
+  it("requires authentication", async () => {
+    const res = await request(app).get(`/shows/feed?followerType=user&followerId=${alice.id}`);
+    expect(res.status).toBe(401);
+  });
+
+  it("refuses to read another user's feed", async () => {
+    const res = await request(app)
+      .get(`/shows/feed?followerType=user&followerId=${alice.id}`)
+      .set(auth(mallory.token));
+
+    expect(res.status).toBe(403);
+  });
+
+  it("refuses to read a band's feed without membership", async () => {
+    const res = await request(app)
+      .get(`/shows/feed?followerType=band&followerId=${aliceBand}`)
+      .set(auth(mallory.token));
+
+    expect(res.status).toBe(403);
+  });
+
+  it("refuses to read a venue's feed without representation", async () => {
+    const res = await request(app)
+      .get(`/shows/feed?followerType=venue&followerId=${aliceVenue}`)
+      .set(auth(mallory.token));
+
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("explore feed", () => {
+  it("refuses to browse as another profile", async () => {
+    const res = await request(app)
+      .get(`/explore?profileType=venue&profileId=${aliceVenue}`)
+      .set(auth(mallory.token));
+
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("user crafts", () => {
   it("refuses to set another user's crafts", async () => {
     const res = await request(app).put(`/users/${alice.id}/crafts`).set(auth(mallory.token))

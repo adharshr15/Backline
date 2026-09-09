@@ -4,8 +4,9 @@ import { fail } from "../middlewares/error.middleware";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { AccountType, InviteStatus, ShowStatus } from "../../generated/prisma/client";
 import { ParticipantType } from "../../generated/prisma/enums";
-import { canActAs } from "../lib/authorization";
+import { canActAs, canActAsLower } from "../lib/authorization";
 import { resolveSceneId } from "../lib/scenes";
+import { clampLimit, parsePage } from "../lib/query";
 
 
 /** Returns a valid Date, or null for a missing/unparseable value. */
@@ -586,8 +587,21 @@ export const unrepostShow = async (req: AuthRequest, res: Response) => {
 
 // FEED
 
-export const getFeedShows = async (req: Request, res: Response) => {
+/** Cap on the follow graph read into memory to build the feed query. */
+const FEED_FOLLOW_CAP = 1000;
+
+/**
+ * GET /shows/feed?followerType=&followerId=&page=&limit=
+ *
+ * Authenticated. The feed is a profile's personalized view, built from who it
+ * follows -- reading it discloses that profile's entire follow graph, so the
+ * caller must be able to act as the profile.
+ */
+export const getFeedShows = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
     const { followerType, followerId } = req.query as Record<string, string>;
     if (!followerType || !followerId) {
       return res.status(400).json({ error: "followerType and followerId are required" });
@@ -597,6 +611,13 @@ export const getFeedShows = async (req: Request, res: Response) => {
     const dbType = typeMap[followerType];
     if (!dbType) return res.status(400).json({ error: "Invalid followerType" });
 
+    if (!(await canActAsLower(userId, followerType, followerId))) {
+      return res.status(403).json({ error: "You cannot read this profile's feed" });
+    }
+
+    const page = parsePage(req.query.page);
+    const limit = clampLimit(req.query.limit, 30);
+
     const followerFilter =
       followerType === 'band'  ? { followerBandId: followerId } :
       followerType === 'venue' ? { followerVenueId: followerId } :
@@ -604,38 +625,52 @@ export const getFeedShows = async (req: Request, res: Response) => {
 
     const follows = await prisma.follow.findMany({
       where: { followerType: dbType, ...followerFilter },
+      select: { followeeType: true, followeeBandId: true, followeeVenueId: true, followeeUserId: true },
+      take: FEED_FOLLOW_CAP,
     });
 
     const sceneFollows = await prisma.sceneFollow.findMany({
       where: { followerId, followerType },
-      select: { city: true, state: true },
+      select: { sceneId: true },
+      take: FEED_FOLLOW_CAP,
     });
 
     if (follows.length === 0 && sceneFollows.length === 0) return res.json([]);
 
-    const orConditions: any[] = [];
-
-    for (const sf of sceneFollows) {
-      orConditions.push({
-        city:  { equals: sf.city,  mode: 'insensitive' },
-        state: { equals: sf.state, mode: 'insensitive' },
-      });
-    }
+    // Collect ids first, then emit a fixed number of clauses. Building one clause
+    // per followed profile meant a profile following 500 bands produced a
+    // 1500-clause OR; this is always at most nine.
+    const sceneIds = sceneFollows.map(sf => sf.sceneId);
+    const bandIds: string[] = [];
+    const venueIds: string[] = [];
+    const followedUserIds: string[] = [];
 
     for (const f of follows) {
-      if (f.followeeType === 'BAND' && f.followeeBandId) {
-        orConditions.push({ createdByBandId: f.followeeBandId });
-        orConditions.push({ bands: { some: { bandId: f.followeeBandId } } });
-        orConditions.push({ repostedByBands: { some: { id: f.followeeBandId } } });
-      } else if (f.followeeType === 'VENUE' && f.followeeVenueId) {
-        orConditions.push({ venueId: f.followeeVenueId });
-        orConditions.push({ createdByVenueId: f.followeeVenueId });
-        orConditions.push({ repostedByVenues: { some: { id: f.followeeVenueId } } });
-      } else if (f.followeeType === 'USER' && f.followeeUserId) {
-        orConditions.push({ createdByUserId: f.followeeUserId });
-        orConditions.push({ repostedByUsers: { some: { id: f.followeeUserId } } });
-      }
+      if (f.followeeType === 'BAND' && f.followeeBandId) bandIds.push(f.followeeBandId);
+      else if (f.followeeType === 'VENUE' && f.followeeVenueId) venueIds.push(f.followeeVenueId);
+      else if (f.followeeType === 'USER' && f.followeeUserId) followedUserIds.push(f.followeeUserId);
     }
+
+    const orConditions: any[] = [];
+    // Scene follows used to contribute an insensitive city/state pair each, which
+    // compiles to ILIKE and cannot use an index. sceneId is an indexed equality.
+    if (sceneIds.length) orConditions.push({ sceneId: { in: sceneIds } });
+    if (bandIds.length) {
+      orConditions.push({ createdByBandId: { in: bandIds } });
+      orConditions.push({ bands: { some: { bandId: { in: bandIds } } } });
+      orConditions.push({ repostedByBands: { some: { id: { in: bandIds } } } });
+    }
+    if (venueIds.length) {
+      orConditions.push({ venueId: { in: venueIds } });
+      orConditions.push({ createdByVenueId: { in: venueIds } });
+      orConditions.push({ repostedByVenues: { some: { id: { in: venueIds } } } });
+    }
+    if (followedUserIds.length) {
+      orConditions.push({ createdByUserId: { in: followedUserIds } });
+      orConditions.push({ repostedByUsers: { some: { id: { in: followedUserIds } } } });
+    }
+
+    if (orConditions.length === 0) return res.json([]);
 
     const shows = await prisma.show.findMany({
       where: { deletedAt: null, date: { gte: new Date() }, OR: orConditions },
@@ -651,6 +686,8 @@ export const getFeedShows = async (req: Request, res: Response) => {
         rsvpVenues: { select: { id: true } },
       },
       orderBy: { date: 'asc' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
 
     res.json(shows);

@@ -6,7 +6,9 @@ import { upload } from '../config/multer'
 
 const router = Router()
 
-router.get('/feed', getFeedShows)
+// The feed is personalized and discloses the profile's follow graph, so it is
+// authenticated and the controller checks the caller may act as that profile.
+router.get('/feed', authenticate as RequestHandler, getFeedShows as RequestHandler)
 router.get('/rsvp', authenticate as RequestHandler, getRsvpShows as RequestHandler)
 router.get('/', getShows)
 router.get('/:id/posts', getShowPosts as RequestHandler)

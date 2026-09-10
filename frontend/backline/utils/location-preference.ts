@@ -1,8 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const KEY = 'marketplace.location';
-const HISTORY_KEY = 'marketplace.location.history';
+/**
+ * A remembered city choice, per screen. Marketplace and Explore each keep their
+ * own so browsing gear in Austin does not move your Explore feed there.
+ */
+export type LocationScope = 'marketplace' | 'explore';
+
 const HISTORY_MAX = 8;
+
+const key = (scope: LocationScope) => `${scope}.location`;
+const historyKey = (scope: LocationScope) => `${scope}.location.history`;
 
 export interface SavedLocation {
     city: string;
@@ -13,9 +20,9 @@ const sameLoc = (a: SavedLocation, b: SavedLocation) =>
     a.city.toLowerCase() === b.city.toLowerCase() &&
     (a.state ?? '').toLowerCase() === (b.state ?? '').toLowerCase();
 
-export const getSavedLocation = async (): Promise<SavedLocation | null> => {
+export const getSavedLocation = async (scope: LocationScope): Promise<SavedLocation | null> => {
     try {
-        const raw = await AsyncStorage.getItem(KEY);
+        const raw = await AsyncStorage.getItem(key(scope));
         if (!raw) return null;
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed.city === 'string' && parsed.city.length > 0) {
@@ -25,15 +32,15 @@ export const getSavedLocation = async (): Promise<SavedLocation | null> => {
     return null;
 };
 
-export const saveLocation = async (loc: SavedLocation): Promise<void> => {
+export const saveLocation = async (scope: LocationScope, loc: SavedLocation): Promise<void> => {
     try {
-        await AsyncStorage.setItem(KEY, JSON.stringify({ city: loc.city, state: loc.state ?? null }));
+        await AsyncStorage.setItem(key(scope), JSON.stringify({ city: loc.city, state: loc.state ?? null }));
     } catch {}
 };
 
-export const getHistory = async (): Promise<SavedLocation[]> => {
+export const getHistory = async (scope: LocationScope): Promise<SavedLocation[]> => {
     try {
-        const raw = await AsyncStorage.getItem(HISTORY_KEY);
+        const raw = await AsyncStorage.getItem(historyKey(scope));
         if (!raw) return [];
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
@@ -46,18 +53,18 @@ export const getHistory = async (): Promise<SavedLocation[]> => {
 };
 
 // Prepend a location (deduped, most-recent-first, capped) and return the new list.
-export const addToHistory = async (loc: SavedLocation): Promise<SavedLocation[]> => {
+export const addToHistory = async (scope: LocationScope, loc: SavedLocation): Promise<SavedLocation[]> => {
     const entry: SavedLocation = { city: loc.city, state: loc.state ?? null };
-    const existing = await getHistory();
+    const existing = await getHistory(scope);
     const next = [entry, ...existing.filter(l => !sameLoc(l, entry))].slice(0, HISTORY_MAX);
     try {
-        await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+        await AsyncStorage.setItem(historyKey(scope), JSON.stringify(next));
     } catch {}
     return next;
 };
 
-export const clearHistory = async (): Promise<void> => {
+export const clearHistory = async (scope: LocationScope): Promise<void> => {
     try {
-        await AsyncStorage.removeItem(HISTORY_KEY);
+        await AsyncStorage.removeItem(historyKey(scope));
     } catch {}
 };

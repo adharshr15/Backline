@@ -17,7 +17,9 @@ import { getFollowedScenes, getSceneCities, SceneFollow, SceneCity } from '@/ser
 import { ListingCard, useGridTileWidth } from '@/components/listing-card';
 import CreateListingModal from '@/components/profile/create-listing-modal';
 import LocationPickerModal from '@/components/marketplace/location-picker-modal';
-import { getSavedLocation, saveLocation, getHistory, addToHistory, clearHistory, SavedLocation } from '@/utils/marketplace-location';
+import { getSavedLocation, saveLocation, getHistory, addToHistory, clearHistory, SavedLocation } from '@/utils/location-preference';
+
+const LOCATION_SCOPE = 'marketplace' as const;
 
 type KindFilter = 'ALL' | ListingKind;
 
@@ -73,7 +75,7 @@ export default function MarketplaceScreen() {
     useEffect(() => {
         (async () => {
             setLocationLoading(true);
-            const saved = await getSavedLocation();
+            const saved = await getSavedLocation(LOCATION_SCOPE);
             if (saved) {
                 setLocation({ city: saved.city, state: saved.state });
             } else {
@@ -84,17 +86,17 @@ export default function MarketplaceScreen() {
     }, [activeProfile?.city, activeProfile?.state]);
 
     // Load recent-city history once.
-    useEffect(() => { getHistory().then(setHistory); }, []);
+    useEffect(() => { getHistory(LOCATION_SCOPE).then(setHistory); }, []);
 
     // Persist + apply a manual location choice, recording it in history.
     const applyLocation = useCallback((loc: { city: string; state: string | null }) => {
         setLocation(loc);
-        saveLocation(loc);
-        addToHistory(loc).then(setHistory);
+        saveLocation(LOCATION_SCOPE, loc);
+        addToHistory(LOCATION_SCOPE, loc).then(setHistory);
         setPickerVisible(false);
     }, []);
 
-    const handleClearHistory = useCallback(() => { clearHistory(); setHistory([]); }, []);
+    const handleClearHistory = useCallback(() => { clearHistory(LOCATION_SCOPE); setHistory([]); }, []);
 
     // "Use current location" from the picker: re-resolve via GPS and persist.
     const handleUseCurrentLocation = useCallback(async () => {

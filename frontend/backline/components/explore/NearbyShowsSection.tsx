@@ -5,8 +5,9 @@ import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTabHref } from '@/hooks/use-tab-href';
 import { Show, getShowsByLocation } from '@/services/show.service';
-import { getSceneCities, SceneCity } from '@/services/scene.service';
+import { getSceneCities, getSceneShows, SceneCity } from '@/services/scene.service';
 
 type DateRange = 'today' | 'week' | 'month' | 'all';
 type ViewMode = 'map' | 'list';
@@ -32,13 +33,22 @@ function formatDoors(doorsString: string) {
 }
 
 type Props = {
-    city: string;
-    state: string;
+    city?: string;
+    state?: string;
+    /**
+     * Reads /scenes/:slug/shows instead of /shows when set. Preferred inside a
+     * scene, where the backend has already resolved which shows belong to it.
+     */
+    sceneSlug?: string;
+    /** Genre slug, only meaningful alongside sceneSlug. */
+    genre?: string;
+    title?: string;
     onShowPress: (show: Show) => void;
 };
 
-export default function NearbyShowsSection({ city, state, onShowPress }: Props) {
+export default function NearbyShowsSection({ city, state, sceneSlug, genre, title, onShowPress }: Props) {
     const router = useRouter();
+    const tabHref = useTabHref();
     const [dateRange, setDateRange] = useState<DateRange>('week');
     const [viewMode, setViewMode] = useState<ViewMode>('list');
     const [shows, setShows] = useState<Show[]>([]);
@@ -50,15 +60,23 @@ export default function NearbyShowsSection({ city, state, onShowPress }: Props) 
 
     useEffect(() => {
         setLoading(true);
-        getShowsByLocation(city, state, dateRange)
+        const request = sceneSlug
+            ? getSceneShows(sceneSlug, { dateRange, genre }).then(r => r.items as Show[])
+            : city && state
+                ? getShowsByLocation(city, state, dateRange)
+                : Promise.resolve<Show[]>([]);
+
+        request
             .then(setShows)
             .catch(() => setShows([]))
             .finally(() => setLoading(false));
-    }, [city, state, dateRange]);
+    }, [city, state, sceneSlug, genre, dateRange]);
 
+    // The blue pins are other scenes; only worth fetching in the map view.
     useEffect(() => {
+        if (viewMode !== 'map') return;
         getSceneCities().then(setSceneCities).catch(() => {});
-    }, []);
+    }, [viewMode]);
 
     const showsWithCoords = shows.filter(s => s.venue?.latitude && s.venue?.longitude);
     const centerLat = showsWithCoords[0]?.venue?.latitude ?? 37.09;
@@ -68,7 +86,7 @@ export default function NearbyShowsSection({ city, state, onShowPress }: Props) 
         <View style={styles.container}>
             {/* Header row */}
             <View style={styles.headerRow}>
-                <ThemedText style={styles.sectionTitle}>Shows Near You</ThemedText>
+                <ThemedText style={styles.sectionTitle}>{title ?? 'Shows Near You'}</ThemedText>
                 <View style={[styles.viewToggle, { borderColor }]}>
                     <TouchableOpacity
                         style={[styles.toggleBtn, viewMode === 'map' && { backgroundColor: borderColor }]}
@@ -129,7 +147,11 @@ export default function NearbyShowsSection({ city, state, onShowPress }: Props) 
                             pinColor="blue"
                             title={`${sc.city}, ${sc.state}`}
                             description={`${sc.venueCount} venue${sc.venueCount !== 1 ? 's' : ''} — tap to explore scene`}
-                            onCalloutPress={() => router.push({ pathname: '/explore/scene', params: { city: sc.city, state: sc.state } } as any)}
+                            onCalloutPress={() => router.push({
+                                pathname: tabHref('scene'),
+                                // Prefer the slug now that /scenes/cities returns one.
+                                params: sc.slug ? { slug: sc.slug } : { city: sc.city, state: sc.state },
+                            })}
                         />
                     ))}
                 </MapView>

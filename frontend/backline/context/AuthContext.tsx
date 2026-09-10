@@ -42,7 +42,8 @@ type VenueRep = {
 export interface Band {
     id: string;
     name: string;
-    genre?: string;
+    /** Primary first. Band.genre (free text) is gone; genres come from the taxonomy. */
+    genres?: { slug: string; name: string }[];
     city?: string;
     state?: string;
     country?: string;

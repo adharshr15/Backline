@@ -110,7 +110,7 @@ export default function ViewBandScreen() {
                         </ThemedText>
                         <View style={{ width: AVATAR_SIZE }} />
                         <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
-                            {band.genre ?? ''}
+                            {band.genres?.map((g: { name: string }) => g.name).join(' · ') ?? ''}
                         </ThemedText>
                     </View>
 

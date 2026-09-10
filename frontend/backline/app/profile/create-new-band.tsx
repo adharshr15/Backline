@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { createBand } from '@/services/band.service'; // your API service
+import GenrePicker, { PickedGenre } from '@/components/profile/genre-picker';
 import { setAuthToken } from '@/services/api';
 
 
@@ -10,7 +11,7 @@ export default function CreateBandScreen() {
     const router = useRouter();
 
     const [bandName, setBandName] = useState('');
-    const [genre, setGenre] = useState('');
+    const [genres, setGenres] = useState<PickedGenre[]>([]);
 
     const [bandImage, setBandImage] = useState<string | null>(null);
     const [locationQuery, setLocationQuery] = useState('');
@@ -54,7 +55,7 @@ export default function CreateBandScreen() {
 
 
     const handleSubmit = async () => {
-        if (!bandName || !genre || !city || !state || !country) {
+        if (!bandName || genres.length === 0 || !city || !state || !country) {
             Alert.alert('Error', 'Please fill in all fields');
             return;
         }
@@ -64,7 +65,8 @@ export default function CreateBandScreen() {
 
             const formData = new FormData();
             formData.append('name', bandName);
-            formData.append('genre', genre);
+            // JSON-encoded: FormData cannot carry an array.
+            formData.append('genres', JSON.stringify(genres.map(g => g.slug)));
             formData.append('city', city);
             formData.append('state', state);
             formData.append('country', country);
@@ -113,12 +115,9 @@ export default function CreateBandScreen() {
                             value={bandName}
                             onChangeText={setBandName}
                         />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Genre"
-                            value={genre}
-                            onChangeText={setGenre}
-                        />
+                        <View style={styles.genres}>
+                            <GenrePicker value={genres} onChange={setGenres} />
+                        </View>
 
                         <TextInput
                             style={styles.input}
@@ -188,6 +187,7 @@ const styles = StyleSheet.create({
         marginBottom: 32,
         textAlign: 'center'
     },
+    genres: { marginBottom: 16 },
     input: {
         color: 'white',
         borderWidth: 1,

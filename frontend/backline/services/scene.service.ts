@@ -65,7 +65,6 @@ export interface SceneDetail extends SceneSummary {
 export interface SceneBand {
     id: string;
     name: string;
-    genre?: string | null;
     city?: string | null;
     state?: string | null;
     profileImageUrl?: string | null;

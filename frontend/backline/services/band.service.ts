@@ -4,7 +4,7 @@ import api from "./api";
 export interface BandSummary {
     id: string;
     name: string;
-    genre?: string | null;
+    genres?: { slug: string; name: string }[];
     city?: string | null;
     state?: string | null;
     profileImageUrl?: string | null;
@@ -37,7 +37,8 @@ export const createBand = async (formData: FormData) => {
 
 export const updateBand = async (bandId: string, data: {
     name?: string;
-    genre?: string;
+    /** Genre slugs, primary first. Omit to leave them alone; [] clears them. */
+    genres?: string[];
     bio?: string;
     city?: string;
     state?: string;
@@ -48,7 +49,8 @@ export const updateBand = async (bandId: string, data: {
     const formData = new FormData();
 
     if (data.name) formData.append('name', data.name);
-    if (data.genre) formData.append('genre', data.genre);
+    // JSON-encoded: FormData cannot carry an array, and [] must stay expressible.
+    if (data.genres) formData.append('genres', JSON.stringify(data.genres));
     if (data.bio) formData.append('bio', data.bio);
     if (data.city) formData.append('city', data.city);
     if (data.state) formData.append('state', data.state);

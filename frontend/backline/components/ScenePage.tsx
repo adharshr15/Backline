@@ -299,7 +299,7 @@ export default function ScenePage() {
                                         const item = toItem(
                                             b,
                                             'BAND',
-                                            [b.genres?.[0]?.name ?? b.genre, placeLabel(b.city, b.state)]
+                                            [b.genres?.[0]?.name, placeLabel(b.city, b.state)]
                                                 .filter(Boolean).join(' · '),
                                         );
                                         return <ItemRow key={b.id} item={item} onPress={() => handleItemPress(item)} />;

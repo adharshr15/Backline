@@ -1,5 +1,6 @@
 import { useAuth, type Band } from '@/context/AuthContext';
 import { updateBand } from '@/services/band.service';
+import GenrePicker, { PickedGenre } from '@/components/profile/genre-picker';
 import { useState, useRef } from 'react';
 import { Alert, Text, Image, TextInput, TouchableOpacity, ScrollView, View, Modal } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
@@ -18,7 +19,6 @@ export function EditBandProfileModal({ onClose }: { onClose: () => void }) {
     const { activeProfile, setActiveProfile, refreshUser } = useAuth();
     const scrollViewRef = useRef<ScrollView>(null);
     const nameInputRef = useRef<TextInput>(null);
-    const genreInputRef = useRef<TextInput>(null);
     const bioInputRef = useRef<TextInput>(null);
     const locationInputRef = useRef<TextInput>(null);
 
@@ -26,7 +26,10 @@ export function EditBandProfileModal({ onClose }: { onClose: () => void }) {
     const band = activeProfile as Band;
 
     const [name, setName] = useState(band.name || '');
-    const [genre, setGenre] = useState(band.genre || '');
+    const [genres, setGenres] = useState<PickedGenre[]>(band.genres ?? []);
+    const slugKey = (list: { slug: string }[]) => list.map(g => g.slug).join(',');
+    // Order matters (first is primary), so a reorder counts as a change.
+    const genresChanged = slugKey(genres) !== slugKey(band.genres ?? []);
     const [bio, setBio] = useState(band.bio || '');
     const [city, setCity] = useState(band.city || '');
     const [state, setState] = useState(band.state || '');
@@ -51,7 +54,7 @@ export function EditBandProfileModal({ onClose }: { onClose: () => void }) {
     const handleSave = async () => {
         if (
             name === band.name &&
-            genre === (band.genre || '') &&
+            !genresChanged &&
             bio === (band.bio || '') &&
             city === (band.city || '') &&
             state === (band.state || '') &&
@@ -64,7 +67,11 @@ export function EditBandProfileModal({ onClose }: { onClose: () => void }) {
         }
 
         try {
-            const updatedBand = await updateBand(band.id, { name, genre, bio, city, state, country, profileImage, headerImage });
+            const updatedBand = await updateBand(band.id, {
+                name, bio, city, state, country, profileImage, headerImage,
+                // Only sent when changed: PUT replaces the whole set.
+                ...(genresChanged ? { genres: genres.map(g => g.slug) } : {}),
+            });
             setActiveProfile({ ...updatedBand, accountType: 'BAND' });
             await refreshUser();
             router.back();
@@ -137,8 +144,7 @@ export function EditBandProfileModal({ onClose }: { onClose: () => void }) {
                             </View>
 
                             <View style={styles.inputGroup}>
-                                <ThemedText style={styles.label}>Genre</ThemedText>
-                                <TextInput ref={genreInputRef} value={genre} onChangeText={setGenre} style={styles.input} placeholder="e.g. Rock, Jazz, Hip-Hop" onFocus={() => scrollToInput(genreInputRef)} />
+                                <GenrePicker value={genres} onChange={setGenres} />
                             </View>
 
                             <View style={styles.inputGroup}>

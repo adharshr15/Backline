@@ -150,7 +150,7 @@ export function BandProfile() {
                         </TouchableOpacity>
                         <View style={{ width: AVATAR_SIZE }} />
                         <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
-                            {band?.genre ? `${band.genre}` : ''}
+                            {band?.genres?.map(g => g.name).join(' · ') ?? ''}
                         </ThemedText>
                     </View>
 

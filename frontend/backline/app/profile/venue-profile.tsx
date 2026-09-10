@@ -13,23 +13,26 @@ import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useTabHref } from '@/hooks/use-tab-href';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
 import CreateShowModal from '@/components/profile/create-show-modal';
 import CreateListingModal from '@/components/profile/create-listing-modal';
 import ProfileListingsSection from '@/components/profile/listings-section';
+import ProfilePostsSection from '@/components/profile/posts-section';
+import PostComposerModal from '@/components/media/post-composer';
 import { TabSwitcher } from '@/components/ui/tab-switcher';
 import { Listing, getListingsByProfile } from '@/services/listing.service';
+import { Post, getProfilePosts } from '@/services/post.service';
 import { renderBioWithLinks, profileStyles } from '../(tabs)/profile';
 
-type Tab = 'shows' | 'listings';
+type Tab = 'shows' | 'posts' | 'listings';
 
 export const AVATAR_SIZE = 80;
 
 export function VenueProfile() {
     const router = useRouter();
+    const tabHref = useTabHref();
     const { user, activeProfile, setActiveProfile } = useAuth();
-
-    if (!activeProfile || activeProfile.accountType !== 'VENUE') return null;
     const venue = activeProfile as Venue;
 
     const { width } = useWindowDimensions();
@@ -50,21 +53,35 @@ export function VenueProfile() {
     const [listingView, setListingView] = useState<'poster' | 'list'>('poster');
     const [createListingVisible, setCreateListingVisible] = useState(false);
     const [editingListing, setEditingListing] = useState<Listing | undefined>(undefined);
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [composerVisible, setComposerVisible] = useState(false);
     const borderColor = useThemeColor({}, 'text');
 
     const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
     const venues = user?.venueReps?.map(v => v.venue).filter(Boolean) || [];
 
     const loadListings = useCallback(() => {
+        if (!venue?.id) return;
         getListingsByProfile('venue', venue.id, true).then(setListings).catch(() => {});
-    }, [venue.id]);
+    }, [venue?.id]);
+
+    const loadPosts = useCallback(() => {
+        if (!venue?.id) return;
+        getProfilePosts('VENUE', venue.id, { type: 'VENUE', id: venue.id }).then(setPosts).catch(() => {});
+    }, [venue?.id]);
 
     useFocusEffect(useCallback(() => {
+        if (!venue?.id) return;
         getShowsByProfile('venue', venue.id).then(setShows).catch(() => {});
         getShowsByProfile('venue', venue.id, true).then(setPastShows).catch(() => {});
         getRsvpShows('venue', venue.id).then(setRsvpShows).catch(() => {});
         loadListings();
-    }, [venue.id]));
+        loadPosts();
+    }, [venue?.id]));
+
+    // All hooks are above this line. Guard after them so the hook count stays
+    // stable across renders (e.g. when activeProfile briefly becomes null on logout).
+    if (!activeProfile || activeProfile.accountType !== 'VENUE') return null;
 
     const handleRsvp = async (show: Show) => {
         const hasRsvp = show.rsvpVenues?.some(v => v.id === venue.id);
@@ -122,7 +139,7 @@ export function VenueProfile() {
 
                     <View style={profileStyles.metaRow}>
                         <TouchableOpacity
-                            onPress={() => venue?.city && venue?.state && router.push({ pathname: '/profile/scene', params: { city: venue.city, state: venue.state } } as any)}
+                            onPress={() => venue?.city && venue?.state && router.push({ pathname: tabHref('scene'), params: { city: venue.city, state: venue.state } } as any)}
                             disabled={!venue?.city || !venue?.state}
                         >
                             <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
@@ -156,8 +173,8 @@ export function VenueProfile() {
                         <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Share Profile')}>
                             <Ionicons name="share-outline" size={22} color="white" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => router.push('/settings')}>
-                            <Ionicons name="settings-outline" size={22} color="white" />
+                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => router.push(tabHref('metrics'))}>
+                            <Ionicons name="stats-chart-outline" size={22} color="white" />
                         </TouchableOpacity>
                     </View>
 
@@ -177,10 +194,21 @@ export function VenueProfile() {
                                         onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                                         onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
                                         onLeaveShow={handleLeaveShow}
-                                        onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
+                                        onShowPress={(show) => router.push({ pathname: tabHref('show'), params: { id: show.id } })}
                                         activeProfileId={venue.id}
                                         activeProfileType="venue"
                                         onRsvp={handleRsvp}
+                                    />
+                                ),
+                            },
+                            {
+                                key: 'posts',
+                                content: (
+                                    <ProfilePostsSection
+                                        posts={posts}
+                                        isOwner={true}
+                                        onAddPost={() => setComposerVisible(true)}
+                                        onPostPress={(post) => router.push({ pathname: tabHref('post'), params: { id: post.id } })}
                                     />
                                 ),
                             },
@@ -193,7 +221,7 @@ export function VenueProfile() {
                                         setView={setListingView}
                                         isOwner={true}
                                         onCreateListing={() => { setEditingListing(undefined); setCreateListingVisible(true); }}
-                                        onListingPress={(listing) => router.push({ pathname: '/listing', params: { id: listing.id } })}
+                                        onListingPress={(listing) => router.push({ pathname: tabHref('listing'), params: { id: listing.id } })}
                                     />
                                 ),
                             },
@@ -204,6 +232,19 @@ export function VenueProfile() {
                     />
                 </>
             </ParallaxScrollView>
+
+            {/* settings gear — top-right of header */}
+            <TouchableOpacity style={profileStyles.headerGear} onPress={() => router.push('/settings')}>
+                <Ionicons name="settings-outline" size={20} color="white" />
+            </TouchableOpacity>
+
+            <PostComposerModal
+                visible={composerVisible}
+                ownerType="VENUE"
+                ownerId={venue.id}
+                onClose={() => setComposerVisible(false)}
+                onCreated={loadPosts}
+            />
 
             {/* Account Switcher */}
             <Modal

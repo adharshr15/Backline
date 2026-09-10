@@ -167,4 +167,15 @@ export const profileStyles = StyleSheet.create({
   actionText: {
     fontSize: 20,
   },
+  headerGear: {
+    position: 'absolute',
+    top: 52,
+    right: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

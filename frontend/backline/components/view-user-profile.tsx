@@ -10,6 +10,7 @@ import api from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTabHref } from '@/hooks/use-tab-href';
 import { Ionicons } from '@expo/vector-icons';
 import { renderBioWithLinks, profileStyles } from '@/app/(tabs)/profile/index';
 import * as followService from '@/services/follow.service';
@@ -20,12 +21,14 @@ import ProfileCalendarModal from '@/components/profile-calendar-modal';
 import { toCountryName } from '@/utils/location';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
 import ProfileListingsSection from '@/components/profile/listings-section';
+import ProfilePostsSection from '@/components/profile/posts-section';
 import { TabSwitcher } from '@/components/ui/tab-switcher';
 import { Listing, getListingsByProfile } from '@/services/listing.service';
+import { Post, getProfilePosts, OwnerType } from '@/services/post.service';
 
 const AVATAR_SIZE = 80;
 
-type Tab = 'shows' | 'listings';
+type Tab = 'shows' | 'posts' | 'listings';
 
 interface Props {
     id: string;
@@ -33,6 +36,7 @@ interface Props {
 
 export default function ViewUserProfile({ id }: Props) {
     const router = useRouter();
+    const tabHref = useTabHref();
     const { activeProfile, user } = useAuth();
     const { width } = useWindowDimensions();
     const sideWidth = (width - AVATAR_SIZE) / 2;
@@ -51,6 +55,7 @@ export default function ViewUserProfile({ id }: Props) {
     const [calendarVisible, setCalendarVisible] = useState(false);
     const [listings, setListings] = useState<Listing[]>([]);
     const [listingView, setListingView] = useState<'poster' | 'list'>('poster');
+    const [posts, setPosts] = useState<Post[]>([]);
     const [activeTab, setActiveTab] = useState<Tab>('shows');
 
     const followerType = activeProfile?.accountType as 'USER' | 'BAND' | 'VENUE';
@@ -82,6 +87,7 @@ export default function ViewUserProfile({ id }: Props) {
         getShowsByProfile('user', id).then(setShows).catch(() => {});
         getShowsByProfile('user', id, true).then(setPastShows).catch(() => {});
         getListingsByProfile('user', id).then(setListings).catch(() => {});
+        getProfilePosts('USER', id, activeProfile ? { type: followerType as OwnerType, id: activeProfile.id } : undefined).then(setPosts).catch(() => {});
         if (activeProfile) getRsvpShows(activeProfileType, activeProfile.id).then(setViewerRsvpShows).catch(() => {});
     }, [id]);
 
@@ -112,10 +118,10 @@ export default function ViewUserProfile({ id }: Props) {
                 c.participants.some(p => getParticipantProfile(p)?.id === id)
             );
             if (existing) {
-                router.push(`/messages/${existing.id}`);
+                router.push(tabHref(`messages/${existing.id}`));
             } else {
                 router.push({
-                    pathname: '/messages/compose',
+                    pathname: tabHref('messages/compose'),
                     params: { recipientType: 'USER', recipientId: id, recipientName: profile?.name ?? '' },
                 });
             }
@@ -236,7 +242,7 @@ export default function ViewUserProfile({ id }: Props) {
 
                     <View style={profileStyles.metaRow}>
                         <TouchableOpacity
-                            onPress={() => profile.city && profile.state && router.push({ pathname: '/profile/scene', params: { city: profile.city, state: profile.state } } as any)}
+                            onPress={() => profile.city && profile.state && router.push({ pathname: tabHref('scene'), params: { city: profile.city, state: profile.state } } as any)}
                             disabled={!profile.city || !profile.state}
                         >
                             <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
@@ -290,7 +296,7 @@ export default function ViewUserProfile({ id }: Props) {
                                 onSeePastShows={() => setShowingPast(true)}
                                 onCreateShow={() => {}}
                                 onEditShow={() => {}}
-                                onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
+                                onShowPress={(show) => router.push({ pathname: tabHref('show'), params: { id: show.id } })}
                                 activeProfileId={activeProfile?.id}
                                 activeProfileType={activeProfileType}
                                 onRepost={handleRepost}
@@ -298,7 +304,16 @@ export default function ViewUserProfile({ id }: Props) {
                             />
                         );
 
-                        if (listings.length === 0) {
+                        const postsSection = (
+                            <ProfilePostsSection
+                                posts={posts}
+                                isOwner={false}
+                                onAddPost={() => {}}
+                                onPostPress={(post) => router.push({ pathname: tabHref('post'), params: { id: post.id } })}
+                            />
+                        );
+
+                        if (posts.length === 0 && listings.length === 0) {
                             return (
                                 <>
                                     <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: '#616161', marginHorizontal: -32, marginTop: 4, marginBottom: 12 }} />
@@ -307,24 +322,29 @@ export default function ViewUserProfile({ id }: Props) {
                             );
                         }
 
+                        const tabs = [
+                            { key: 'shows' as Tab, content: showsSection },
+                            { key: 'posts' as Tab, content: postsSection },
+                        ];
+                        if (listings.length > 0) {
+                            tabs.push({
+                                key: 'listings' as Tab,
+                                content: (
+                                    <ProfileListingsSection
+                                        listings={listings}
+                                        view={listingView}
+                                        setView={setListingView}
+                                        isOwner={false}
+                                        onCreateListing={() => {}}
+                                        onListingPress={(listing) => router.push({ pathname: tabHref('listing'), params: { id: listing.id } })}
+                                    />
+                                ),
+                            });
+                        }
+
                         return (
                             <TabSwitcher
-                                tabs={[
-                                    { key: 'shows', content: showsSection },
-                                    {
-                                        key: 'listings',
-                                        content: (
-                                            <ProfileListingsSection
-                                                listings={listings}
-                                                view={listingView}
-                                                setView={setListingView}
-                                                isOwner={false}
-                                                onCreateListing={() => {}}
-                                                onListingPress={(listing) => router.push({ pathname: '/listing', params: { id: listing.id } })}
-                                            />
-                                        ),
-                                    },
-                                ]}
+                                tabs={tabs}
                                 activeTab={activeTab}
                                 onTabChange={setActiveTab}
                                 marginHorizontal={32}

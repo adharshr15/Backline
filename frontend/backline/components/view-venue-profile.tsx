@@ -10,6 +10,7 @@ import api from '@/services/api';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTabHref } from '@/hooks/use-tab-href';
 import { Ionicons } from '@expo/vector-icons';
 import { renderBioWithLinks, profileStyles } from '@/app/(tabs)/profile/index';
 import * as followService from '@/services/follow.service';
@@ -17,10 +18,12 @@ import { Show, getShowsByProfile, repostShow, unrepostShow, getRsvpShows, rsvpSh
 import { getMyConversations, createConversation, getParticipantProfile, ParticipantType } from '@/services/conversation.service';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
 import ProfileListingsSection from '@/components/profile/listings-section';
+import ProfilePostsSection from '@/components/profile/posts-section';
 import { TabSwitcher } from '@/components/ui/tab-switcher';
 import { Listing, getListingsByProfile } from '@/services/listing.service';
+import { Post, getProfilePosts, OwnerType } from '@/services/post.service';
 
-type Tab = 'shows' | 'listings';
+type Tab = 'shows' | 'posts' | 'listings';
 import ProfileCalendarModal from '@/components/profile-calendar-modal';
 
 const AVATAR_SIZE = 80;
@@ -31,6 +34,7 @@ interface Props {
 
 export default function ViewVenueProfile({ id }: Props) {
     const router = useRouter();
+    const tabHref = useTabHref();
     const { activeProfile } = useAuth();
     const { width } = useWindowDimensions();
     const sideWidth = (width - AVATAR_SIZE) / 2;
@@ -49,6 +53,7 @@ export default function ViewVenueProfile({ id }: Props) {
     const [calendarVisible, setCalendarVisible] = useState(false);
     const [listings, setListings] = useState<Listing[]>([]);
     const [listingView, setListingView] = useState<'poster' | 'list'>('poster');
+    const [posts, setPosts] = useState<Post[]>([]);
     const [activeTab, setActiveTab] = useState<Tab>('shows');
 
     const followerType = activeProfile?.accountType as 'USER' | 'BAND' | 'VENUE';
@@ -80,6 +85,7 @@ export default function ViewVenueProfile({ id }: Props) {
         getShowsByProfile('venue', id).then(setShows).catch(() => {});
         getShowsByProfile('venue', id, true).then(setPastShows).catch(() => {});
         getListingsByProfile('venue', id).then(setListings).catch(() => {});
+        getProfilePosts('VENUE', id, activeProfile ? { type: followerType as OwnerType, id: activeProfile.id } : undefined).then(setPosts).catch(() => {});
         if (activeProfile) getRsvpShows(activeProfileType, activeProfile.id).then(setViewerRsvpShows).catch(() => {});
     }, [id]);
 
@@ -110,10 +116,10 @@ export default function ViewVenueProfile({ id }: Props) {
                 c.participants.some(p => getParticipantProfile(p)?.id === id)
             );
             if (existing) {
-                router.push(`/messages/${existing.id}`);
+                router.push(tabHref(`messages/${existing.id}`));
             } else {
                 router.push({
-                    pathname: '/messages/compose',
+                    pathname: tabHref('messages/compose'),
                     params: { recipientType: 'VENUE', recipientId: id, recipientName: venue?.name ?? '' },
                 });
             }
@@ -198,7 +204,7 @@ export default function ViewVenueProfile({ id }: Props) {
 
                     <View style={profileStyles.metaRow}>
                         <TouchableOpacity
-                            onPress={() => venue.city && venue.state && router.push({ pathname: '/profile/scene', params: { city: venue.city, state: venue.state } } as any)}
+                            onPress={() => venue.city && venue.state && router.push({ pathname: tabHref('scene'), params: { city: venue.city, state: venue.state } } as any)}
                             disabled={!venue.city || !venue.state}
                         >
                             <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
@@ -252,7 +258,7 @@ export default function ViewVenueProfile({ id }: Props) {
                                 onSeePastShows={() => setShowingPast(true)}
                                 onCreateShow={() => {}}
                                 onEditShow={() => {}}
-                                onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
+                                onShowPress={(show) => router.push({ pathname: tabHref('show'), params: { id: show.id } })}
                                 activeProfileId={activeProfile?.id}
                                 activeProfileType={activeProfileType}
                                 onRepost={handleRepost}
@@ -260,7 +266,16 @@ export default function ViewVenueProfile({ id }: Props) {
                             />
                         );
 
-                        if (listings.length === 0) {
+                        const postsSection = (
+                            <ProfilePostsSection
+                                posts={posts}
+                                isOwner={false}
+                                onAddPost={() => {}}
+                                onPostPress={(post) => router.push({ pathname: tabHref('post'), params: { id: post.id } })}
+                            />
+                        );
+
+                        if (posts.length === 0 && listings.length === 0) {
                             return (
                                 <>
                                     <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: '#616161', marginHorizontal: -32, marginTop: 4, marginBottom: 12 }} />
@@ -269,24 +284,29 @@ export default function ViewVenueProfile({ id }: Props) {
                             );
                         }
 
+                        const tabs = [
+                            { key: 'shows' as Tab, content: showsSection },
+                            { key: 'posts' as Tab, content: postsSection },
+                        ];
+                        if (listings.length > 0) {
+                            tabs.push({
+                                key: 'listings' as Tab,
+                                content: (
+                                    <ProfileListingsSection
+                                        listings={listings}
+                                        view={listingView}
+                                        setView={setListingView}
+                                        isOwner={false}
+                                        onCreateListing={() => {}}
+                                        onListingPress={(listing) => router.push({ pathname: tabHref('listing'), params: { id: listing.id } })}
+                                    />
+                                ),
+                            });
+                        }
+
                         return (
                             <TabSwitcher
-                                tabs={[
-                                    { key: 'shows', content: showsSection },
-                                    {
-                                        key: 'listings',
-                                        content: (
-                                            <ProfileListingsSection
-                                                listings={listings}
-                                                view={listingView}
-                                                setView={setListingView}
-                                                isOwner={false}
-                                                onCreateListing={() => {}}
-                                                onListingPress={(listing) => router.push({ pathname: '/listing', params: { id: listing.id } })}
-                                            />
-                                        ),
-                                    },
-                                ]}
+                                tabs={tabs}
                                 activeTab={activeTab}
                                 onTabChange={setActiveTab}
                                 marginHorizontal={32}

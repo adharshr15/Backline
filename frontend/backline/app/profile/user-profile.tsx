@@ -15,22 +15,26 @@ import CreateShowModal from '@/components/profile/create-show-modal';
 import CreateListingModal from '@/components/profile/create-listing-modal';
 import { Listing, getListingsByProfile } from '@/services/listing.service';
 import ProfileListingsSection from '@/components/profile/listings-section';
+import ProfilePostsSection from '@/components/profile/posts-section';
+import PostComposerModal from '@/components/media/post-composer';
+import { Post, getProfilePosts } from '@/services/post.service';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useTabHref } from '@/hooks/use-tab-href';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
 import { renderBioWithLinks } from '../(tabs)/profile';
 import { profileStyles } from '../(tabs)/profile';
 export const AVATAR_SIZE = 80;
 
-type Tab = 'shows' | 'listings';
+type Tab = 'shows' | 'posts' | 'listings';
 
 export function UserProfile() {
     const router = useRouter();
+    const tabHref = useTabHref();
 
     const { activeProfile, setActiveProfile } = useAuth();
-    if (!activeProfile || activeProfile.accountType !== 'USER') return null;
     const user = activeProfile as User;
 
 
@@ -50,6 +54,8 @@ export function UserProfile() {
     const [listingView, setListingView] = useState<'poster' | 'list'>('poster');
     const [createListingVisible, setCreateListingVisible] = useState(false);
     const [editingListing, setEditingListing] = useState<Listing | undefined>(undefined);
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [composerVisible, setComposerVisible] = useState(false);
     const borderColor = useThemeColor({}, 'text');
 
     const bands = user?.bandMemberships?.map(m => m.band).filter(Boolean) || [];
@@ -60,15 +66,27 @@ export function UserProfile() {
     const hasListings = true; // owner: always show tabs so listings can be created
 
     const loadListings = useCallback(() => {
+        if (!user?.id) return;
         getListingsByProfile('user', user.id, true).then(setListings).catch(() => {});
-    }, [user.id]);
+    }, [user?.id]);
+
+    const loadPosts = useCallback(() => {
+        if (!user?.id) return;
+        getProfilePosts('USER', user.id, { type: 'USER', id: user.id }).then(setPosts).catch(() => {});
+    }, [user?.id]);
 
     useFocusEffect(useCallback(() => {
+        if (!user?.id) return;
         getShowsByProfile('user', user.id).then(setShows).catch(() => {});
         getShowsByProfile('user', user.id, true).then(setPastShows).catch(() => {});
         getRsvpShows('user', user.id).then(setRsvpShows).catch(() => {});
         loadListings();
-    }, [user.id]));
+        loadPosts();
+    }, [user?.id]));
+
+    // All hooks are above this line. Guard after them so the hook count stays
+    // stable across renders (e.g. when activeProfile briefly becomes null on logout).
+    if (!activeProfile || activeProfile.accountType !== 'USER') return null;
 
     const handleRsvp = async (show: Show) => {
         const hasRsvp = show.rsvpUsers?.some(u => u.id === user.id);
@@ -117,7 +135,7 @@ export function UserProfile() {
                     {/* meta row*/}
                     <View style={profileStyles.metaRow}>
                         <TouchableOpacity
-                            onPress={() => user?.city && user?.state && router.push({ pathname: '/profile/scene', params: { city: user.city, state: user.state } } as any)}
+                            onPress={() => user?.city && user?.state && router.push({ pathname: tabHref('scene'), params: { city: user.city, state: user.state } } as any)}
                             disabled={!user?.city || !user?.state}
                         >
                             <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
@@ -154,8 +172,8 @@ export function UserProfile() {
                         <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Share Profile')}>
                             <Ionicons name="share-outline" size={22} color="white" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => router.push('/settings')}>
-                            <Ionicons name="settings-outline" size={22} color="white" />
+                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => router.push(tabHref('metrics'))}>
+                            <Ionicons name="stats-chart-outline" size={22} color="white" />
                         </TouchableOpacity>
                     </View>
 
@@ -176,10 +194,21 @@ export function UserProfile() {
                                             onSeePastShows={() => setShowingPast(true)}
                                             onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                                             onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
-                                            onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
+                                            onShowPress={(show) => router.push({ pathname: tabHref('show'), params: { id: show.id } })}
                                             activeProfileId={user.id}
                                             activeProfileType="user"
                                             onRsvp={handleRsvp}
+                                        />
+                                    ),
+                                },
+                                {
+                                    key: 'posts',
+                                    content: (
+                                        <ProfilePostsSection
+                                            posts={posts}
+                                            isOwner={true}
+                                            onAddPost={() => setComposerVisible(true)}
+                                            onPostPress={(post) => router.push({ pathname: tabHref('post'), params: { id: post.id } })}
                                         />
                                     ),
                                 },
@@ -192,7 +221,7 @@ export function UserProfile() {
                                             setView={setListingView}
                                             isOwner={true}
                                             onCreateListing={() => { setEditingListing(undefined); setCreateListingVisible(true); }}
-                                            onListingPress={(listing) => router.push({ pathname: '/listing', params: { id: listing.id } })}
+                                            onListingPress={(listing) => router.push({ pathname: tabHref('listing'), params: { id: listing.id } })}
                                         />
                                     ),
                                 },
@@ -225,7 +254,7 @@ export function UserProfile() {
                                 onSeePastShows={() => setShowingPast(true)}
                                 onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                                 onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
-                                onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
+                                onShowPress={(show) => router.push({ pathname: tabHref('show'), params: { id: show.id } })}
                                 activeProfileId={user.id}
                                 activeProfileType="user"
                             />
@@ -234,6 +263,11 @@ export function UserProfile() {
                 </>
 
             </ParallaxScrollView>
+
+            {/* settings gear — top-right of header */}
+            <TouchableOpacity style={profileStyles.headerGear} onPress={() => router.push('/settings')}>
+                <Ionicons name="settings-outline" size={20} color="white" />
+            </TouchableOpacity>
 
             {/* Account Switcher */}
             <Modal
@@ -389,6 +423,14 @@ export function UserProfile() {
                     loadListings();
                     setCreateListingVisible(false);
                 }}
+            />
+
+            <PostComposerModal
+                visible={composerVisible}
+                ownerType="USER"
+                ownerId={user.id}
+                onClose={() => setComposerVisible(false)}
+                onCreated={loadPosts}
             />
 
         </>

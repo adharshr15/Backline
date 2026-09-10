@@ -13,23 +13,26 @@ import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useTabHref } from '@/hooks/use-tab-href';
 import ProfileShowsSection from '@/components/profile/shows-poster-section';
 import CreateShowModal from '@/components/profile/create-show-modal';
 import CreateListingModal from '@/components/profile/create-listing-modal';
 import ProfileListingsSection from '@/components/profile/listings-section';
+import ProfilePostsSection from '@/components/profile/posts-section';
+import PostComposerModal from '@/components/media/post-composer';
 import { TabSwitcher } from '@/components/ui/tab-switcher';
 import { Listing, getListingsByProfile } from '@/services/listing.service';
+import { Post, getProfilePosts } from '@/services/post.service';
 import { renderBioWithLinks, profileStyles } from '../(tabs)/profile';
 
-type Tab = 'shows' | 'listings';
+type Tab = 'shows' | 'posts' | 'listings';
 
 export const AVATAR_SIZE = 80;
 
 export function BandProfile() {
     const router = useRouter();
+    const tabHref = useTabHref();
     const { user, activeProfile, setActiveProfile } = useAuth();
-
-    if (!activeProfile || activeProfile.accountType !== 'BAND') return null;
     const band = activeProfile as Band;
 
     const { width } = useWindowDimensions();
@@ -50,18 +53,32 @@ export function BandProfile() {
     const [listingView, setListingView] = useState<'poster' | 'list'>('poster');
     const [createListingVisible, setCreateListingVisible] = useState(false);
     const [editingListing, setEditingListing] = useState<Listing | undefined>(undefined);
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [composerVisible, setComposerVisible] = useState(false);
     const borderColor = useThemeColor({}, 'text');
 
     const loadListings = useCallback(() => {
+        if (!band?.id) return;
         getListingsByProfile('band', band.id, true).then(setListings).catch(() => {});
-    }, [band.id]);
+    }, [band?.id]);
+
+    const loadPosts = useCallback(() => {
+        if (!band?.id) return;
+        getProfilePosts('BAND', band.id, { type: 'BAND', id: band.id }).then(setPosts).catch(() => {});
+    }, [band?.id]);
 
     useFocusEffect(useCallback(() => {
+        if (!band?.id) return;
         getShowsByProfile('band', band.id).then(setShows).catch(() => {});
         getShowsByProfile('band', band.id, true).then(setPastShows).catch(() => {});
         getRsvpShows('band', band.id).then(setRsvpShows).catch(() => {});
         loadListings();
-    }, [band.id]));
+        loadPosts();
+    }, [band?.id]));
+
+    // All hooks are above this line. Guard after them so the hook count stays
+    // stable across renders (e.g. when activeProfile briefly becomes null on logout).
+    if (!activeProfile || activeProfile.accountType !== 'BAND') return null;
 
     const handleRsvp = async (show: Show) => {
         const hasRsvp = show.rsvpBands?.some(b => b.id === band.id);
@@ -124,7 +141,7 @@ export function BandProfile() {
                     {/* meta row */}
                     <View style={profileStyles.metaRow}>
                         <TouchableOpacity
-                            onPress={() => band?.city && band?.state && router.push({ pathname: '/profile/scene', params: { city: band.city, state: band.state } } as any)}
+                            onPress={() => band?.city && band?.state && router.push({ pathname: tabHref('scene'), params: { city: band.city, state: band.state } } as any)}
                             disabled={!band?.city || !band?.state}
                         >
                             <ThemedText style={[profileStyles.metaText, { width: sideWidth }]}>
@@ -161,8 +178,8 @@ export function BandProfile() {
                         <TouchableOpacity style={profileStyles.actionButton} onPress={() => console.log('Share Profile')}>
                             <Ionicons name="share-outline" size={22} color="white" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => router.push('/settings')}>
-                            <Ionicons name="settings-outline" size={22} color="white" />
+                        <TouchableOpacity style={profileStyles.actionButton} onPress={() => router.push(tabHref('metrics'))}>
+                            <Ionicons name="stats-chart-outline" size={22} color="white" />
                         </TouchableOpacity>
                     </View>
 
@@ -182,10 +199,21 @@ export function BandProfile() {
                                         onCreateShow={() => { setEditingShow(undefined); setCreateShowVisible(true); }}
                                         onEditShow={(show) => { setEditingShow(show); setCreateShowVisible(true); }}
                                         onLeaveShow={handleLeaveShow}
-                                        onShowPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
+                                        onShowPress={(show) => router.push({ pathname: tabHref('show'), params: { id: show.id } })}
                                         activeProfileId={band.id}
                                         activeProfileType="band"
                                         onRsvp={handleRsvp}
+                                    />
+                                ),
+                            },
+                            {
+                                key: 'posts',
+                                content: (
+                                    <ProfilePostsSection
+                                        posts={posts}
+                                        isOwner={true}
+                                        onAddPost={() => setComposerVisible(true)}
+                                        onPostPress={(post) => router.push({ pathname: tabHref('post'), params: { id: post.id } })}
                                     />
                                 ),
                             },
@@ -198,7 +226,7 @@ export function BandProfile() {
                                         setView={setListingView}
                                         isOwner={true}
                                         onCreateListing={() => { setEditingListing(undefined); setCreateListingVisible(true); }}
-                                        onListingPress={(listing) => router.push({ pathname: '/listing', params: { id: listing.id } })}
+                                        onListingPress={(listing) => router.push({ pathname: tabHref('listing'), params: { id: listing.id } })}
                                     />
                                 ),
                             },
@@ -209,6 +237,19 @@ export function BandProfile() {
                     />
                 </>
             </ParallaxScrollView>
+
+            {/* settings gear — top-right of header */}
+            <TouchableOpacity style={profileStyles.headerGear} onPress={() => router.push('/settings')}>
+                <Ionicons name="settings-outline" size={20} color="white" />
+            </TouchableOpacity>
+
+            <PostComposerModal
+                visible={composerVisible}
+                ownerType="BAND"
+                ownerId={band.id}
+                onClose={() => setComposerVisible(false)}
+                onCreated={loadPosts}
+            />
 
             {/* Account Switcher */}
             <Modal

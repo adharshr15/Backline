@@ -6,6 +6,7 @@ import { Request, Response } from 'express'
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { resolveSceneId, stateSpellings } from '../lib/scenes';
 import { resolveGenreIds } from '../lib/genres';
+import { userPublicSelect } from '../lib/prismaSelects';
 import { clampLimit, parsePage, parseCsv, parseText } from '../lib/query';
 import { request } from 'node:http';
 import fs from 'fs';
@@ -98,7 +99,9 @@ export const getBandById = async (req: AuthRequest, res: Response) => {
     const band = await prisma.band.findUnique({
       where: { id, deletedAt: null },
       include: {
-        members: { include: { user: true } },
+        // Public route: select, never include, on User. `user: true` handed every
+        // member's email and password hash to anyone without a token.
+        members: { include: { user: { select: userPublicSelect } } },
         tours: { include: { tour: true } },
         shows: { include: { show: { include: { venue: true, tour: true } } } }
       }

@@ -7,6 +7,7 @@ import { InviteStatus } from '../../generated/prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { resolveSceneId, stateSpellings } from '../lib/scenes';
 import { clampLimit, parsePage, parseText, parseNumber } from '../lib/query';
+import { userPublicSelect } from '../lib/prismaSelects';
 import fs from 'fs';
 import path from 'path';
 
@@ -96,7 +97,9 @@ export const getVenueById = async (req: AuthRequest, res: Response) => {
         const venue = await prisma.venue.findUnique({
             where: { id },
             include: {
-                representatives: { include: { user: true } }
+                // Public route: select, never include, on User. `user: true` handed
+                // every representative's email and password hash to anyone.
+                representatives: { include: { user: { select: userPublicSelect } } }
             }
         });
 

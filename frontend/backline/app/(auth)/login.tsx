@@ -33,7 +33,7 @@ export default function LoginScreen() {
             await saveAuth(user, token)
 
             // Navigate to (tabs) screen
-            router.replace('/(tabs)')
+            router.replace('/(tabs)/home' as any)
 
         }
         catch (error: any) {

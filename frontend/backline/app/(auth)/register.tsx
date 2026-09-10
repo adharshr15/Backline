@@ -160,7 +160,7 @@ export default function RegisterScreen() {
       setAuthToken(token);
 
       // Navigate to (tabs) screen
-      router.replace('/(tabs)')
+      router.replace('/(tabs)/home' as any)
     }
     catch (error: any) {
       Alert.alert('Error', error.response?.data?.error || 'Something went wrong');

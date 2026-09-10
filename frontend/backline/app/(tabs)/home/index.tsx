@@ -7,6 +7,7 @@ import { isConvUnread } from '@/utils/lastRead';
 import { ThemedText } from '@/components/themed-text';
 import { useAuth } from '@/context/AuthContext';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTabHref } from '@/hooks/use-tab-href';
 import { Fonts } from '@/constants/theme';
 import { getFeedShows, Show } from '@/services/show.service';
 import { getMyConversations, getMyInvites, ParticipantType } from '@/services/conversation.service';
@@ -87,6 +88,7 @@ function FeedShowCard({ show, onPress, sceneTag }: FeedShowCardProps) {
 
 export default function HomeScreen() {
     const router = useRouter();
+    const tabHref = useTabHref();
     const { activeProfile } = useAuth();
     const bgColor = useThemeColor({}, 'background');
     const textColor = useThemeColor({}, 'text');
@@ -137,7 +139,7 @@ export default function HomeScreen() {
                         {followedScenes.length > 0 ? ` · ${followedScenes.length} scene${followedScenes.length !== 1 ? 's' : ''}` : ''}
                     </ThemedText>
                 </View>
-                <TouchableOpacity onPress={() => router.push('/messages')} style={styles.dmBtn}>
+                <TouchableOpacity onPress={() => router.push(tabHref('messages'))} style={styles.dmBtn}>
                     <Ionicons name="chatbubble-ellipses-outline" size={26} color={textColor} />
                     {hasUnread && <View style={styles.unreadDot} />}
                 </TouchableOpacity>
@@ -156,7 +158,7 @@ export default function HomeScreen() {
                 renderItem={({ item }) => (
                     <FeedShowCard
                         show={item}
-                        onPress={(show) => router.push({ pathname: '/show', params: { id: show.id } })}
+                        onPress={(show) => router.push({ pathname: tabHref('show'), params: { id: show.id } })}
                         sceneTag={getSceneTag(item, followedScenes)}
                     />
                 )}

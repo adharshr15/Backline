@@ -5,6 +5,7 @@ import { generateToken } from "../lib/auth"
 import { AuthRequest } from "../middlewares/auth.middleware"
 import { fail } from "../middlewares/error.middleware"
 import { resolveSceneId } from "../lib/scenes"
+import { bandGenresSelect, flattenGenres } from "../lib/prismaSelects"
 
 const BCRYPT_ROUNDS = 12
 const MIN_PASSWORD_LENGTH = 8
@@ -147,7 +148,9 @@ export const getMe = async (req: AuthRequest, res: Response) => {
         profileImageUrl: true,
         headerImageUrl: true,
         createdAt: true,
-        bandMemberships: { include: { band: true } },
+        // Genres ride along so the app's active band profile can show and edit
+        // them without a second request.
+        bandMemberships: { include: { band: { include: { genres: bandGenresSelect } } } },
         venueReps: { include: { venue: true } }
       }
     })
@@ -156,7 +159,10 @@ export const getMe = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: "User not found" })
     }
 
-    res.json(user)
+    res.json({
+      ...user,
+      bandMemberships: user.bandMemberships.map(m => ({ ...m, band: flattenGenres(m.band) })),
+    })
   } catch (error) {
     console.error("getMe error:", error)
     res.status(500).json({ error: "Internal server error" })

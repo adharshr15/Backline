@@ -5,7 +5,7 @@ import bcrypt from "bcrypt";
 import { InviteStatus } from '../../generated/prisma/enums'
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { AccountType } from '../../generated/prisma/enums';
-import { userPrivateSelect, userPublicSelect, userCraftsSelect } from '../lib/prismaSelects';
+import { userPrivateSelect, userPublicSelect, userCraftsSelect, bandGenresSelect, flattenGenres } from '../lib/prismaSelects';
 import { fail } from '../middlewares/error.middleware';
 import { resolveSceneId, stateSpellings } from '../lib/scenes';
 import { Craft } from '../../generated/prisma/enums';
@@ -298,7 +298,8 @@ export const getMyProfiles = async (req: AuthRequest, res: Response) => {
         bio: true,
         profileImageUrl: true,
         headerImageUrl: true,
-        accountType: true
+        accountType: true,
+        genres: bandGenresSelect,
       }
     })
 
@@ -318,7 +319,7 @@ export const getMyProfiles = async (req: AuthRequest, res: Response) => {
       }
     })
 
-    res.status(200).json({ bands, venues });
+    res.status(200).json({ bands: bands.map(flattenGenres), venues });
   }
   catch (error) {
     console.error("getMyProfiles error:", error);

@@ -35,6 +35,67 @@ export const resolveGenreIds = async (tokens: string[]): Promise<string[]> => {
   return genres.map(g => g.id);
 };
 
+/** A band carries at most this many genres; position 0 is the primary. */
+export const MAX_BAND_GENRES = 3;
+
+const GENRES_SHAPE_ERROR = "genres must be a list of genre slugs";
+
+/**
+ * Parse and resolve the `genres` field of a band create or update.
+ *
+ *   field omitted   -> {}                 leave the band's set alone
+ *   []              -> { genreIds: [] }   clear it
+ *   ["a", "b"]      -> { genreIds }       in the order given, duplicates collapsed
+ *
+ * Accepts an array (JSON body, or multipart `genres[]`) or a JSON-encoded string,
+ * because the app sends FormData, which cannot carry an array -- and an empty
+ * array has to be expressible so a band can clear its genres.
+ *
+ * Unlike resolveGenreIds this is strict: slugs only, and an unknown one is an
+ * error. A filter should tolerate a typo; a write must not silently drop part of
+ * what was asked for.
+ */
+export const parseBandGenres = async (
+  raw: unknown,
+): Promise<{ genreIds?: string[]; error?: string }> => {
+  if (raw === undefined) return {};
+
+  let list: unknown = raw;
+  if (typeof raw === "string") {
+    const text = raw.trim();
+    if (text === "") {
+      list = [];
+    } else {
+      try {
+        list = JSON.parse(text);
+      } catch {
+        return { error: GENRES_SHAPE_ERROR };
+      }
+    }
+  }
+
+  if (!Array.isArray(list) || !list.every(s => typeof s === "string")) {
+    return { error: GENRES_SHAPE_ERROR };
+  }
+
+  const slugs = [...new Set((list as string[]).map(s => s.trim().toLowerCase()).filter(Boolean))];
+  if (slugs.length > MAX_BAND_GENRES) {
+    return { error: `At most ${MAX_BAND_GENRES} genres` };
+  }
+  if (slugs.length === 0) return { genreIds: [] };
+
+  const found = await prisma.genre.findMany({
+    where: { slug: { in: slugs }, isActive: true },
+    select: { id: true, slug: true },
+  });
+  const idBySlug = new Map(found.map(g => [g.slug, g.id]));
+
+  const unknown = slugs.filter(s => !idBySlug.has(s));
+  if (unknown.length) return { error: `Unknown genre: ${unknown.join(", ")}` };
+
+  return { genreIds: slugs.map(s => idBySlug.get(s)!) };
+};
+
 export const syncGenreSeed = async () => {
   const roots = GENRE_SEED.filter(g => !g.parent);
   const children = GENRE_SEED.filter(g => g.parent);

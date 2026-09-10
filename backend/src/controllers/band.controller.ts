@@ -5,8 +5,8 @@ import { BandRole, InviteStatus } from '../../generated/prisma/client'
 import { Request, Response } from 'express'
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { resolveSceneId, stateSpellings } from '../lib/scenes';
-import { resolveGenreIds } from '../lib/genres';
-import { userPublicSelect } from '../lib/prismaSelects';
+import { resolveGenreIds, parseBandGenres } from '../lib/genres';
+import { bandGenresSelect, flattenGenres, userPublicSelect } from '../lib/prismaSelects';
 import { clampLimit, parsePage, parseCsv, parseText } from '../lib/query';
 import { request } from 'node:http';
 import fs from 'fs';
@@ -103,7 +103,8 @@ export const getBandById = async (req: AuthRequest, res: Response) => {
         // member's email and password hash to anyone without a token.
         members: { include: { user: { select: userPublicSelect } } },
         tours: { include: { tour: true } },
-        shows: { include: { show: { include: { venue: true, tour: true } } } }
+        shows: { include: { show: { include: { venue: true, tour: true } } } },
+        genres: bandGenresSelect,
       }
     })
 
@@ -111,7 +112,7 @@ export const getBandById = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: "Band not found" })
     }
 
-    res.json(band)
+    res.json(flattenGenres(band))
   } catch (error: any) {
     console.error("Prisma getBandById error:", error.message)
     fail(res, error, "band")
@@ -173,6 +174,11 @@ export const createBand = async (req: AuthRequest, res: Response) => {
     if (!creatorId) return res.status(401).json({ error: "Unauthorized" });
     if (!name) return res.status(400).json({ error: "Band name is required." });
 
+    // Validated before resolveSceneId, which can create a Scene row: a rejected
+    // request must not leave anything behind.
+    const bandGenres = await parseBandGenres(req.body.genres);
+    if (bandGenres.error) return res.status(400).json({ error: bandGenres.error });
+
     const accountType = "BAND";
 
     // Resolved outside the transaction: it may create a Scene row, and holding
@@ -193,6 +199,9 @@ export const createBand = async (req: AuthRequest, res: Response) => {
           bio,
           profileImageUrl,
           headerImageUrl,
+          ...(bandGenres.genreIds?.length
+            ? { genres: { create: bandGenres.genreIds.map((genreId, position) => ({ genreId, position })) } }
+            : {}),
           members: {
             create: [
               {
@@ -210,6 +219,7 @@ export const createBand = async (req: AuthRequest, res: Response) => {
           },
           tours: { include: { tour: true } },
           shows: { include: { show: true } },
+          genres: bandGenresSelect,
         },
       });
 
@@ -233,7 +243,7 @@ export const createBand = async (req: AuthRequest, res: Response) => {
       return createdBand;
     });
 
-    res.status(201).json(band);
+    res.status(201).json(flattenGenres(band));
   } catch (error: any) {
     console.error("Prisma createBand error:", error.message);
     fail(res, error, "band");
@@ -276,6 +286,11 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
     if ((removeMemberId || inviteMemberId || updateRole) && !isManager) {
       return res.status(403).json({ error: "Only managers can change the band roster" });
     }
+
+    // Any member may set genres, like name and bio. Validated before anything is
+    // written, so a bad slug leaves the existing set untouched.
+    const bandGenres = await parseBandGenres(req.body.genres);
+    if (bandGenres.error) return res.status(400).json({ error: bandGenres.error });
 
     const currentBand = await prisma.band.findUnique({ where: { id: bandId } });
 
@@ -351,18 +366,30 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
         });
       }
 
+      // Replace-the-set semantics, as PUT /users/me/crafts: omitted leaves it
+      // alone, [] clears it, otherwise the given order becomes `position`.
+      if (bandGenres.genreIds) {
+        await tx.bandGenre.deleteMany({ where: { bandId } });
+        if (bandGenres.genreIds.length) {
+          await tx.bandGenre.createMany({
+            data: bandGenres.genreIds.map((genreId, position) => ({ bandId, genreId, position })),
+          });
+        }
+      }
+
       const band = await tx.band.update({
         where: { id: bandId },
         data: updateData,
         include: {
           members: { include: { user: { select: { name: true, id: true } } } },
           tours: { include: { tour: true } },
-          shows: { include: { show: true } }
+          shows: { include: { show: true } },
+          genres: bandGenresSelect,
         }
       });
 
       return {
-        ...band,
+        ...flattenGenres(band),
         tours: band.tours.map(bt => bt.tour),
         shows: band.shows.map(sb => sb.show)
       };

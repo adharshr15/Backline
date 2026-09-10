@@ -46,6 +46,17 @@ export const userCraftsSelect = {
   orderBy: { position: "asc" },
 } as const;
 
+/** A band's genres, primary first. Pass the row through flattenGenres before responding. */
+export const bandGenresSelect = {
+  select: { genre: { select: { slug: true, name: true } } },
+  orderBy: { position: "asc" },
+} as const;
+
+/** `genres: [{ genre: {slug, name} }]` -> `genres: [{slug, name}]`, the shape GET /bands returns. */
+export const flattenGenres = <T extends { genres: { genre: { slug: string; name: string } }[] }>(
+  band: T,
+) => ({ ...band, genres: band.genres.map(g => g.genre) });
+
 /** Minimal shape for avatars and name chips in lists. */
 export const profileSummarySelect = {
   id: true,

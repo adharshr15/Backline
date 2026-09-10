@@ -1,15 +1,14 @@
-import { View, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { View, ScrollView, StyleSheet } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
-import { BASE_URL } from '@/services/api';
+import { ProfileCard, useItemPress, styles as railStyles } from '@/components/explore/SectionRail';
+import type { ExploreItem } from '@/services/explore.service';
 
 export type DiscoverItem = {
     id: string;
     name: string;
     subtitle: string;
     profileImageUrl?: string | null;
-    accountType: 'BAND' | 'VENUE';
+    accountType: 'BAND' | 'VENUE' | 'USER';
 };
 
 type Props = {
@@ -17,38 +16,35 @@ type Props = {
     items: DiscoverItem[];
 };
 
+/**
+ * A titled avatar carousel over a plain item array, for callers that have their
+ * own data rather than an /explore section. Shares SectionRail's card so the two
+ * never drift apart visually.
+ */
 export default function DiscoverSection({ title, items }: Props) {
-    const router = useRouter();
-
-    const handlePress = (item: DiscoverItem) => {
-        if (item.accountType === 'BAND') {
-            router.push(`/explore/view-band/${item.id}` as any);
-        } else {
-            router.push(`/explore/view-venue/${item.id}` as any);
-        }
-    };
+    const handlePress = useItemPress();
 
     return (
-        <View style={styles.container}>
+        <View style={railStyles.container}>
             <ThemedText style={styles.title}>{title}</ThemedText>
             {items.length === 0 ? (
-                <ThemedText style={styles.empty}>None found near you</ThemedText>
+                <ThemedText style={railStyles.empty}>None found near you</ThemedText>
             ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-                    {items.map(item => (
-                        <TouchableOpacity key={item.id} style={styles.card} onPress={() => handlePress(item)} activeOpacity={0.75}>
-                            <Image
-                                source={
-                                    item.profileImageUrl
-                                        ? { uri: `${BASE_URL}${item.profileImageUrl}` }
-                                        : require('@/assets/images/default/profileImage.png')
-                                }
-                                style={styles.avatar}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={railStyles.row}>
+                    {items.map(item => {
+                        const exploreItem = {
+                            ...item,
+                            type: item.accountType,
+                            profileImageUrl: item.profileImageUrl ?? null,
+                        } as ExploreItem;
+                        return (
+                            <ProfileCard
+                                key={item.id}
+                                item={exploreItem}
+                                onPress={() => handlePress(exploreItem)}
                             />
-                            <ThemedText style={styles.name} numberOfLines={1}>{item.name}</ThemedText>
-                            <ThemedText style={styles.subtitle} numberOfLines={1}>{item.subtitle}</ThemedText>
-                        </TouchableOpacity>
-                    ))}
+                        );
+                    })}
                 </ScrollView>
             )}
         </View>
@@ -56,12 +52,5 @@ export default function DiscoverSection({ title, items }: Props) {
 }
 
 const styles = StyleSheet.create({
-    container: { marginBottom: 24 },
     title: { fontSize: 17, fontWeight: '700', marginBottom: 12, paddingHorizontal: 16 },
-    row: { paddingHorizontal: 16, gap: 12 },
-    card: { width: 88, alignItems: 'center', gap: 5 },
-    avatar: { width: 64, height: 64, borderRadius: 32 },
-    name: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
-    subtitle: { fontSize: 11, opacity: 0.55, textAlign: 'center' },
-    empty: { opacity: 0.4, fontSize: 13, paddingHorizontal: 16, paddingVertical: 8 },
 });

@@ -71,8 +71,6 @@ export const getBands = async (req: AuthRequest, res: Response) => {
       select: {
         id: true,
         name: true,
-        // Legacy free-text genre, kept as the display fallback for one release.
-        genre: true,
         city: true,
         state: true,
         country: true,
@@ -158,7 +156,7 @@ export const getMyShowInvites = async (req: AuthRequest, res: Response) => {
 
 export const createBand = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, genre, city, state, country, bio, members } = req.body;
+    const { name, city, state, country, bio, members } = req.body;
     const creatorId = req.user?.userId;
 
     const files = req.files as Record<string, Express.Multer.File[]>;
@@ -190,7 +188,6 @@ export const createBand = async (req: AuthRequest, res: Response) => {
       const createdBand = await tx.band.create({
         data: {
           name,
-          genre,
           city,
           state,
           country,
@@ -257,10 +254,9 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
 
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, genre, city, state, country, bio, updateRole, inviteMemberId, removeMemberId }:
+    const { name, city, state, country, bio, updateRole, inviteMemberId, removeMemberId }:
       {
         name?: string;
-        genre?: string;
         city?: string;
         state?: string;
         country?: string;
@@ -309,7 +305,6 @@ export const updateBand = async (req: AuthRequest, res: Response) => {
     const updatedBand = await prisma.$transaction(async (tx) => {
       const updateData: any = {};
       if (name) updateData.name = name;
-      if (genre) updateData.genre = genre;
       if (city) updateData.city = city;
       if (state) updateData.state = state;
       if (country) updateData.country = country;

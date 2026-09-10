@@ -291,7 +291,6 @@ export const getMyProfiles = async (req: AuthRequest, res: Response) => {
       select: { 
         id: true,
         name: true,
-        genre: true,
         city: true, 
         state: true,
         country: true,

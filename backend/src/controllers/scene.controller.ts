@@ -103,9 +103,6 @@ export const followScene = async (req: AuthRequest, res: Response) => {
                 sceneId: scene.id,
                 followerId,
                 followerType,
-                city: scene.city,
-                state: scene.state,
-                country: scene.country,
             },
             update: {},
         });
@@ -489,7 +486,6 @@ export const getSceneBands = async (req: Request, res: Response) => {
             select: {
                 id: true,
                 name: true,
-                genre: true,
                 city: true,
                 state: true,
                 profileImageUrl: true,

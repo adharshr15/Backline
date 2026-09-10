@@ -114,7 +114,6 @@ describe("Band API", () => {
             .set("Authorization", `Bearer ${creatorToken}`)
             .send({
                 name: "Heel",
-                genre: "Shoegaze",
                 city: "College Station",
                 state: "Texas",
                 country: "USA",
@@ -192,12 +191,11 @@ describe("Band API", () => {
     })
 
     // UPDATE
-    it("Should update band genre and invite new member", async () => {
-        // Update band genre and invite a new member
+    it("Should invite a new member through update", async () => {
+        // Invite a new member through update
         const res = await request(app)
             .put(`/bands/${testBandId}`)
             .send({
-                genre: "Electronic",
                 inviteMemberId: inviteeId2
             })
             .set("Authorization", `Bearer ${creatorToken}`);

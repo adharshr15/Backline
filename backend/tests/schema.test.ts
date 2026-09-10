@@ -206,9 +206,6 @@ describe("explore schema", () => {
           followerId: alice.id,
           followerType: "user",
           sceneId,
-          city: "Waco",
-          state: "TX",
-          country: "USA",
         },
         include: { scene: { select: { slug: true } } },
       });
@@ -223,7 +220,6 @@ describe("explore schema", () => {
         data: { followerId: alice.id, followerType: "user", sceneId },
       });
       expect(follow.sceneId).toBe(sceneId);
-      expect(follow.city).toBeNull();
     });
 
     it("allows one follow per (follower, scene)", async () => {

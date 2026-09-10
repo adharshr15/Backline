@@ -594,15 +594,13 @@ describe("scene read endpoints", () => {
     describe("GET /scenes/following", () => {
       it("keeps city and state at the top level, sourced from the scene", async () => {
         // The shipped ScenePage does scenes.some(s => s.city.toLowerCase() === ...).
-        // The legacy columns are nullable now, so these must come from the relation.
+        // The legacy columns are gone, so these can only come from the relation.
         await clearFollows();
         await request(app)
           .post("/scenes/follow")
           .set(auth(alice.token))
           .send({ sceneId: houstonId, followerId: alice.id, followerType: "user" });
 
-        // Blank the legacy columns to prove nothing reads them any more.
-        await prisma.sceneFollow.updateMany({ data: { city: null, state: null, country: null } });
 
         const res = await request(app).get(
           `/scenes/following?followerId=${alice.id}&followerType=user`,

@@ -155,12 +155,12 @@ describe("band and venue list filters", () => {
       expect(names(byName)).toEqual(names(byCode));
     });
 
-    it("embeds resolved genres while keeping the legacy field", async () => {
+    it("embeds resolved genres, and no legacy genre field", async () => {
       const res = await request(app).get("/bands?genre=shoegaze&sceneSlug=houston-tx");
       const band = res.body[0];
 
       expect(band.genres.map((g: any) => g.slug)).toEqual(["shoegaze"]);
-      expect(band).toHaveProperty("genre");
+      expect(band).not.toHaveProperty("genre");
     });
   });
 

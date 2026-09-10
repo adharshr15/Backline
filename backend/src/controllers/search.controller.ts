@@ -225,7 +225,6 @@ export const search = async (req: AuthRequest, res: Response) => {
             select: {
               id: true,
               name: true,
-              genre: true,
               city: true,
               state: true,
               profileImageUrl: true,
@@ -330,7 +329,7 @@ export const search = async (req: AuthRequest, res: Response) => {
 
       ...bands.map(b => {
         const genres = b.genres.map(g => g.genre);
-        const genreLabel = genres[0]?.name ?? b.genre ?? 'Band';
+        const genreLabel = genres[0]?.name ?? 'Band';
         const place = placeLabel(b.city, b.state);
         return {
           id: b.id,

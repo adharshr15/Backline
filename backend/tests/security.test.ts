@@ -264,7 +264,8 @@ describe("scene follows", () => {
     expect(res.status).toBe(403);
 
     const stillThere = await prisma.sceneFollow.findFirst({
-      where: { followerId: aliceBand, followerType: "band", city: "Austin" },
+      // Through the relation: SceneFollow no longer has its own city column.
+      where: { followerId: aliceBand, followerType: "band", scene: { city: "Austin" } },
     });
     expect(stillThere).not.toBeNull();
   });

@@ -53,7 +53,6 @@ beforeAll(async () => {
     .post('/bands')
     .send({
       name: "Heel",
-      genre: "Shoegaze",
       city: "College Station",
       state: "Texas",
       country: "USA",
@@ -78,7 +77,6 @@ beforeAll(async () => {
     .post('/bands')
     .send({
       name: "Toe",
-      genre: "Indie",
       city: "Houston",
       state: "Texas",
       country: "USA",
@@ -103,7 +101,6 @@ beforeAll(async () => {
     .post('/bands')
     .send({
       name: "Foot",
-      genre: "J-Pop",
       city: "Katy",
       state: "Texas",
       country: "USA",

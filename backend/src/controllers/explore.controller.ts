@@ -266,7 +266,6 @@ export const getExplore = async (req: AuthRequest, res: Response) => {
           select: {
             id: true,
             name: true,
-            genre: true,
             city: true,
             state: true,
             profileImageUrl: true,
@@ -363,7 +362,7 @@ export const getExplore = async (req: AuthRequest, res: Response) => {
           seeMore: { path: "/bands", params: locParams },
           items: bands.map(b => {
             const genres = b.genres.map(g => g.genre);
-            const label = genres[0]?.name ?? b.genre ?? "Band";
+            const label = genres[0]?.name ?? "Band";
             return {
               id: b.id,
               type: "BAND" as const,
@@ -413,7 +412,6 @@ export const getExplore = async (req: AuthRequest, res: Response) => {
           select: {
             id: true,
             name: true,
-            genre: true,
             city: true,
             state: true,
             profileImageUrl: true,

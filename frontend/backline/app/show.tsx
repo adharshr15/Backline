@@ -15,10 +15,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTabHref } from '@/hooks/use-tab-href';
 import { useAuth } from '@/context/AuthContext';
 import { Show, getShowById, rsvpShow, unrsvpShow, repostShow, unrepostShow } from '@/services/show.service';
-import { ShowMedia, getShowMedia } from '@/services/media.service';
-import ShowMediaGallery, { pickAndUploadShowMedia, VideoTileThumb } from '@/components/show-media-gallery';
+import { Post, getShowPosts, OwnerType } from '@/services/post.service';
+import ShowMediaGallery from '@/components/show-media-gallery';
+import PostComposerModal from '@/components/media/post-composer';
+import { VideoTileThumb } from '@/components/media/media-tile';
 import { BASE_URL } from '@/services/api';
 
 function formatShowDate(isoString: string) {
@@ -45,6 +48,7 @@ function formatDoors(doorsString: string) {
 export default function ShowDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const tabHref = useTabHref();
   const { user, activeProfile } = useAuth();
   const { height } = useWindowDimensions();
   const borderColor = useThemeColor({}, 'text');
@@ -53,19 +57,23 @@ export default function ShowDetailScreen() {
 
   const [show, setShow] = useState<Show | null>(null);
   const [loading, setLoading] = useState(true);
-  const [media, setMedia] = useState<ShowMedia[]>([]);
+  const [media, setMedia] = useState<Post[]>([]);
   const [galleryVisible, setGalleryVisible] = useState(false);
-  const [galleryIndex, setGalleryIndex] = useState<number | undefined>(undefined);
-  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [composerVisible, setComposerVisible] = useState(false);
 
   const activeProfileType = (
     activeProfile?.accountType === 'BAND' ? 'band' :
     activeProfile?.accountType === 'VENUE' ? 'venue' : 'user'
   ) as 'user' | 'band' | 'venue';
 
+  const ownerType = (
+    activeProfile?.accountType === 'BAND' ? 'BAND' :
+    activeProfile?.accountType === 'VENUE' ? 'VENUE' : 'USER'
+  ) as OwnerType;
+
   const loadMedia = useCallback(() => {
     if (!id) return;
-    getShowMedia(id).then(setMedia).catch(() => setMedia([]));
+    getShowPosts(id).then(setMedia).catch(() => setMedia([]));
   }, [id]);
 
   const load = useCallback(() => {
@@ -79,21 +87,14 @@ export default function ShowDetailScreen() {
 
   useFocusEffect(load);
 
-  const handleAddMedia = async () => {
-    try {
-      setUploadingMedia(true);
-      const added = await pickAndUploadShowMedia(id, activeProfile);
-      if (added) loadMedia();
-    } catch {
-      // silently ignore; gallery handles its own errors
-    } finally {
-      setUploadingMedia(false);
-    }
+  const handleAddMedia = () => {
+    if (!activeProfile) return;
+    setComposerVisible(true);
   };
 
-  const openGallery = (index?: number) => {
-    setGalleryIndex(index);
-    setGalleryVisible(true);
+  const openPost = (postId: string) => {
+    setGalleryVisible(false);
+    router.push({ pathname: tabHref('post'), params: { id: postId } });
   };
 
   const handleRsvp = async () => {
@@ -189,6 +190,14 @@ export default function ShowDetailScreen() {
     : show.createdByUserId === activeProfile.id
     : false;
 
+  const isAttached = activeProfile
+    ? activeProfileType === 'band'
+      ? show.createdByBandId === activeProfile.id || show.bands?.some(b => b.bandId === activeProfile.id)
+      : activeProfileType === 'venue'
+      ? show.createdByVenueId === activeProfile.id || show.venue?.id === activeProfile.id
+      : show.createdByUserId === activeProfile.id
+    : false;
+
   const openMaps = () => {
     const query = venueAddress
       ? `${venueName}, ${venueAddress}, ${show.city}, ${show.state}`
@@ -213,7 +222,17 @@ export default function ShowDetailScreen() {
           <Ionicons name="chevron-back" size={24} color={borderColor} />
         </TouchableOpacity>
         <ThemedText style={styles.headerTitle}>Show Details</ThemedText>
-        <View style={styles.headerSpacer} />
+        {isAttached ? (
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: tabHref('show-metrics'), params: { id } })}
+            style={styles.closeBtn}
+            hitSlop={8}
+          >
+            <Ionicons name="bar-chart-outline" size={22} color={borderColor} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerSpacer} />
+        )}
       </View>
 
       <ScrollView
@@ -325,17 +344,10 @@ export default function ShowDetailScreen() {
             <TouchableOpacity
               style={[styles.addMediaBtn, { borderColor }]}
               onPress={handleAddMedia}
-              disabled={uploadingMedia}
               activeOpacity={0.7}
             >
-              {uploadingMedia ? (
-                <ActivityIndicator size="small" color={borderColor} />
-              ) : (
-                <>
-                  <Ionicons name="add" size={14} color={borderColor} />
-                  <ThemedText style={styles.addMediaText}>Add</ThemedText>
-                </>
-              )}
+              <Ionicons name="add" size={14} color={borderColor} />
+              <ThemedText style={styles.addMediaText}>Add</ThemedText>
             </TouchableOpacity>
           </View>
 
@@ -354,8 +366,8 @@ export default function ShowDetailScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.mediaStrip}
             >
-              {media.slice(0, 6).map((m, i) => (
-                <TouchableOpacity key={m.id} onPress={() => openGallery(i)} activeOpacity={0.8}>
+              {media.slice(0, 6).map((m) => (
+                <TouchableOpacity key={m.id} onPress={() => openPost(m.id)} activeOpacity={0.8}>
                   <View style={styles.mediaThumbWrap}>
                     {m.type === 'VIDEO' ? (
                       <VideoTileThumb uri={`${BASE_URL}${m.url}`} style={styles.mediaThumb} />
@@ -377,7 +389,7 @@ export default function ShowDetailScreen() {
               {media.length > 6 && (
                 <TouchableOpacity
                   style={[styles.mediaSeeAll, { borderColor }]}
-                  onPress={() => openGallery()}
+                  onPress={() => setGalleryVisible(true)}
                   activeOpacity={0.7}
                 >
                   <ThemedText style={styles.mediaSeeAllText}>See all{'\n'}({media.length})</ThemedText>
@@ -415,16 +427,24 @@ export default function ShowDetailScreen() {
       )}
 
       <ShowMediaGallery
-        showId={id}
-        show={show}
         visible={galleryVisible}
+        posts={media}
         onClose={() => setGalleryVisible(false)}
-        media={media}
-        onChanged={loadMedia}
-        user={user}
-        activeProfile={activeProfile}
-        initialIndex={galleryIndex}
+        onOpenPost={openPost}
+        onAdd={handleAddMedia}
+        canAdd={!!activeProfile}
       />
+
+      {activeProfile && (
+        <PostComposerModal
+          visible={composerVisible}
+          ownerType={ownerType}
+          ownerId={activeProfile.id}
+          showId={id}
+          onClose={() => setComposerVisible(false)}
+          onCreated={loadMedia}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -614,7 +634,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1e1e1e',
   },
   mediaThumbPlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

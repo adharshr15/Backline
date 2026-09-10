@@ -1,7 +1,8 @@
 import { useAuth } from '@/context/AuthContext';
-import { updateMe } from '@/services/user.service';
+import { updateMe, getUserCrafts, updateMyCrafts } from '@/services/user.service';
 import { checkUsernameUnique } from '@/services/auth.service';
-import { useState, useRef } from 'react';
+import CraftPicker, { CraftEntry } from '@/components/profile/craft-picker';
+import { useState, useRef, useEffect } from 'react';
 import { Alert, Text, Image, TextInput, TouchableOpacity, ScrollView, View, Modal, StyleSheet } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -37,6 +38,26 @@ export function EditUserProfileModal({ onClose }: { onClose: () => void }) {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [profileImage, setProfileImage] = useState<string | null>(user.profileImageUrl || null);
     const [headerImage, setHeaderImage] = useState<string | null>(user.headerImageUrl || null);
+    const [crafts, setCrafts] = useState<CraftEntry[]>([]);
+    // The baseline to diff against, so an untouched picker sends no request.
+    const [initialCrafts, setInitialCrafts] = useState<string>('[]');
+
+    // /auth/me does not carry crafts, so they are loaded separately.
+    useEffect(() => {
+        getUserCrafts(user.id)
+            .then(rows => {
+                const entries = rows.map(r => ({
+                    craft: r.craft,
+                    forHire: r.forHire,
+                    headline: r.headline ?? '',
+                }));
+                setCrafts(entries);
+                setInitialCrafts(JSON.stringify(entries));
+            })
+            .catch(() => {});
+    }, [user.id]);
+
+    const craftsChanged = JSON.stringify(crafts) !== initialCrafts;
 
     const scrollToInput = (inputRef: React.RefObject<TextInput | null>) => {
         setTimeout(() => {
@@ -57,7 +78,8 @@ export function EditUserProfileModal({ onClose }: { onClose: () => void }) {
             state === (user.state || '') &&
             country === (user.country || '') &&
             profileImage === (user.profileImageUrl || null) &&
-            headerImage === (user.headerImageUrl || null)
+            headerImage === (user.headerImageUrl || null) &&
+            !craftsChanged
         ) {
             router.back();
             return;
@@ -68,6 +90,14 @@ export function EditUserProfileModal({ onClose }: { onClose: () => void }) {
         }
 
         try {
+            // Crafts have their own endpoint, so this is a second request.
+            if (craftsChanged) {
+                await updateMyCrafts(crafts.map(c => ({
+                    craft: c.craft,
+                    forHire: c.forHire,
+                    headline: c.headline.trim() || null,
+                })));
+            }
             const updatedUser = await updateMe({ name, username, bio, city, state, country, profileImage, headerImage });
             setActiveProfile(updatedUser);
             await refreshUser();
@@ -178,6 +208,10 @@ export function EditUserProfileModal({ onClose }: { onClose: () => void }) {
                                         })}
                                     </View>
                                 )}
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <CraftPicker value={crafts} onChange={setCrafts} />
                             </View>
                         </View>
                     </ScrollView>

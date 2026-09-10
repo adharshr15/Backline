@@ -25,6 +25,7 @@ import ProfilePostsSection from '@/components/profile/posts-section';
 import { TabSwitcher } from '@/components/ui/tab-switcher';
 import { Listing, getListingsByProfile } from '@/services/listing.service';
 import { Post, getProfilePosts, OwnerType } from '@/services/post.service';
+import CraftChips from '@/components/profile/craft-chips';
 
 const AVATAR_SIZE = 80;
 
@@ -264,6 +265,8 @@ export default function ViewUserProfile({ id }: Props) {
                             {renderBioWithLinks(profile.bio, setWebViewUrl)}
                         </View>
                     ) : null}
+
+                    <CraftChips crafts={profile.crafts} />
 
                     <View style={profileStyles.actionRow}>
                         <TouchableOpacity

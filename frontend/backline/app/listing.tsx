@@ -29,7 +29,7 @@ import {
   addListingMedia,
 } from '@/services/listing.service';
 import CreateListingModal from '@/components/profile/create-listing-modal';
-import { getMyConversations, getParticipantProfile, ParticipantType } from '@/services/conversation.service';
+import { getMyConversations, findDirectConversation, ParticipantType } from '@/services/conversation.service';
 
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -76,9 +76,7 @@ export default function ListingDetailScreen() {
     const recipientType = ownerInfo.type.toUpperCase() as ParticipantType;
     try {
       const convs = await getMyConversations(senderType, activeProfile.id);
-      const existing = convs.find(c =>
-        c.participants.some(p => getParticipantProfile(p)?.id === ownerInfo.owner.id)
-      );
+      const existing = findDirectConversation(convs, activeProfile.id, ownerInfo.owner.id);
       if (existing) {
         router.push({
           pathname: tabHref(`messages/${existing.id}`),

@@ -13,15 +13,38 @@ import { useAuth } from '@/context/AuthContext';
 import { BASE_URL } from '@/services/api';
 import { Fonts } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import {
     getMessages, sendMessage, getMyConversations,
     Message, getMessageSender, getParticipantProfile,
     ParticipantType, resolveAttachment, attachmentToRef, getMessageAttachment,
-    MessageAttachment, AttachmentKind, AttachmentPreview,
+    MessageAttachment, AttachmentKind, AttachmentPreview, ImageAttachment,
 } from '@/services/conversation.service';
 import { AttachmentCard, StagedAttachmentBanner } from '@/components/message-attachment';
 
 const FONT = Fonts?.rounded ?? undefined;
+
+const IMAGE_MAX_W = 220;
+
+// Renders a message image at a fixed width, preserving aspect ratio once loaded.
+function MessageImage({ uri, rounded }: { uri: string; rounded: boolean }) {
+    const [ratio, setRatio] = useState(1);
+    return (
+        <Image
+            source={{ uri }}
+            onLoad={e => {
+                const { width, height } = e.nativeEvent.source;
+                if (width && height) setRatio(width / height);
+            }}
+            style={[
+                styles.messageImage,
+                { width: IMAGE_MAX_W, height: IMAGE_MAX_W / ratio },
+                rounded && styles.messageImageRounded,
+            ]}
+            resizeMode="cover"
+        />
+    );
+}
 
 export default function ConversationScreen() {
     const { id: conversationId, attachmentType, attachmentId } = useLocalSearchParams<{
@@ -45,6 +68,16 @@ export default function ConversationScreen() {
     const [title, setTitle] = useState('');
     const [isGroup, setIsGroup] = useState(false);
     const [pendingAttachment, setPendingAttachment] = useState<MessageAttachment | null>(null);
+    const [pendingImage, setPendingImage] = useState<ImageAttachment | null>(null);
+
+    const pickImage = async () => {
+        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
+        if (result.canceled || !result.assets?.[0]) return;
+        const asset = result.assets[0];
+        const name = asset.fileName ?? asset.uri.split('/').pop() ?? 'photo.jpg';
+        const ext = name.split('.').pop()?.toLowerCase() ?? 'jpg';
+        setPendingImage({ uri: asset.uri, name, type: asset.mimeType ?? `image/${ext}` });
+    };
 
     // Resolve a staged attachment passed in via params (e.g. from "Message Lister")
     useEffect(() => {
@@ -102,14 +135,15 @@ export default function ConversationScreen() {
     }, [loadMessages]);
 
     const handleSend = async () => {
-        if (!text.trim() || sending || !conversationId) return;
+        if ((!text.trim() && !pendingImage) || sending || !conversationId) return;
         setSending(true);
         const attachmentRef = pendingAttachment ? attachmentToRef(pendingAttachment) : undefined;
         try {
-            const msg = await sendMessage(conversationId, senderType, senderId, text.trim(), attachmentRef);
+            const msg = await sendMessage(conversationId, senderType, senderId, text.trim(), attachmentRef, pendingImage ?? undefined);
             setMessages(prev => [...prev, msg]);
             setText('');
             setPendingAttachment(null);
+            setPendingImage(null);
             markRead(conversationId, senderType, senderId).catch(() => {});
             setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
         } catch (e) { console.error(e); }
@@ -184,6 +218,7 @@ export default function ConversationScreen() {
                                     )}
                                     <View style={[
                                         styles.bubble,
+                                        !!msg.imageUrl && styles.bubbleWithImage,
                                         mine
                                             ? [styles.bubbleMine, { backgroundColor: '#4A90D9' }]
                                             : [styles.bubbleTheirs, { backgroundColor: borderColor + '22' }],
@@ -196,9 +231,16 @@ export default function ConversationScreen() {
                                                 </View>
                                             ) : null;
                                         })()}
+                                        {!!msg.imageUrl && (
+                                            <MessageImage
+                                                uri={`${BASE_URL}${msg.imageUrl}`}
+                                                rounded={!msg.content}
+                                            />
+                                        )}
                                         {!!msg.content && (
                                             <ThemedText style={[
                                                 styles.bubbleText,
+                                                !!msg.imageUrl && styles.bubbleTextWithImage,
                                                 mine && { color: '#fff' },
                                                 FONT && { fontFamily: FONT },
                                             ]}>
@@ -218,12 +260,25 @@ export default function ConversationScreen() {
                 <StagedAttachmentBanner attachment={pendingAttachment} onClear={() => setPendingAttachment(null)} />
             )}
 
+            {/* Staged image preview */}
+            {pendingImage && (
+                <View style={[styles.imageBanner, { borderTopColor: borderColor + '33' }]}>
+                    <Image source={{ uri: pendingImage.uri }} style={styles.imageThumb} />
+                    <TouchableOpacity onPress={() => setPendingImage(null)} style={styles.imageClearBtn} hitSlop={8}>
+                        <Ionicons name="close-circle" size={22} color={borderColor} />
+                    </TouchableOpacity>
+                </View>
+            )}
+
             {/* Input bar — always at bottom, above keyboard when open */}
             <View style={[styles.inputRow, {
                 borderTopColor: borderColor + '33',
                 backgroundColor: bgColor,
                 paddingBottom: insets.bottom || 12,
             }]}>
+                <TouchableOpacity style={styles.attachBtn} onPress={pickImage} disabled={sending} hitSlop={6}>
+                    <Ionicons name="image-outline" size={24} color={borderColor} />
+                </TouchableOpacity>
                 <TextInput
                     style={[styles.input, { color: textColor, borderColor: borderColor + '55' }]}
                     placeholder="Message..."
@@ -235,11 +290,13 @@ export default function ConversationScreen() {
                     fontFamily={FONT}
                 />
                 <TouchableOpacity
-                    style={[styles.sendBtn, (!text.trim() || sending) && styles.sendBtnDisabled]}
+                    style={[styles.sendBtn, ((!text.trim() && !pendingImage) || sending) && styles.sendBtnDisabled]}
                     onPress={handleSend}
-                    disabled={!text.trim() || sending}
+                    disabled={(!text.trim() && !pendingImage) || sending}
                 >
-                    <Ionicons name="arrow-up" size={20} color="#fff" />
+                    {sending
+                        ? <ActivityIndicator color="#fff" size="small" />
+                        : <Ionicons name="arrow-up" size={20} color="#fff" />}
                 </TouchableOpacity>
             </View>
         </KeyboardAvoidingView>
@@ -266,10 +323,24 @@ const styles = StyleSheet.create({
     bubbleAvatar: { width: 28, height: 28, borderRadius: 14, marginRight: 6 },
     avatarHidden: { opacity: 0 },
     bubble: { maxWidth: '75%', borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8 },
+    bubbleWithImage: { padding: 3, overflow: 'hidden' },
     bubbleAttachment: { marginBottom: 6, minWidth: 200 },
+    messageImage: { borderRadius: 15 },
+    messageImageRounded: { borderRadius: 15 },
     bubbleMine: { borderBottomRightRadius: 4 },
     bubbleTheirs: { borderBottomLeftRadius: 4 },
     bubbleText: { fontSize: 15, lineHeight: 20 },
+    bubbleTextWithImage: { paddingHorizontal: 9, paddingTop: 6, paddingBottom: 3 },
+    imageBanner: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingHorizontal: 12,
+        paddingTop: 8,
+        borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    imageThumb: { width: 64, height: 64, borderRadius: 8 },
+    imageClearBtn: { marginLeft: -12, marginTop: -6 },
+    attachBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
     inputRow: {
         flexDirection: 'row',
         alignItems: 'flex-end',

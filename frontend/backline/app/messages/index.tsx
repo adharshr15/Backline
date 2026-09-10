@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTabHref } from '@/hooks/use-tab-href';
 import { useAuth } from '@/context/AuthContext';
 import { BASE_URL } from '@/services/api';
 import { Fonts } from '@/constants/theme';
@@ -58,6 +59,7 @@ function ConvAvatar({ sources, bgColor }: { sources: (string | null | undefined)
 
 export default function MessagesScreen() {
     const router = useRouter();
+    const tabHref = useTabHref();
     const { activeProfile, user, refreshUser } = useAuth();
     const bgColor = useThemeColor({}, 'background');
     const textColor = useThemeColor({}, 'text');
@@ -103,7 +105,7 @@ export default function MessagesScreen() {
         await respondToInvite(invite.id, senderType, senderId, action).catch(console.error);
         load();
         if (action === 'ACCEPT' && invite.conversationId) {
-            router.push(`/messages/${invite.conversationId}`);
+            router.push(tabHref(`messages/${invite.conversationId}`));
         }
     };
 
@@ -112,7 +114,7 @@ export default function MessagesScreen() {
         if (action === 'ACCEPT') await refreshUser().catch(console.error);
         load();
         if (action === 'ACCEPT' && result && (result as any).conversationId) {
-            router.push(`/messages/${(result as any).conversationId}`);
+            router.push(tabHref(`messages/${(result as any).conversationId}`));
         }
     };
 
@@ -121,7 +123,7 @@ export default function MessagesScreen() {
         if (action === 'ACCEPT') await refreshUser().catch(console.error);
         load();
         if (action === 'ACCEPT' && result && (result as any).conversationId) {
-            router.push(`/messages/${(result as any).conversationId}`);
+            router.push(tabHref(`messages/${(result as any).conversationId}`));
         }
     };
 
@@ -177,7 +179,7 @@ export default function MessagesScreen() {
         <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
             <View style={styles.headerRow}>
                 <ThemedText style={[styles.title, FONT && { fontFamily: FONT }]}>Messages</ThemedText>
-                <TouchableOpacity onPress={() => router.push('/messages/compose')} style={styles.composeBtn}>
+                <TouchableOpacity onPress={() => router.push(tabHref('messages/compose'))} style={styles.composeBtn}>
                     <Ionicons name="create-outline" size={26} color={textColor} />
                 </TouchableOpacity>
             </View>
@@ -398,7 +400,7 @@ export default function MessagesScreen() {
                                     >
                                         <TouchableOpacity
                                             style={[styles.convRow, { borderBottomColor: borderColor + '22', backgroundColor: bgColor }]}
-                                            onPress={() => router.push(`/messages/${conv.id}`)}
+                                            onPress={() => router.push(tabHref(`messages/${conv.id}`))}
                                         >
                                             <ConvAvatar sources={getConvAvatarSources(conv)} bgColor={bgColor} />
                                             <View style={styles.convBody}>
@@ -407,7 +409,7 @@ export default function MessagesScreen() {
                                                 </ThemedText>
                                                 {lastMsg ? (
                                                     <ThemedText style={[styles.preview, unread && styles.previewUnread, FONT && { fontFamily: FONT }]} numberOfLines={1}>
-                                                        {lastMsg.content}
+                                                        {lastMsg.content || (lastMsg.imageUrl ? '📷 Photo' : '')}
                                                     </ThemedText>
                                                 ) : (
                                                     <ThemedText style={[styles.preview, FONT && { fontFamily: FONT }]} numberOfLines={1}>

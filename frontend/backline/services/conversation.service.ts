@@ -124,9 +124,18 @@ export interface Message {
     senderUser?: MessageSender | null;
     senderBand?: MessageSender | null;
     senderVenue?: MessageSender | null;
+    // Optional image attachment (relative path; prefix BASE_URL to render).
+    imageUrl?: string | null;
     // Optional inline attachment (one FK per kind).
     listingId?: string | null;
     listing?: ListingPreview | null;
+}
+
+// A local image picked to send with a message.
+export interface ImageAttachment {
+    uri: string;
+    name: string;
+    type: string;
 }
 
 export interface Conversation {
@@ -175,6 +184,34 @@ export function getParticipantProfile(p: ConversationParticipant): ParticipantPr
     return p.user ?? p.band ?? p.venue ?? null;
 }
 
+/**
+ * Finds the existing 1:1 conversation between `senderId` and exactly one other
+ * party (`recipientId`), or null. A conversation only qualifies as a 1:1 when it
+ * is unnamed AND its full membership — accepted participants plus still-pending
+ * invitees — is exactly {sender, recipient}. Named threads and multi-party groups
+ * (including groups still "forming" via pending invites) are never treated as a
+ * 1:1, so messaging someone directly can't leak into an unrelated group chat.
+ */
+export function findDirectConversation(
+    convs: Conversation[],
+    senderId: string,
+    recipientId: string
+): Conversation | null {
+    return convs.find(c => {
+        if (c.name) return false;
+        const others = new Set<string>();
+        c.participants.forEach(p => {
+            const prof = getParticipantProfile(p);
+            if (prof && prof.id !== senderId) others.add(prof.id);
+        });
+        (c.invites ?? []).forEach(inv => {
+            const r = getInviteRecipient(inv);
+            if (r && r.id !== senderId) others.add(r.id);
+        });
+        return others.size === 1 && others.has(recipientId);
+    }) ?? null;
+}
+
 /** Returns the sender profile for an invite. */
 export function getInviteSender(invite: ConversationInvite): ParticipantProfile | null {
     return invite.senderUser ?? invite.senderBand ?? invite.senderVenue ?? null;
@@ -217,8 +254,22 @@ export const sendMessage = async (
     senderType: ParticipantType,
     senderId: string,
     content: string,
-    attachment?: AttachmentRef
+    attachment?: AttachmentRef,
+    image?: ImageAttachment
 ): Promise<Message> => {
+    if (image) {
+        const form = new FormData();
+        form.append('senderType', senderType);
+        form.append('senderId', senderId);
+        form.append('content', content);
+        const body = attachmentBody(attachment);
+        Object.entries(body).forEach(([k, v]) => form.append(k, v));
+        form.append('image', image as any);
+        const res = await api.post(`/conversations/${conversationId}/messages`, form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return res.data;
+    }
     const res = await api.post(`/conversations/${conversationId}/messages`, {
         senderType, senderId, content, ...attachmentBody(attachment),
     });

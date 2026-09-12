@@ -385,6 +385,46 @@ describe("user crafts", () => {
   });
 });
 
+describe("craft recommendations", () => {
+  let target: TestUser;
+  const path = () => `/users/${target.id}/crafts/PHOTOGRAPHER/recommend`;
+  const countFor = () => prisma.craftRecommendation.count({ where: { targetUserId: target.id } });
+
+  beforeAll(async () => {
+    target = await registerUser({ username: "rec_target_sec", name: "Rec Target" });
+    await request(app).put("/users/me/crafts").set(auth(target.token))
+      .send({ crafts: [{ craft: "PHOTOGRAPHER" }] });
+  });
+
+  it("refuses to recommend as another user", async () => {
+    const res = await request(app).post(path()).set(auth(mallory.token))
+      .send({ recommenderType: "USER", recommenderId: alice.id });
+
+    expect(res.status).toBe(403);
+    expect(await countFor()).toBe(0);
+  });
+
+  it("refuses to recommend as a band you are not in", async () => {
+    const res = await request(app).post(path()).set(auth(mallory.token))
+      .send({ recommenderType: "BAND", recommenderId: aliceBand });
+
+    expect(res.status).toBe(403);
+    expect(await countFor()).toBe(0);
+  });
+
+  it("refuses to remove a band's recommendation when you are not in the band", async () => {
+    // The inverse operation needs its own check.
+    await request(app).post(path()).set(auth(alice.token))
+      .send({ recommenderType: "BAND", recommenderId: aliceBand });
+
+    const res = await request(app).delete(path()).set(auth(mallory.token))
+      .send({ recommenderType: "BAND", recommenderId: aliceBand });
+
+    expect(res.status).toBe(403);
+    expect(await countFor()).toBe(1);
+  });
+});
+
 describe("show RSVP and repost", () => {
   let showId: string;
 

@@ -1,5 +1,6 @@
 import { RequestHandler, Router } from 'express'
 import { getUsers, getUserById, getMyProfiles, getMyInvites, getMyBandInvites, getMyVenueInvites, updateUser, respondToBandInvite, respondToVenueInvite, deleteUser, getUserByUsername, discoverUsers, updateUserCrafts, } from '../controllers/user.controller'
+import { recommendCraft, unrecommendCraft, getCraftRecommendations } from '../controllers/recommendation.controller'
 import { authenticate } from '../middlewares/auth.middleware'
 import { upload } from '../config/multer'
 
@@ -40,5 +41,10 @@ router.delete("/me", deleteUser as RequestHandler)
 
 // Self only, enforced in the controller. Accepts "me" or the caller's own id.
 router.put("/:id/crafts", updateUserCrafts as RequestHandler)
+
+// Craft recommendations. The recommender is caller-supplied and checked with canActAs.
+router.get("/:id/recommendations", getCraftRecommendations as RequestHandler)
+router.post("/:id/crafts/:craft/recommend", recommendCraft as RequestHandler)
+router.delete("/:id/crafts/:craft/recommend", unrecommendCraft as RequestHandler)
 
 export default router

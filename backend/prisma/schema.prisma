@@ -668,6 +668,25 @@ model UserCraft {
   @@index([craft, forHire])
 }
 
+/// A profile vouching for a user in one of their crafts. Keyed on (targetUserId,
+/// craft), not UserCraft.id: PUT /users/:id/crafts deletes and recreates every
+/// UserCraft row, so an id FK would orphan these on each edit. Rows for a craft the
+/// user no longer lists are kept but hidden, and reappear if the craft is re-added.
+model CraftRecommendation {
+  id              String   @id @default(cuid())
+  targetUserId    String
+  craft           Craft
+  /// ParticipantType: USER | BAND | VENUE (same idiom as PostLike).
+  recommenderType String
+  recommenderId   String
+  createdAt       DateTime @default(now())
+
+  /// Explicit map: the generated name is past Postgres's 63-char identifier limit.
+  @@unique([targetUserId, craft, recommenderType, recommenderId], map: "CraftRecommendation_target_craft_recommender_key")
+  @@index([targetUserId, craft])
+  @@index([recommenderType, recommenderId])
+}
+
 enum ListingKind {
   RENT
   SALE

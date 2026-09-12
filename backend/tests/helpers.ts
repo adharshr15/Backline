@@ -40,6 +40,7 @@ export const resetDatabase = async () => {
   await prisma.venueInvite.deleteMany();
   await prisma.venueRepresentative.deleteMany();
   await prisma.venue.deleteMany();
+  await prisma.craftRecommendation.deleteMany();
   await prisma.userCraft.deleteMany();
   await prisma.user.deleteMany();
   // Genre and Scene are self-referencing with onDelete: Restrict, so a parent

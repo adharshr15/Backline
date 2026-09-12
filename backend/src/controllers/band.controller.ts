@@ -75,6 +75,8 @@ export const getBands = async (req: AuthRequest, res: Response) => {
         state: true,
         country: true,
         profileImageUrl: true,
+        // Clients route a row off this; see the same field on GET /venues.
+        accountType: true,
         createdAt: true,
         genres: {
           select: { position: true, genre: { select: { slug: true, name: true } } },

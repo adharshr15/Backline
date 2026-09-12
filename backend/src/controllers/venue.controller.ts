@@ -79,6 +79,8 @@ export const getVenues = async (req: AuthRequest, res: Response) => {
                 capacity: true,
                 contactEmail: true,
                 profileImageUrl: true,
+                // Clients route a row off this; without it "See all" sent venues to the band screen.
+                accountType: true,
                 createdAt: true
             }
         });

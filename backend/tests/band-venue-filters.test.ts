@@ -162,6 +162,12 @@ describe("band and venue list filters", () => {
       expect(band.genres.map((g: any) => g.slug)).toEqual(["shoegaze"]);
       expect(band).not.toHaveProperty("genre");
     });
+
+    it("tags every row with its accountType, which clients route on", async () => {
+      const res = await request(app).get("/bands");
+      expect(res.body.length).toBeGreaterThan(0);
+      for (const band of res.body) expect(band.accountType).toBe("BAND");
+    });
   });
 
   describe("GET /venues", () => {
@@ -203,6 +209,14 @@ describe("band and venue list filters", () => {
       const byCode = await request(app).get("/venues?city=Houston&state=TX");
       const byName = await request(app).get("/venues?city=Houston&state=Texas");
       expect(names(byName)).toEqual(names(byCode));
+    });
+
+    it("tags every row with its accountType, which clients route on", async () => {
+      // Without it, Explore's "See all" fell back to BAND and opened
+      // view-band/<venueId>, a 404.
+      const res = await request(app).get("/venues");
+      expect(res.body.length).toBeGreaterThan(0);
+      for (const venue of res.body) expect(venue.accountType).toBe("VENUE");
     });
   });
 });

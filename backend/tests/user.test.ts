@@ -2,6 +2,7 @@ import request from "supertest"
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { app } from "../src/app"
 import { prisma } from "../src/lib/prisma"
+import { resetDatabase } from "./helpers"
 
 let testUserId: string
 let testBandId: string
@@ -30,37 +31,15 @@ let taylaBandInvite: string
 let nickBandInvite: string
 let andresVenueInvite: string
 
+// The shared reset clears every dependent table (BandGenre included) in FK-safe
+// order. The hand-rolled list this replaced missed BandGenre, so band.deleteMany()
+// failed whenever an earlier suite had left genre-tagged bands behind.
 beforeAll(async () => {
-    // FULL clean
-    await prisma.show.deleteMany()
-    await prisma.tour.deleteMany()
-    await prisma.conversationParticipant.deleteMany()
-    await prisma.message.deleteMany()
-    await prisma.bandMember.deleteMany()
-    await prisma.venueRepresentative.deleteMany()
-    await prisma.bandInvite.deleteMany()
-    await prisma.venueInvite.deleteMany()
-    await prisma.conversation.deleteMany()
-    await prisma.user.deleteMany()
-    await prisma.band.deleteMany()
-    await prisma.venue.deleteMany()
-
+    await resetDatabase()
 })
 
 afterAll(async () => {
-    await prisma.show.deleteMany()
-    await prisma.tour.deleteMany()
-    await prisma.conversationParticipant.deleteMany()
-    await prisma.message.deleteMany()
-    await prisma.bandMember.deleteMany()
-    await prisma.venueRepresentative.deleteMany()
-    await prisma.bandInvite.deleteMany()
-    await prisma.venueInvite.deleteMany()
-    await prisma.conversation.deleteMany()
-    await prisma.user.deleteMany()
-    await prisma.band.deleteMany()
-    await prisma.venue.deleteMany()
-
+    await resetDatabase()
     await prisma.$disconnect()
 })
 

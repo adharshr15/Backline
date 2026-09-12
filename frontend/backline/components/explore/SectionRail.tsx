@@ -5,6 +5,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useTabHref } from '@/hooks/use-tab-href';
 import { BASE_URL } from '@/services/api';
+import PostGrid from '@/components/explore/PostGrid';
 import type { ExploreItem, ExploreSection, ItemType, SeeMore } from '@/services/explore.service';
 
 export const ACCENT = '#4A90D9';
@@ -28,6 +29,8 @@ export function useItemPress() {
                 return router.push(tabHref(`view-user/${item.id}`));
             case 'SHOW':
                 return router.push({ pathname: tabHref('show'), params: { id: item.id } });
+            case 'POST':
+                return router.push({ pathname: tabHref('post'), params: { id: item.id } });
             case 'SCENE':
                 return router.push({
                     pathname: tabHref('scene'),
@@ -128,6 +131,10 @@ type Props = {
 export default function SectionRail({ section, onSeeMore }: Props) {
     const handlePress = useItemPress();
     const showSeeMore = !!onSeeMore && !!section.seeMore?.path;
+
+    if (section.kind === 'POSTS') {
+        return <PostGrid items={section.items} onPress={handlePress} />;
+    }
 
     return (
         <View style={styles.container}>

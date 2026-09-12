@@ -32,7 +32,11 @@ export function VideoTileThumb({ uri, style }: { uri: string; style: any }) {
 }
 
 /** A single square post thumbnail: photo or video frame, with play + show-link badges. */
-export function MediaTile({ post, size, onPress }: { post: Post; size: number; onPress: () => void }) {
+export function MediaTile({ post, size, onPress }: {
+    post: Pick<Post, 'id' | 'url' | 'type' | 'showId'>;
+    size: number;
+    onPress: () => void;
+}) {
     const uri = `${BASE_URL}${post.url}`;
     return (
         <Pressable onPress={onPress} style={{ width: size, height: size }}>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View, TextInput, FlatList, TouchableOpacity,
-    ScrollView, StyleSheet, ActivityIndicator, useColorScheme,
+    StyleSheet, ActivityIndicator, useColorScheme,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -17,7 +17,7 @@ import { useAuth } from '@/context/AuthContext';
 import SectionRail from '@/components/explore/SectionRail';
 import LocationPickerModal from '@/components/marketplace/location-picker-modal';
 import {
-    getExplore, ExploreSection, ExploreLocation, SeeMore, ProfileType,
+    getExplore, getExplorePosts, ExploreSection, ExploreLocation, SeeMore, ProfileType,
 } from '@/services/explore.service';
 import { getFollowedScenes, getSceneCities, SceneFollow, SceneCity } from '@/services/scene.service';
 import {
@@ -26,6 +26,8 @@ import {
 
 const LOCATION_SCOPE = 'explore' as const;
 const SEARCH_DEBOUNCE_MS = 250;
+/** Posts per grid; matches the backend's BLOCK_SIZE. */
+const POST_BLOCK = 9;
 
 type SearchResult = {
     id: string;
@@ -71,6 +73,11 @@ export default function ExploreScreen() {
     const [sections, setSections] = useState<ExploreSection[]>([]);
     const [feedLocation, setFeedLocation] = useState<ExploreLocation | null>(null);
     const [feedLoading, setFeedLoading] = useState(true);
+    const [postsCursor, setPostsCursor] = useState<string | null>(null);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const loadingMoreRef = useRef(false);
+    // Bumped on every feed reload; a posts page from an older feed is dropped.
+    const feedGen = useRef(0);
 
     const [followedScenes, setFollowedScenes] = useState<SceneFollow[]>([]);
     const [sceneCities, setSceneCities] = useState<SceneCity[]>([]);
@@ -124,22 +131,66 @@ export default function ExploreScreen() {
         })();
     }, [activeProfile?.id]);
 
+    // Profile + location, sent identically to /explore and /explore/posts so a
+    // cursor is only ever continued against the feed that issued it.
+    const feedOpts = activeProfile ? {
+        profileId: activeProfile.id,
+        profileType,
+        city: location.city,
+        state: location.state,
+        lat: coords?.lat,
+        lng: coords?.lng,
+    } : null;
+
     // The feed itself.
     useEffect(() => {
-        if (!activeProfile || locationLoading) return;
+        if (!feedOpts || locationLoading) return;
+        const gen = ++feedGen.current;
         setFeedLoading(true);
-        getExplore({
-            profileId: activeProfile.id,
-            profileType,
-            city: location.city,
-            state: location.state,
-            lat: coords?.lat,
-            lng: coords?.lng,
-        })
-            .then(res => { setSections(res.sections); setFeedLocation(res.location); })
-            .catch(() => { setSections([]); setFeedLocation(null); })
-            .finally(() => setFeedLoading(false));
+        setPostsCursor(null);
+        getExplore(feedOpts)
+            .then(res => {
+                if (gen !== feedGen.current) return;
+                setSections(res.sections);
+                setFeedLocation(res.location);
+                setPostsCursor(res.postsCursor);
+            })
+            .catch(() => {
+                if (gen !== feedGen.current) return;
+                setSections([]);
+                setFeedLocation(null);
+            })
+            .finally(() => { if (gen === feedGen.current) setFeedLoading(false); });
     }, [activeProfile?.id, profileType, location.city, location.state, coords, locationLoading]);
+
+    // Past the last rail the feed keeps going as grids of posts.
+    const loadMorePosts = async () => {
+        if (!feedOpts || !postsCursor || loadingMoreRef.current) return;
+        loadingMoreRef.current = true;
+        setLoadingMore(true);
+        const gen = feedGen.current;
+        try {
+            const res = await getExplorePosts({ ...feedOpts, cursor: postsCursor });
+            if (gen !== feedGen.current) return;
+            const blocks: ExploreSection[] = [];
+            for (let i = 0; i < res.items.length; i += POST_BLOCK) {
+                blocks.push({
+                    key: `posts:tail:${res.items[i].id}`,
+                    title: '',
+                    kind: 'POSTS',
+                    seeMore: { path: '', params: {} },
+                    items: res.items.slice(i, i + POST_BLOCK),
+                });
+            }
+            setSections(prev => [...prev, ...blocks]);
+            setPostsCursor(res.nextCursor);
+        } catch {
+            // Keep the cursor; the next onEndReached retries.
+        } finally {
+            loadingMoreRef.current = false;
+            setLoadingMore(false);
+        }
+    };
 
     const applyLocation = useCallback((loc: { city: string; state: string | null }) => {
         setLocation(loc);
@@ -316,17 +367,24 @@ export default function ExploreScreen() {
                                 : 'Set a city on your profile to see local discovery.'}
                         </ThemedText>
                     ) : (
-                        <ScrollView
+                        /* The backend decides which sections exist and in what
+                           order -- rails and post grids alike. Nothing here
+                           branches on account type. */
+                        <FlatList
+                            data={sections}
+                            keyExtractor={section => section.key}
+                            renderItem={({ item }) => (
+                                <SectionRail section={item} onSeeMore={handleSeeMore} />
+                            )}
+                            onEndReached={loadMorePosts}
+                            onEndReachedThreshold={0.6}
+                            ListFooterComponent={
+                                loadingMore ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null
+                            }
                             keyboardShouldPersistTaps="handled"
                             showsVerticalScrollIndicator={false}
                             contentContainerStyle={{ paddingBottom: 40 }}
-                        >
-                            {/* The backend decides which sections exist and in what
-                                order. Nothing here branches on account type. */}
-                            {sections.map(section => (
-                                <SectionRail key={section.key} section={section} onSeeMore={handleSeeMore} />
-                            ))}
-                        </ScrollView>
+                        />
                     )}
                 </>
             )}

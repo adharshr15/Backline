@@ -27,7 +27,9 @@ import ProfileShowsSection from '@/components/profile/shows-poster-section';
 import { renderBioWithLinks } from '../(tabs)/profile';
 import { profileStyles } from '../(tabs)/profile';
 import CraftChips from '@/components/profile/craft-chips';
-import { getUserCrafts } from '@/services/user.service';
+import {
+    getUserCrafts, getCraftRecommendations, recommendationsByCraft, CraftRecommendation,
+} from '@/services/user.service';
 import type { ExploreCraft } from '@/services/explore.service';
 export const AVATAR_SIZE = 80;
 
@@ -47,6 +49,7 @@ export function UserProfile() {
     const [webViewUrl, setWebViewUrl] = useState<string | null>(null);
     // /auth/me does not carry crafts, so the own-profile view loads them.
     const [crafts, setCrafts] = useState<ExploreCraft[]>([]);
+    const [recommendations, setRecommendations] = useState<Record<string, CraftRecommendation>>({});
     const [activeTab, setActiveTab] = useState<Tab>('shows');
     const [switcherVisible, setSwitcherVisible] = useState(false);
     const [showView, setShowView] = useState<'poster' | 'list'>('poster');
@@ -86,6 +89,7 @@ export function UserProfile() {
         getShowsByProfile('user', user.id, true).then(setPastShows).catch(() => {});
         getRsvpShows('user', user.id).then(setRsvpShows).catch(() => {});
         getUserCrafts(user.id).then(setCrafts).catch(() => {});
+        getCraftRecommendations(user.id).then(r => setRecommendations(recommendationsByCraft(r))).catch(() => {});
         loadListings();
         loadPosts();
     }, [user?.id]));
@@ -170,7 +174,7 @@ export function UserProfile() {
                         </View>
                     ) : null}
 
-                    <CraftChips crafts={crafts} />
+                    <CraftChips crafts={crafts} recommendations={recommendations} />
 
                     {/* action buttons */}
                     <View style={profileStyles.actionRow}>

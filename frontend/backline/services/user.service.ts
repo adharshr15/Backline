@@ -101,6 +101,41 @@ export const updateMyCrafts = async (
   return response.data?.crafts ?? [];
 };
 
+export type RecommenderType = 'USER' | 'BAND' | 'VENUE';
+
+export interface CraftRecommendation {
+  craft: string;
+  count: number;
+  recommendedByViewer: boolean;
+}
+
+export const recommendationsByCraft = (list: CraftRecommendation[]): Record<string, CraftRecommendation> =>
+  Object.fromEntries(list.map(r => [r.craft, r]));
+
+/** One entry per craft the user lists. Pass `viewer` to learn which ones it recommended. */
+export const getCraftRecommendations = async (
+  userId: string,
+  viewer?: { type: RecommenderType; id: string },
+): Promise<CraftRecommendation[]> => {
+  const params = viewer ? { viewerType: viewer.type, viewerId: viewer.id } : {};
+  const response = await api.get(`/users/${userId}/recommendations`, { params });
+  return response.data ?? [];
+};
+
+export const recommendCraft = async (
+  userId: string, craft: string, recommenderType: RecommenderType, recommenderId: string,
+): Promise<{ recommended: boolean; count: number }> => {
+  const response = await api.post(`/users/${userId}/crafts/${craft}/recommend`, { recommenderType, recommenderId });
+  return response.data;
+};
+
+export const unrecommendCraft = async (
+  userId: string, craft: string, recommenderType: RecommenderType, recommenderId: string,
+): Promise<{ recommended: boolean; count: number }> => {
+  const response = await api.delete(`/users/${userId}/crafts/${craft}/recommend`, { data: { recommenderType, recommenderId } });
+  return response.data;
+};
+
 export const discoverUsers = async (opts: {
   craft?: string;
   forHire?: boolean;

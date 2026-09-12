@@ -26,6 +26,9 @@ import { TabSwitcher } from '@/components/ui/tab-switcher';
 import { Listing, getListingsByProfile } from '@/services/listing.service';
 import { Post, getProfilePosts, OwnerType } from '@/services/post.service';
 import CraftChips from '@/components/profile/craft-chips';
+import {
+    CraftRecommendation, getCraftRecommendations, recommendCraft, unrecommendCraft, recommendationsByCraft,
+} from '@/services/user.service';
 
 const AVATAR_SIZE = 80;
 
@@ -57,6 +60,7 @@ export default function ViewUserProfile({ id }: Props) {
     const [listings, setListings] = useState<Listing[]>([]);
     const [listingView, setListingView] = useState<'poster' | 'list'>('poster');
     const [posts, setPosts] = useState<Post[]>([]);
+    const [recommendations, setRecommendations] = useState<Record<string, CraftRecommendation>>({});
     const [activeTab, setActiveTab] = useState<Tab>('shows');
 
     const followerType = activeProfile?.accountType as 'USER' | 'BAND' | 'VENUE';
@@ -90,6 +94,8 @@ export default function ViewUserProfile({ id }: Props) {
         getListingsByProfile('user', id).then(setListings).catch(() => {});
         getProfilePosts('USER', id, activeProfile ? { type: followerType as OwnerType, id: activeProfile.id } : undefined).then(setPosts).catch(() => {});
         if (activeProfile) getRsvpShows(activeProfileType, activeProfile.id).then(setViewerRsvpShows).catch(() => {});
+        getCraftRecommendations(id, activeProfile ? { type: followerType, id: activeProfile.id } : undefined)
+            .then(r => setRecommendations(recommendationsByCraft(r))).catch(() => {});
     }, [id]);
 
     const handleFollowToggle = async () => {
@@ -209,6 +215,28 @@ export default function ViewUserProfile({ id }: Props) {
         }
     };
 
+    // Anyone but the user themselves (as their own USER profile) can recommend.
+    const canRecommend = !!activeProfile && !(followerType === 'USER' && activeProfile.id === id);
+
+    const handleToggleRecommend = async (craft: string) => {
+        if (!activeProfile) return;
+        const current = recommendations[craft] ?? { craft, count: 0, recommendedByViewer: false };
+        const next = !current.recommendedByViewer;
+        // Optimistic; reconciled with the server's count below.
+        setRecommendations(r => ({
+            ...r, [craft]: { ...current, recommendedByViewer: next, count: current.count + (next ? 1 : -1) },
+        }));
+        try {
+            const res = next
+                ? await recommendCraft(id, craft, followerType, activeProfile.id)
+                : await unrecommendCraft(id, craft, followerType, activeProfile.id);
+            setRecommendations(r => ({ ...r, [craft]: { craft, count: res.count, recommendedByViewer: res.recommended } }));
+        } catch (e) {
+            console.error('Recommend error:', e);
+            setRecommendations(r => ({ ...r, [craft]: current }));
+        }
+    };
+
     if (loading) {
         return (
             <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -266,7 +294,11 @@ export default function ViewUserProfile({ id }: Props) {
                         </View>
                     ) : null}
 
-                    <CraftChips crafts={profile.crafts} />
+                    <CraftChips
+                        crafts={profile.crafts}
+                        recommendations={recommendations}
+                        onToggleRecommend={canRecommend ? handleToggleRecommend : undefined}
+                    />
 
                     <View style={profileStyles.actionRow}>
                         <TouchableOpacity

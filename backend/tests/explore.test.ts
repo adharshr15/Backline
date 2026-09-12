@@ -13,6 +13,7 @@ import {
   attachGenres,
   setCrafts,
   futureDate,
+  createPost,
   TestUser,
 } from "./helpers";
 
@@ -369,6 +370,195 @@ describe("GET /explore", () => {
     });
   });
 
+  describe("posts", () => {
+    const FILLER = 80;
+    let localIds: string[];
+    let gazePostId: string;
+    let dallasPostId: string;
+    let alicePostId: string;
+    let deletedPostId: string;
+    let eligibleForAlice: number;
+
+    const postIds = (body: any): string[] =>
+      body.sections
+        .filter((s: any) => s.kind === "POSTS")
+        .flatMap((s: any) => s.items.map((i: any) => i.id));
+
+    const morePosts = (user: TestUser, qs = "") =>
+      request(app).get(`/explore/posts${qs ? `?${qs}` : ""}`).set(auth(user.token));
+
+    beforeAll(async () => {
+      const venueId = (await prisma.venue.findFirstOrThrow({ where: { name: "Houston Room" } })).id;
+      // Explicit timestamps throughout: the DB container's clock is not the app's.
+      const now = new Date();
+
+      gazePostId = await createPost({
+        uploader: alice, ownerType: "BAND", ownerId: gazeBandId,
+        sceneId: houstonId, caption: "Gaze at the Room", createdAt: now,
+      });
+      localIds = [
+        gazePostId,
+        await createPost({ uploader: alice, ownerType: "BAND", ownerId: hardcoreBandId, sceneId: houstonId, createdAt: now }),
+        await createPost({ uploader: alice, ownerType: "VENUE", ownerId: venueId, sceneId: houstonId, createdAt: now }),
+        await createPost({ uploader: mallory, ownerType: "USER", ownerId: mallory.id, sceneId: houstonId, createdAt: now }),
+      ];
+      dallasPostId = await createPost({
+        uploader: alice, ownerType: "BAND", ownerId: dallasBandId, sceneId: dallasId, createdAt: now,
+      });
+      alicePostId = await createPost({
+        uploader: alice, ownerType: "USER", ownerId: alice.id, sceneId: houstonId, createdAt: now,
+      });
+      deletedPostId = await createPost({
+        uploader: mallory, ownerType: "USER", ownerId: mallory.id,
+        sceneId: houstonId, createdAt: now, deletedAt: now,
+      });
+
+      // Older, placeless filler: more than the grids /explore can embed, so a
+      // cursor has to be issued.
+      await prisma.post.createMany({
+        data: Array.from({ length: FILLER }, (_, i) => ({
+          url: `/uploads/filler-${i}.jpg`,
+          uploaderUserId: mallory.id,
+          ownerUserId: mallory.id,
+          createdAt: new Date(now.getTime() - 10 * 86_400_000 - i * 1000),
+        })),
+      });
+
+      // Everything except Alice's own post and the deleted one.
+      eligibleForAlice = localIds.length + 1 + FILLER;
+    });
+
+    describe("in the feed", () => {
+      it("puts a grid of posts straight after Shows Near You", async () => {
+        const res = await explore(alice);
+        expect(res.body.sections[0].key).toBe("shows_near_you");
+        expect(res.body.sections[1]).toMatchObject({ key: "posts:1", kind: "POSTS" });
+      });
+
+      it("alternates rails and grids", async () => {
+        const res = await explore(alice);
+        res.body.sections.forEach((s: any, i: number) => {
+          expect(s.kind === "POSTS").toBe(i % 2 === 1);
+        });
+      });
+
+      it("fills grids in whole rows of three, nine at most", async () => {
+        const res = await explore(alice);
+        for (const s of res.body.sections.filter((s: any) => s.kind === "POSTS")) {
+          expect(s.items.length).toBeLessThanOrEqual(9);
+          expect(s.items.length % 3).toBe(0);
+        }
+      });
+
+      it("ranks a local post above a non-local one of the same age", async () => {
+        const ids = postIds((await explore(alice)).body);
+        expect(ids).toContain(dallasPostId);
+        for (const id of localIds) {
+          expect(ids.indexOf(id)).toBeLessThan(ids.indexOf(dallasPostId));
+        }
+      });
+
+      it("excludes the acting profile's own posts", async () => {
+        const asAlice = postIds((await explore(alice)).body);
+        expect(asAlice).not.toContain(alicePostId);
+
+        // Browsing as the band hides the band's posts, not its member's.
+        const asGaze = postIds(
+          (await explore(alice, `profileType=band&profileId=${gazeBandId}`)).body,
+        );
+        expect(asGaze).not.toContain(gazePostId);
+        expect(asGaze).toContain(alicePostId);
+      });
+
+      it("excludes deleted posts", async () => {
+        expect(postIds((await explore(alice)).body)).not.toContain(deletedPostId);
+      });
+
+      it("gives a post item the binding shape plus its media", async () => {
+        const res = await explore(alice);
+        const item = res.body.sections
+          .flatMap((s: any) => s.items)
+          .find((i: any) => i.id === gazePostId);
+
+        expect(item).toMatchObject({
+          type: "POST",
+          accountType: "BAND",
+          name: "Gaze Band",
+          subtitle: "Gaze at the Room",
+          mediaType: "PHOTO",
+        });
+        expect(item.url).toMatch(/^\/uploads\//);
+      });
+
+      it("hands back a cursor while posts remain", async () => {
+        const res = await explore(alice);
+        expect(typeof res.body.postsCursor).toBe("string");
+      });
+    });
+
+    describe("GET /explore/posts", () => {
+      it("401s without a token", async () => {
+        expect((await request(app).get("/explore/posts")).status).toBe(401);
+      });
+
+      it("refuses to browse as a band the caller is not in", async () => {
+        const res = await morePosts(mallory, `profileType=band&profileId=${aliceBandId}`);
+        expect(res.status).toBe(403);
+      });
+
+      it("400s on a malformed cursor", async () => {
+        expect((await morePosts(alice, "cursor=not-a-cursor!!")).status).toBe(400);
+      });
+
+      it("400s on city without state", async () => {
+        expect((await morePosts(alice, "city=Houston")).status).toBe(400);
+      });
+
+      it("pages through every eligible post exactly once", async () => {
+        const first = await explore(alice);
+        const seen = postIds(first.body);
+        let cursor: string | null = first.body.postsCursor;
+
+        while (cursor) {
+          const page = await morePosts(alice, `cursor=${encodeURIComponent(cursor)}`);
+          expect(page.status).toBe(200);
+          seen.push(...page.body.items.map((i: any) => i.id));
+          cursor = page.body.nextCursor;
+        }
+
+        expect(new Set(seen).size).toBe(seen.length);
+        expect(seen).toHaveLength(eligibleForAlice - (eligibleForAlice % 3));
+        expect(seen).not.toContain(alicePostId);
+        expect(seen).not.toContain(deletedPostId);
+      });
+
+      it("does not slip a newer post into a scroll already under way", async () => {
+        const first = await explore(alice);
+        const late = await createPost({
+          uploader: mallory, ownerType: "USER", ownerId: mallory.id,
+          sceneId: houstonId, createdAt: new Date(),
+        });
+
+        const page = await morePosts(alice, `cursor=${encodeURIComponent(first.body.postsCursor)}`);
+        expect(page.body.items.map((i: any) => i.id)).not.toContain(late);
+
+        // A fresh load does see it -- and ranks it near the top.
+        expect(postIds((await explore(alice)).body)).toContain(late);
+      });
+
+      it("serves whole grids and clamps the page size", async () => {
+        expect((await morePosts(alice, "limit=1")).body.items).toHaveLength(9);
+        expect((await morePosts(alice, "limit=1000")).body.items.length).toBeLessThanOrEqual(27);
+      });
+
+      it("never leaks a password or email", async () => {
+        const body = JSON.stringify((await morePosts(alice, "limit=27")).body);
+        expect(body).not.toContain("password");
+        expect(body).not.toContain("@test.com");
+      });
+    });
+  });
+
   describe("bounds", () => {
     it("clamps items per section", async () => {
       const res = await explore(alice, "limit=1000");
@@ -378,9 +568,11 @@ describe("GET /explore", () => {
       }
     });
 
-    it("caps the number of sections", async () => {
+    it("caps the number of rails", async () => {
       const res = await explore(alice);
-      expect(res.body.sections.length).toBeLessThanOrEqual(8);
+      // Post grids sit between rails and are not rails; the cap is on rails.
+      const rails = res.body.sections.filter((s: any) => s.kind !== "POSTS");
+      expect(rails.length).toBeLessThanOrEqual(8);
     });
   });
 

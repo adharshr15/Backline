@@ -100,6 +100,15 @@ describe("profile impersonation", () => {
 
     expect(res.status).toBe(403);
   });
+
+  it("refuses to page Explore posts as a band the caller is not in", async () => {
+    // The ranking reads the band's follow graph and genres; paging as it would leak both.
+    const res = await request(app)
+      .get(`/explore/posts?profileType=band&profileId=${aliceBand}`)
+      .set(auth(mallory.token));
+
+    expect(res.status).toBe(403);
+  });
 });
 
 describe("conversation read receipts", () => {

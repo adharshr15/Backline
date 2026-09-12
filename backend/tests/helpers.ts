@@ -180,6 +180,42 @@ export const setCrafts = async (
   return res.body.crafts as { craft: string; forHire: boolean; headline: string | null }[];
 };
 
+/**
+ * Insert a post row directly. POST /posts is multipart and writes a file to
+ * uploads/; ranking tests only need rows. Stamping through the real endpoint is
+ * covered in scene-stamp.test.ts.
+ */
+export const createPost = async (opts: {
+  uploader: TestUser;
+  ownerType: "USER" | "BAND" | "VENUE";
+  ownerId: string;
+  sceneId?: string | null;
+  showId?: string;
+  caption?: string;
+  createdAt?: Date;
+  deletedAt?: Date;
+}) => {
+  const owner =
+    opts.ownerType === "BAND" ? { ownerBandId: opts.ownerId } :
+    opts.ownerType === "VENUE" ? { ownerVenueId: opts.ownerId } :
+                                 { ownerUserId: opts.ownerId };
+
+  const post = await prisma.post.create({
+    data: {
+      url: `/uploads/test-post-${++seq}.jpg`,
+      type: "PHOTO",
+      caption: opts.caption ?? null,
+      uploaderUserId: opts.uploader.id,
+      sceneId: opts.sceneId ?? null,
+      showId: opts.showId ?? null,
+      ...(opts.createdAt ? { createdAt: opts.createdAt } : {}),
+      deletedAt: opts.deletedAt ?? null,
+      ...owner,
+    },
+  });
+  return post.id;
+};
+
 /** Tag a band with genres by slug, in order (position 0 = primary). */
 export const attachGenres = async (bandId: string, slugs: string[]) => {
   const genres = await prisma.genre.findMany({ where: { slug: { in: slugs } } });

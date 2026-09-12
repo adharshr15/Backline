@@ -20,7 +20,8 @@
     "verify": "npm run typecheck && npm run test",
     "hooks:install": "node scripts/install-hooks.mjs",
     "dev": "tsx src/index.ts",
-    "migrate": "node scripts/migrate.cjs"
+    "migrate": "node scripts/migrate.cjs",
+    "seed:test": "tsx scripts/seed-test-data.ts"
   },
   "keywords": [],
   "author": "",

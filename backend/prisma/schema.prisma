@@ -600,6 +600,7 @@ model Scene {
   bands          Band[]
   venues         Venue[]
   users          User[]
+  posts          Post[]
 
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -753,6 +754,12 @@ model Post {
   showId          String?
   show            Show?         @relation(fields: [showId], references: [id])
 
+  /// Stamped at creation: the linked show's scene, else the owner's. Explore
+  /// ranks local posts off it; deriving it at read time would be a four-way
+  /// join on every feed load.
+  sceneId         String?
+  scene           Scene?        @relation(fields: [sceneId], references: [id])
+
   comments        PostComment[]
   likes           PostLike[]
 
@@ -763,6 +770,7 @@ model Post {
   @@index([ownerBandId])
   @@index([ownerVenueId])
   @@index([showId])
+  @@index([sceneId, createdAt])
 }
 
 model PostComment {

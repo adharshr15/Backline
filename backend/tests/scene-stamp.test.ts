@@ -239,6 +239,64 @@ describe("sceneId stamping", () => {
     });
   });
 
+  describe("posts", () => {
+    const upload = (token: string, fields: Record<string, string>) => {
+      let req = request(app).post("/posts").set(auth(token));
+      for (const [key, value] of Object.entries(fields)) req = req.field(key, value);
+      return req.attach("media", Buffer.from("fake"), { filename: "x.png", contentType: "image/png" });
+    };
+
+    const postScene = async (id: string) => {
+      const post = await prisma.post.findUniqueOrThrow({ where: { id } });
+      return post.sceneId ? sceneOf(post.sceneId) : null;
+    };
+
+    it("stamps from the linked show's scene, not the owner's", async () => {
+      // Alice lives in Houston; a photo from a Waco show belongs to Waco.
+      const show = await request(app)
+        .post("/shows")
+        .set(auth(alice.token))
+        .send({
+          date: futureDate(),
+          doors: futureDate(),
+          city: "Waco",
+          state: "TX",
+          country: "USA",
+          creatorUserId: alice.id,
+        });
+
+      const res = await upload(alice.token, {
+        ownerType: "USER",
+        ownerId: alice.id,
+        showId: show.body.id,
+      });
+      expect(res.status).toBe(201);
+      expect(await postScene(res.body.id)).toMatchObject({ slug: "waco-tx" });
+    });
+
+    it("stamps from the owning profile when no show is linked", async () => {
+      const band = await request(app)
+        .post("/bands")
+        .set(auth(alice.token))
+        .send({ name: "Post Stamp Band", city: "San Marcos", state: "TX", country: "USA" });
+
+      const res = await upload(alice.token, { ownerType: "BAND", ownerId: band.body.id });
+      expect(res.status).toBe(201);
+      expect(await postScene(res.body.id)).toMatchObject({ slug: "san-marcos-tx" });
+    });
+
+    it("leaves sceneId null when neither the show nor the owner has one", async () => {
+      const band = await request(app)
+        .post("/bands")
+        .set(auth(alice.token))
+        .send({ name: "Placeless Poster" });
+
+      const res = await upload(alice.token, { ownerType: "BAND", ownerId: band.body.id });
+      expect(res.status).toBe(201);
+      expect(await postScene(res.body.id)).toBeNull();
+    });
+  });
+
   describe("scene creation", () => {
     it("marks auto-created scenes as uncurated", async () => {
       const scene = await prisma.scene.findUniqueOrThrow({ where: { slug: "houston-tx" } });

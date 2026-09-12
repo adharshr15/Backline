@@ -48,6 +48,16 @@ const ownerField = (type: ParticipantType, id: string) =>
   type === ParticipantType.VENUE ? { ownerVenueId: id } :
                                    { ownerUserId: id };
 
+// The owner's scene, for stamping a post that has no show to take one from.
+async function ownerSceneId(type: ParticipantType, id: string): Promise<string | null> {
+  const select = { sceneId: true } as const;
+  const row =
+    type === ParticipantType.BAND  ? await prisma.band.findUnique({ where: { id }, select }) :
+    type === ParticipantType.VENUE ? await prisma.venue.findUnique({ where: { id }, select }) :
+                                     await prisma.user.findUnique({ where: { id }, select });
+  return row?.sceneId ?? null;
+}
+
 const authorField = (type: ParticipantType, id: string) =>
   type === ParticipantType.BAND  ? { authorBandId: id } :
   type === ParticipantType.VENUE ? { authorVenueId: id } :
@@ -86,10 +96,17 @@ export const createPost = async (req: AuthRequest, res: Response) => {
     if (!(await canActAs(userId, ownerType, ownerId))) {
       return res.status(403).json({ error: "You cannot post as this profile" });
     }
+    // A post belongs to the scene it was taken in: the linked show's, else the owner's.
+    let sceneId: string | null = null;
     if (showId) {
-      const show = await prisma.show.findFirst({ where: { id: showId, deletedAt: null } });
+      const show = await prisma.show.findFirst({
+        where: { id: showId, deletedAt: null },
+        select: { sceneId: true },
+      });
       if (!show) return res.status(404).json({ error: "Linked show not found" });
+      sceneId = show.sceneId;
     }
+    sceneId ??= await ownerSceneId(ownerType, ownerId);
 
     const post = await prisma.post.create({
       data: {
@@ -97,6 +114,7 @@ export const createPost = async (req: AuthRequest, res: Response) => {
         type: type === "VIDEO" ? "VIDEO" : "PHOTO",
         caption: caption?.trim() || null,
         uploaderUserId: userId,
+        sceneId,
         ...(showId ? { showId } : {}),
         ...ownerField(ownerType, ownerId),
       },

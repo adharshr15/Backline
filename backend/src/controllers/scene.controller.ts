@@ -12,6 +12,7 @@ import {
     type SceneCounts,
 } from "../lib/scenes";
 import { resolveGenreIds } from "../lib/genres";
+import { imagesForScene, imagesForScenes } from "../lib/sceneImages";
 import { Craft } from "../../generated/prisma/enums";
 import {
     clampLimit,
@@ -202,6 +203,8 @@ export const getFollowedScenes = async (req: Request, res: Response) => {
             },
         });
 
+        const images = await imagesForScenes(follows.map(f => f.scene));
+
         res.json(
             follows.map(f => ({
                 id: f.id,
@@ -212,7 +215,7 @@ export const getFollowedScenes = async (req: Request, res: Response) => {
                 city: f.scene.city,
                 state: f.scene.state,
                 country: f.scene.country,
-                scene: f.scene,
+                scene: { ...f.scene, imageUrl: images.get(f.scene.id)!.imageUrl },
             })),
         );
     } catch (error: any) {
@@ -377,6 +380,10 @@ export const getScenes = async (req: Request, res: Response) => {
             scenes = scenes.slice((page - 1) * limit, (page - 1) * limit + limit);
         }
 
+        // Only the returned page: images play no part in the sort.
+        const images = await imagesForScenes(scenes);
+        scenes = scenes.map(s => ({ ...s, imageUrl: images.get(s.id)!.imageUrl }));
+
         res.json({ scenes, page, limit, hasMore: scenes.length === limit });
     } catch (error: any) {
         fail(res, error, "scene");
@@ -402,20 +409,29 @@ const sceneDetail = async (scene: { id: string }) => {
         }),
     ]);
 
-    const genres = await prisma.genre.findMany({
-        where: { id: { in: topGenreRows.map(g => g.genreId) } },
-        select: { id: true, slug: true, name: true },
-    });
+    const genreIds = topGenreRows.map(g => g.genreId);
+    const [genres, images] = await Promise.all([
+        prisma.genre.findMany({
+            where: { id: { in: genreIds } },
+            select: { id: true, slug: true, name: true },
+        }),
+        imagesForScene(full, genreIds),
+    ]);
     const genreById = new Map(genres.map(g => [g.id, g]));
 
     return {
         ...full,
+        // Borrowed from the two most-followed bands with a banner; see lib/sceneImages.
+        ...images.scene,
         counts: { ...counts.get(full.id)!, people },
         // These are the sub-scene chips: "Houston Shoegaze" is a facet of this
-        // list, not a row anywhere.
+        // list, not a row anywhere. Each carries its own images so selecting a
+        // chip can restyle the header without another request.
         topGenres: topGenreRows.flatMap(row => {
             const g = genreById.get(row.genreId);
-            return g ? [{ slug: g.slug, name: g.name, bandCount: row._count._all }] : [];
+            return g
+                ? [{ slug: g.slug, name: g.name, bandCount: row._count._all, ...images.byGenre.get(g.id)! }]
+                : [];
         }),
     };
 };

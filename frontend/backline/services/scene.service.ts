@@ -54,6 +54,9 @@ export interface SceneTopGenre {
     slug: string;
     name: string;
     bandCount: number;
+    // The facet's own avatar and banner ("Houston Shoegaze"), picked like the scene's.
+    imageUrl?: string | null;
+    headerImageUrl?: string | null;
 }
 
 export interface SceneDetail extends SceneSummary {

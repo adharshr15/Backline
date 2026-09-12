@@ -4,6 +4,7 @@ import { fail } from "../middlewares/error.middleware";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { Craft } from "../../generated/prisma/enums";
 import { countsForScenes } from "../lib/scenes";
+import { imagesForScenes } from "../lib/sceneImages";
 import { clampLimit } from "../lib/query";
 import { resolveExploreContext, ExploreContext } from "../lib/exploreContext";
 import { rankExplorePosts, toPostItem } from "../lib/explorePosts";
@@ -417,7 +418,10 @@ const buildRails = async (ctx: ExploreContext, limit: number): Promise<Section[]
     });
 
     if (candidates.length) {
-      const counts = await countsForScenes(candidates.map(c => c.id));
+      const [counts, images] = await Promise.all([
+        countsForScenes(candidates.map(c => c.id)),
+        imagesForScenes(candidates),
+      ]);
 
       sections.push({
         key: "scenes_for_you",
@@ -432,7 +436,7 @@ const buildRails = async (ctx: ExploreContext, limit: number): Promise<Section[]
             accountType: null,
             name: s.name,
             subtitle: `${c.bands} bands · ${c.venues} venues`,
-            profileImageUrl: s.imageUrl,
+            profileImageUrl: images.get(s.id)!.imageUrl,
             slug: s.slug,
             city: s.city,
             state: s.state,

@@ -215,13 +215,20 @@ export default function ScenePage() {
 
     const toggleGenre = (slug: string) => setGenre(prev => (prev === slug ? null : slug));
 
+    // A selected chip turns the header into that sub-scene -- "Houston Shoegaze",
+    // wearing its own most-followed bands' banners.
+    const facet = genre ? scene.topGenres.find(g => g.slug === genre) : undefined;
+    const title = facet ? `${scene.name} ${facet.name}` : scene.name;
+    const avatarUrl = facet ? facet.imageUrl : scene.imageUrl;
+    const bannerUrl = facet ? facet.headerImageUrl : scene.headerImageUrl;
+
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
                 {/* Banner + back */}
                 <View>
-                    {scene.headerImageUrl ? (
-                        <Image source={{ uri: `${BASE_URL}${scene.headerImageUrl}` }} style={styles.banner} />
+                    {bannerUrl ? (
+                        <Image source={{ uri: `${BASE_URL}${bannerUrl}` }} style={styles.banner} />
                     ) : (
                         <View style={[styles.banner, styles.bannerFallback]} />
                     )}
@@ -232,9 +239,9 @@ export default function ScenePage() {
 
                 {/* Identity */}
                 <View style={styles.identityRow}>
-                    <Image source={imageSource(scene.imageUrl)} style={styles.avatar} />
+                    <Image source={imageSource(avatarUrl)} style={styles.avatar} />
                     <View style={styles.identityText}>
-                        <ThemedText style={styles.sceneName}>{scene.name}</ThemedText>
+                        <ThemedText style={styles.sceneName}>{title}</ThemedText>
                         <ThemedText style={styles.scenePlace}>{placeLabel(scene.city, scene.state)}</ThemedText>
                     </View>
                     <TouchableOpacity
